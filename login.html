@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Log in — LCO Connect</title>
+  <meta name="description" content="Log in to your LCO Connect account. Manage customers, billing, complaints and services from one dashboard.">
+  <meta name="theme-color" content="#0B7A6E">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/super-admin.css">
+</head>
+
+<body class="sa-login-page">
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- ═══════════════════════════════════════════
+     LOGIN FORM
+     ═══════════════════════════════════════════ -->
+  <main class="sa-login-main">
+    <div class="sa-login-card">
+
+      <!-- Brand -->
+      <div class="sa-login-brand">
+        <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+          <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+        </a>
+      </div>
+
+      <!-- Login form -->
+      <form id="loginForm" novalidate autocomplete="on">
+        <h1>Sign in to your account</h1>
+        <p class="sa-login-desc">Enter your credentials to access your dashboard.</p>
+
+        <div class="sa-form-group">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" name="email" placeholder="you@example.com" required
+            autocomplete="email">
+          <div class="sa-field-error" id="loginEmail-error">Please enter a valid email</div>
+        </div>
+
+        <div class="sa-form-group">
+          <label for="loginPassword">Password</label>
+          <div class="sa-password-wrap">
+            <input type="password" id="loginPassword" name="password" placeholder="••••••••" required
+              autocomplete="current-password" minlength="6">
+            <button type="button" class="sa-toggle-pw" id="togglePassword" aria-label="Show password">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <div class="sa-field-error" id="loginPassword-error">Please enter your password</div>
+        </div>
+
+        <button type="submit" class="sa-login-btn" id="loginBtn">
+          Sign In
+        </button>
+
+        <div class="sa-login-footer-text">
+          <a href="../index.html">← Back to LCO Connect</a>
+        </div>
+      </form>
+
+    </div>
+
+    <!-- Background decoration -->
+    <div class="sa-login-bg" aria-hidden="true">
+      <div class="sa-bg-circle sa-bg-1"></div>
+      <div class="sa-bg-circle sa-bg-2"></div>
+      <div class="sa-bg-circle sa-bg-3"></div>
+    </div>
+  </main>
+
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Shared Auth Module -->
+  <script src="../js/auth.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      /* ══════════════════════════════════════════════
+         CHECK EXISTING SESSION
+         If already logged in, redirect to dashboard.
+         ══════════════════════════════════════════════ */
+
+      async function checkExistingSession() {
+        var data = await LCOAuth.getSessionWithRole();
+        if (data && data.profile && data.profile.role) {
+          var route = LCOAuth.ROLE_ROUTES[data.profile.role];
+          if (route) {
+            window.location.href = route;
+            return;
+          }
+        }
+      }
+      checkExistingSession();
+
+
+      /* ── DOM refs ── */
+      var form = document.getElementById('loginForm');
+      var emailInput = document.getElementById('loginEmail');
+      var passwordInput = document.getElementById('loginPassword');
+      var loginBtn = document.getElementById('loginBtn');
+      var togglePw = document.getElementById('togglePassword');
+
+
+      /* ── Toggle password visibility ── */
+      togglePw.addEventListener('click', function () {
+        var isPassword = passwordInput.type === 'password';
+        passwordInput.type = isPassword ? 'text' : 'password';
+        togglePw.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+      });
+
+
+      /* ── Clear errors on input ── */
+      emailInput.addEventListener('input', function () {
+        emailInput.classList.remove('error');
+        document.getElementById('loginEmail-error').classList.remove('visible');
+      });
+      passwordInput.addEventListener('input', function () {
+        passwordInput.classList.remove('error');
+        document.getElementById('loginPassword-error').classList.remove('visible');
+      });
+
+
+      /* ══════════════════════════════════════════════
+         FORM SUBMIT — ROLE-BASED ROUTING
+         ══════════════════════════════════════════════ */
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var valid = true;
+
+        // Validate email
+        var email = emailInput.value.trim();
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          emailInput.classList.add('error');
+          document.getElementById('loginEmail-error').classList.add('visible');
+          valid = false;
+        }
+
+        // Validate password
+        var password = passwordInput.value;
+        if (!password || password.length < 6) {
+          passwordInput.classList.add('error');
+          document.getElementById('loginPassword-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (!valid) return;
+
+        // Disable button
+        loginBtn.disabled = true;
+        loginBtn.innerHTML = '<span class="sa-spinner"></span> Signing in…';
+
+        try {
+          // Use centralized auth — handles role fetch + routing
+          var result = await LCOAuth.signIn(email, password);
+
+          showToast('Welcome back!', 'success');
+          setTimeout(function () {
+            window.location.href = result.redirectUrl;
+          }, 600);
+
+        } catch (err) {
+          loginBtn.disabled = false;
+          loginBtn.innerHTML = 'Sign In';
+          var msg = err.message || 'Login failed. Please try again.';
+          if (msg.includes('Invalid login')) msg = 'Invalid email or password.';
+          showToast(msg, 'error');
+        }
+      });
+
+
+      /* ══════════════════════════════════════════════
+         TOAST
+         ══════════════════════════════════════════════ */
+
+      function showToast(message, type) {
+        var container = document.getElementById('toastContainer');
+        var toast = document.createElement('div');
+        toast.className = 'sa-toast ' + (type || '');
+        var icon = type === 'error' ? '⚠️' : type === 'success' ? '✓' : '💬';
+        toast.innerHTML = '<span class="sa-toast-icon">' + icon + '</span>' + escapeHtml(message);
+        container.appendChild(toast);
+        setTimeout(function () {
+          toast.classList.add('removing');
+          setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+        }, 5000);
+      }
+
+      function escapeHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+    })();
+  </script>
+
+</body>
+
+</html>
