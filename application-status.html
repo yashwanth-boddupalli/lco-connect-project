@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Application Status — LCO Connect</title>
+  <meta name="description" content="Check the status of your LCO Connect registration application.">
+  <meta name="theme-color" content="#0B7A6E">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/registration.css">
+</head>
+
+<body class="status-page">
+
+  <!-- ═══════════════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════════════ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+        <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+      </a>
+      <div class="nav-actions">
+        <a href="../index.html" class="btn btn-ghost">← Back to home</a>
+      </div>
+    </div>
+  </nav>
+
+
+  <!-- ═══════════════════════════════════════════
+     STATUS CONTENT
+     ═══════════════════════════════════════════ -->
+  <main class="status-main">
+    <div class="reg-container">
+      <div class="status-card" id="statusCard">
+
+        <div class="status-icon" aria-hidden="true">✓</div>
+
+        <h1>Application Submitted</h1>
+        <p class="status-subtitle">Your LCO registration is being processed</p>
+
+        <div class="status-details">
+          <div class="status-row">
+            <span class="status-label">Application ID</span>
+            <span class="status-value mono" id="statusAppId">—</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Business Name</span>
+            <span class="status-value" id="statusBizName">—</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Submitted</span>
+            <span class="status-value" id="statusDate">—</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Status</span>
+            <span class="status-value">
+              <span class="status-badge pending" id="statusBadge">PENDING VERIFICATION</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="status-message">
+          <p>Your application has been submitted successfully. Our team will verify your business information and
+            supporting documents before activating your LCO account. This typically takes 1–2 business days.</p>
+        </div>
+
+        <div class="status-actions">
+          <a href="../index.html" class="btn btn-primary">Back to Home</a>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+
+  <!-- ═══════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════ -->
+  <footer>
+    <div class="wrap footer-grid">
+      <a href="../index.html" class="brand" style="font-size:16px;" aria-label="LCO Connect — Home">
+        <span class="brand-mark" style="width:24px; height:24px;" aria-hidden="true"></span>LCO Connect
+      </a>
+      <div class="footer-note">© 2026 LCO Connect. Built for local connectivity providers.</div>
+    </div>
+  </footer>
+
+  <script>
+    // Populate status page from URL params or sessionStorage
+    (function () {
+      'use strict';
+
+      var params = new URLSearchParams(window.location.search);
+      var appId = params.get('id') || sessionStorage.getItem('lco_app_id');
+      var bizName = params.get('biz') || sessionStorage.getItem('lco_biz_name');
+      var submittedDate = params.get('date') || sessionStorage.getItem('lco_submitted_date');
+
+      if (appId) {
+        document.getElementById('statusAppId').textContent = appId;
+      }
+
+      if (bizName) {
+        document.getElementById('statusBizName').textContent = bizName;
+      }
+
+      if (submittedDate) {
+        try {
+          var d = new Date(submittedDate);
+          document.getElementById('statusDate').textContent = d.toLocaleDateString('en-IN', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+        } catch (e) {
+          document.getElementById('statusDate').textContent = submittedDate;
+        }
+      } else {
+        document.getElementById('statusDate').textContent = new Date().toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        });
+      }
+    })();
+  </script>
+
+</body>
+
+</html>
