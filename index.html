@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCO Connect — Unified Customer & Service Management for Local Connectivity Providers</title>
+  <meta name="description" content="One simple platform for customer management, billing, complaints, technicians and local service communication — built for cable, broadband and Wi-Fi operators.">
+  <meta name="theme-color" content="#0B7A6E">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Skip to content (accessibility) -->
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<!-- ═══════════════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════════════ -->
+<nav class="nav" role="navigation" aria-label="Main navigation">
+  <div class="nav-inner">
+    <a href="/" class="brand" aria-label="LCO Connect — Home">
+      <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+    </a>
+
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how-it-works">How it works</a>
+      <a href="#services">Services</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </div>
+
+    <div class="nav-actions">
+      <a href="pages/login.html" class="btn btn-ghost">Log in</a>
+      <a href="pages/register-lco.html" class="btn btn-primary">Register your LCO</a>
+    </div>
+
+    <button class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+
+  <!-- Mobile menu -->
+  <div class="mobile-menu" id="mobileMenu" role="menu">
+    <div class="mobile-menu-inner">
+      <a href="#features" role="menuitem">Features</a>
+      <a href="#how-it-works" role="menuitem">How it works</a>
+      <a href="#services" role="menuitem">Services</a>
+      <a href="#pricing" role="menuitem">Pricing</a>
+      <a href="#faq" role="menuitem">FAQ</a>
+      <div class="mobile-menu-actions">
+        <a href="pages/login.html" class="btn btn-ghost" role="menuitem">Log in</a>
+        <a href="pages/register-lco.html" class="btn btn-primary" role="menuitem">Register your LCO</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+
+<!-- ═══════════════════════════════════════════
+     HERO
+     ═══════════════════════════════════════════ -->
+<main id="main-content">
+<section class="hero" aria-label="Introduction">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">
+        <span class="eyebrow-dot" aria-hidden="true"></span>
+        Built for local cable, broadband and Wi-Fi operators
+      </div>
+      <h1>Manage your LCO.<br>Connect your customers.</h1>
+      <p class="hero-sub">One simple platform for customer management, billing, complaints, technicians and local service communication — built for how small connectivity operators actually work.</p>
+      <div class="hero-ctas">
+        <a href="pages/register-lco.html" class="btn btn-primary btn-lg">Register your LCO</a>
+        <a href="#features" class="btn btn-ghost btn-lg">Explore platform</a>
+      </div>
+      <p class="hero-note">Registration is free — your subscription starts once your LCO is approved.</p>
+    </div>
+
+    <!-- Network diagram visualization -->
+    <div class="diagram" aria-label="Visual representation of LCO Connect ecosystem showing Customer, LCO Connect hub, Technician and Billing nodes connected together" role="img">
+      <svg viewBox="0 0 460 380" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <defs>
+          <filter id="cardShadow" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#0F1C2E" flood-opacity="0.14"/>
+          </filter>
+          <filter id="cardShadowDark" x="-40%" y="-40%" width="180%" height="180%">
+            <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#0F1C2E" flood-opacity="0.28"/>
+          </filter>
+        </defs>
+
+        <!-- Connection lines -->
+        <path id="line1" d="M 90 90 C 180 90, 190 190, 260 190" stroke="#D9CFBC" stroke-width="2" fill="none"/>
+        <path id="line2" d="M 260 190 C 320 190, 320 280, 380 300" stroke="#D9CFBC" stroke-width="2" fill="none"/>
+        <path id="line3" d="M 260 190 C 190 220, 150 260, 100 300" stroke="#D9CFBC" stroke-width="2" fill="none"/>
+
+        <!-- Animated pulses along paths -->
+        <circle r="4.5" fill="#0B7A6E" class="pulse">
+          <animateMotion dur="2.6s" repeatCount="indefinite" path="M 90 90 C 180 90, 190 190, 260 190"/>
+        </circle>
+        <circle r="4.5" fill="#4A50C4" class="pulse2">
+          <animateMotion dur="2.6s" repeatCount="indefinite" path="M 260 190 C 320 190, 320 280, 380 300"/>
+        </circle>
+        <circle r="4.5" fill="#F0A430" class="pulse2">
+          <animateMotion dur="2.6s" repeatCount="indefinite" path="M 260 190 C 190 220, 150 260, 100 300"/>
+        </circle>
+
+        <!-- Customer node -->
+        <g class="diagram-node n1" filter="url(#cardShadow)">
+          <rect x="40" y="60" width="100" height="60" rx="14" fill="#DCF1EB" stroke="#0B7A6E" stroke-width="1.5"/>
+          <circle class="status-dot" cx="130" cy="70" r="4" fill="#0B7A6E"/>
+          <text x="90" y="88" text-anchor="middle" class="node-label">Customer</text>
+          <text x="90" y="104" text-anchor="middle" class="node-sub">CUST00124</text>
+        </g>
+
+        <!-- LCO Connect hub node -->
+        <g class="diagram-node n2" filter="url(#cardShadowDark)">
+          <rect x="210" y="160" width="100" height="60" rx="14" fill="#0F1C2E"/>
+          <circle class="status-dot" cx="300" cy="170" r="4" fill="#F0A430"/>
+          <text x="260" y="188" text-anchor="middle" class="node-label" style="fill:#fff">LCO Connect</text>
+          <text x="260" y="204" text-anchor="middle" class="node-sub" style="fill:#AEBBC9">LCO001</text>
+        </g>
+
+        <!-- Technician node -->
+        <g class="diagram-node n3" filter="url(#cardShadow)">
+          <rect x="330" y="270" width="100" height="60" rx="14" fill="#FCEBD2" stroke="#F0A430" stroke-width="1.5"/>
+          <circle class="status-dot" cx="420" cy="280" r="4" fill="#F0A430"/>
+          <text x="380" y="298" text-anchor="middle" class="node-label">Technician</text>
+          <text x="380" y="314" text-anchor="middle" class="node-sub">TECH0031</text>
+        </g>
+
+        <!-- Billing node -->
+        <g class="diagram-node n4" filter="url(#cardShadow)">
+          <rect x="50" y="270" width="100" height="60" rx="14" fill="#E6E6FA" stroke="#4A50C4" stroke-width="1.5"/>
+          <circle class="status-dot" cx="140" cy="280" r="4" fill="#4A50C4"/>
+          <text x="100" y="298" text-anchor="middle" class="node-label">Billing</text>
+          <text x="100" y="314" text-anchor="middle" class="node-sub">Aug — ₹1,018</text>
+        </g>
+      </svg>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     WHAT IT DOES (Workflow)
+     ═══════════════════════════════════════════ -->
+<section id="what-it-does" aria-label="Platform workflow">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="tag">What LCO Connect does</div>
+      <h2>Every workflow between you, your customers and your technicians — in one place</h2>
+    </div>
+    <div class="flow">
+      <div class="flow-node clay">
+        <div class="k">Customer</div>
+        <div class="d">Pays, complains, tracks service</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="flow-node clay">
+        <div class="k">Your LCO</div>
+        <div class="d">Manages billing, plans, staff</div>
+      </div>
+      <div class="flow-arrow" aria-hidden="true">→</div>
+      <div class="flow-node clay">
+        <div class="k">Technician</div>
+        <div class="d">Resolves and updates status</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     KEY FEATURES
+     ═══════════════════════════════════════════ -->
+<section id="features" aria-label="Key features">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="tag">Key features</div>
+      <h2>Built specifically for connectivity operators</h2>
+      <p>Not a generic CRM. Every screen is designed around how cable, broadband and Wi-Fi providers actually run their business.</p>
+    </div>
+    <div class="grid-3">
+      <div class="feature clay reveal">
+        <div class="ic" aria-hidden="true">◎</div>
+        <h3>Customer records</h3>
+        <p>Full profiles with services, plans, billing and complaint history in one view.</p>
+      </div>
+      <div class="feature clay reveal">
+        <div class="ic" aria-hidden="true">▤</div>
+        <h3>Broadband &amp; cable plans</h3>
+        <p>Configure speed tiers and cable bouquets, with base packs and a-la-carte channels.</p>
+      </div>
+      <div class="feature clay reveal">
+        <div class="ic" aria-hidden="true">₹</div>
+        <h3>Billing &amp; invoices</h3>
+        <p>Auto-generated monthly bills based on each customer's active services.</p>
+      </div>
+      <div class="feature clay reveal">
+        <div class="ic" aria-hidden="true">✓</div>
+        <h3>Complaint tracking</h3>
+        <p>From raised to resolved, with a visible timeline your customers can follow.</p>
+      </div>
+      <div class="feature clay reveal">
+        <div class="ic" aria-hidden="true">⚑</div>
+        <h3>Technician assignment</h3>
+        <p>Route complaints to the right technician and track task status in real time.</p>
+      </div>
+      <div class="feature clay reveal">
+        <div class="ic" aria-hidden="true">◈</div>
+        <h3>Announcements</h3>
+        <p>Broadcast outages or service notices to customers and technicians instantly.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     HOW IT WORKS
+     ═══════════════════════════════════════════ -->
+<section id="how-it-works" style="background:var(--card); border-top:1px solid var(--line); border-bottom:1px solid var(--line);" aria-label="How it works">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="tag">How it works</div>
+      <h2>From registration to your first customer</h2>
+    </div>
+    <div class="steps">
+      <div class="step reveal">
+        <div class="step-num">01</div>
+        <h3>Register your LCO</h3>
+        <p>Submit your business details and verification documents.</p>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">02</div>
+        <h3>Get verified</h3>
+        <p>Our team reviews and approves your workspace, usually within a couple of days.</p>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">03</div>
+        <h3>Add customers &amp; staff</h3>
+        <p>Invite customers and technicians — they activate their own accounts.</p>
+      </div>
+      <div class="step reveal">
+        <div class="step-num">04</div>
+        <h3>Run your service</h3>
+        <p>Bill, collect payments and resolve complaints from one dashboard.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     SERVICES
+     ═══════════════════════════════════════════ -->
+<section id="services" aria-label="Service types">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="tag">Service types</div>
+      <h2>Works for whatever you provide</h2>
+      <p>Your dashboard only shows the services you actually offer — nothing to configure that doesn't apply to you.</p>
+    </div>
+    <div class="grid-4">
+      <div class="service-card service-cable clay-dark reveal">
+        <div>
+          <div class="service-glyph" aria-hidden="true">▤</div>
+          <h3>Cable TV</h3>
+        </div>
+        <p>Base packs, bouquets and a-la-carte channels</p>
+      </div>
+      <div class="service-card service-broadband clay-dark reveal">
+        <div>
+          <div class="service-glyph" aria-hidden="true">◈</div>
+          <h3>Broadband</h3>
+        </div>
+        <p>Speed tiers, validity and pricing</p>
+      </div>
+      <div class="service-card service-wifi clay-dark reveal">
+        <div>
+          <div class="service-glyph" aria-hidden="true">◎</div>
+          <h3>Local Wi-Fi</h3>
+        </div>
+        <p>Area-based plans and access</p>
+      </div>
+      <div class="service-card service-other clay-dark reveal">
+        <div>
+          <div class="service-glyph" aria-hidden="true">✦</div>
+          <h3>Other services</h3>
+        </div>
+        <p>Define your own service type</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     BENEFITS
+     ═══════════════════════════════════════════ -->
+<section id="benefits" style="background:var(--paper-warm); border-top:1px solid var(--line); border-bottom:1px solid var(--line);" aria-label="Benefits">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="tag">Benefits</div>
+      <h2>Built for everyone who uses your service</h2>
+    </div>
+
+    <div class="tabs" role="tablist" aria-label="Benefit categories">
+      <button class="tab-btn active" data-tab="ops" role="tab" aria-selected="true" aria-controls="panel-ops" id="tab-ops">For operators</button>
+      <button class="tab-btn" data-tab="cust" role="tab" aria-selected="false" aria-controls="panel-cust" id="tab-cust">For customers</button>
+      <button class="tab-btn" data-tab="tech" role="tab" aria-selected="false" aria-controls="panel-tech" id="tab-tech">For technicians</button>
+    </div>
+
+    <div class="tab-panel active" data-panel="ops" id="panel-ops" role="tabpanel" aria-labelledby="tab-ops">
+      <div class="benefit">
+        <h4>See your whole business at a glance</h4>
+        <p>Revenue, open complaints and pending payments on one dashboard.</p>
+      </div>
+      <div class="benefit">
+        <h4>Fewer calls, clearer records</h4>
+        <p>Every customer interaction is logged and searchable.</p>
+      </div>
+      <div class="benefit">
+        <h4>Faster resolutions</h4>
+        <p>Assign technicians in a click and track work to completion.</p>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="cust" id="panel-cust" role="tabpanel" aria-labelledby="tab-cust">
+      <div class="benefit">
+        <h4>Pay bills without a phone call</h4>
+        <p>See what you owe and pay it directly from your dashboard.</p>
+      </div>
+      <div class="benefit">
+        <h4>Know what's happening</h4>
+        <p>Track a raised complaint step by step until it's resolved.</p>
+      </div>
+      <div class="benefit">
+        <h4>Stay informed</h4>
+        <p>Get outage notices and service updates as they happen.</p>
+      </div>
+    </div>
+
+    <div class="tab-panel" data-panel="tech" id="panel-tech" role="tabpanel" aria-labelledby="tab-tech">
+      <div class="benefit">
+        <h4>Clear task lists</h4>
+        <p>See what's assigned, where, and what the issue is before you arrive.</p>
+      </div>
+      <div class="benefit">
+        <h4>Update from the field</h4>
+        <p>Mark jobs in progress or resolved right from your phone.</p>
+      </div>
+      <div class="benefit">
+        <h4>Full context</h4>
+        <p>See a customer's service history before you start work.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     PRICING
+     ═══════════════════════════════════════════ -->
+<section id="pricing" aria-label="Pricing">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="tag">Pricing</div>
+      <h2>One plan. Everything included.</h2>
+      <p>Register for free. Your subscription begins once your LCO is verified and approved.</p>
+    </div>
+    <div class="price-card clay reveal">
+      <div class="plan-name">LCO Connect</div>
+      <div class="price-value">₹999<span>/month</span></div>
+      <ul class="price-list">
+        <li><span class="check" aria-hidden="true">✓</span>Unlimited customer records</li>
+        <li><span class="check" aria-hidden="true">✓</span>Broadband and cable plan management</li>
+        <li><span class="check" aria-hidden="true">✓</span>Billing and invoice generation</li>
+        <li><span class="check" aria-hidden="true">✓</span>Complaint and technician workflow</li>
+        <li><span class="check" aria-hidden="true">✓</span>Broadcast announcements</li>
+      </ul>
+      <a href="pages/register-lco.html" class="btn btn-primary btn-lg" style="width:100%; margin-top:28px;">Register your LCO</a>
+      <p class="price-note">Registration is free. Billing starts only after your LCO is approved.</p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     FAQ
+     ═══════════════════════════════════════════ -->
+<section id="faq" style="background:var(--card); border-top:1px solid var(--line); border-bottom:1px solid var(--line);" aria-label="Frequently asked questions">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <div class="tag">FAQ</div>
+      <h2>Common questions</h2>
+    </div>
+    <div class="faq">
+      <div class="faq-item">
+        <div class="faq-q">How long does verification take?<span class="plus" aria-hidden="true">+</span></div>
+        <div class="faq-a"><p>Most LCO registrations are reviewed within 1–2 business days once your documents are submitted.</p></div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Can I choose which services to offer?<span class="plus" aria-hidden="true">+</span></div>
+        <div class="faq-a"><p>Yes. Your dashboard adapts to show only cable, broadband, Wi-Fi, or other services you select during registration.</p></div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">How do customers get added?<span class="plus" aria-hidden="true">+</span></div>
+        <div class="faq-a"><p>You create the customer record, and they receive an invitation to set up their own login and verify their phone number.</p></div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">What payment methods are supported?<span class="plus" aria-hidden="true">+</span></div>
+        <div class="faq-a"><p>UPI, cards and net banking through our payment gateway, with UPI QR available as a fallback.</p></div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Is there a free trial?<span class="plus" aria-hidden="true">+</span></div>
+        <div class="faq-a"><p>Registration is completely free. Your ₹999/month subscription only begins after your LCO is verified and approved by our team.</p></div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q">Can I manage multiple service types?<span class="plus" aria-hidden="true">+</span></div>
+        <div class="faq-a"><p>Absolutely. If you provide cable TV, broadband and local Wi-Fi, you can manage all three from a single dashboard with unified billing.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ═══════════════════════════════════════════
+     CTA
+     ═══════════════════════════════════════════ -->
+<section id="contact" aria-label="Call to action">
+  <div class="wrap">
+    <div class="cta-band reveal">
+      <h2>Ready to bring your LCO online?</h2>
+      <p>Register your business, get verified, and start managing customers, billing and complaints in one place.</p>
+      <div class="cta-actions">
+        <a href="pages/register-lco.html" class="btn btn-amber btn-lg">Register your LCO</a>
+        <a href="#contact" class="btn btn-ghost btn-lg" style="border-color:#33465C; color:#fff;">Contact us</a>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+
+<!-- ═══════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════ -->
+<footer>
+  <div class="wrap footer-grid">
+    <a href="/" class="brand" style="font-size:16px;" aria-label="LCO Connect — Home">
+      <span class="brand-mark" style="width:24px; height:24px;" aria-hidden="true"></span>LCO Connect
+    </a>
+    <div class="footer-links">
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+      <a href="#contact">Contact</a>
+    </div>
+    <div class="footer-note">© 2026 LCO Connect. Built for local connectivity providers.</div>
+  </div>
+</footer>
+
+<!-- Scripts -->
+<script src="js/main.js"></script>
+
+</body>
+</html>

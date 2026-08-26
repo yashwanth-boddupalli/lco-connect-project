@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register Your LCO — LCO Connect</title>
+  <meta name="description"
+    content="Register your cable, broadband, or Wi-Fi business with LCO Connect. Quick verification and you're ready to manage your entire operation.">
+  <meta name="theme-color" content="#0B7A6E">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/registration.css">
+</head>
+
+<body class="reg-page">
+
+  <!-- Skip link -->
+  <a href="#reg-form" class="skip-link">Skip to registration form</a>
+
+  <!-- Toast container for notifications -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- ═══════════════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════════════ -->
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+        <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+      </a>
+      <div class="nav-actions">
+        <a href="../index.html" class="btn btn-ghost">← Back to home</a>
+      </div>
+    </div>
+  </nav>
+
+
+  <!-- ═══════════════════════════════════════════
+     REGISTRATION FORM
+     ═══════════════════════════════════════════ -->
+  <main class="reg-main" id="reg-form">
+    <div class="reg-container">
+
+      <!-- Progress indicator -->
+      <div class="progress-bar" role="navigation" aria-label="Registration progress">
+        <div class="progress-step active" data-step="1" id="progress-step-1">
+          <span class="step-number"><span class="step-num-text">1</span></span>
+          <span class="step-label">Business</span>
+        </div>
+        <span class="progress-arrow" aria-hidden="true">→</span>
+        <div class="progress-step" data-step="2" id="progress-step-2">
+          <span class="step-number"><span class="step-num-text">2</span></span>
+          <span class="step-label">Services</span>
+        </div>
+        <span class="progress-arrow" aria-hidden="true">→</span>
+        <div class="progress-step" data-step="3" id="progress-step-3">
+          <span class="step-number"><span class="step-num-text">3</span></span>
+          <span class="step-label">Area</span>
+        </div>
+        <span class="progress-arrow" aria-hidden="true">→</span>
+        <div class="progress-step" data-step="4" id="progress-step-4">
+          <span class="step-number"><span class="step-num-text">4</span></span>
+          <span class="step-label">Documents</span>
+        </div>
+        <span class="progress-arrow" aria-hidden="true">→</span>
+        <div class="progress-step" data-step="5" id="progress-step-5">
+          <span class="step-number"><span class="step-num-text">5</span></span>
+          <span class="step-label">Review</span>
+        </div>
+      </div>
+
+      <!-- Form card -->
+      <div class="form-card">
+        <form id="registrationForm" novalidate autocomplete="off">
+
+          <!-- ═══════════ STEP 1: BUSINESS INFO ═══════════ -->
+          <div class="form-step active" data-step="1" id="step-1">
+            <div class="step-header">
+              <h2>Business Information</h2>
+              <p>Tell us about your LCO business. All fields marked with * are required.</p>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="businessName">Business / LCO Name <span class="required"
+                    aria-label="required">*</span></label>
+                <input type="text" id="businessName" name="businessName" placeholder="e.g. Krishna Cable Services"
+                  required autocomplete="organization">
+                <div class="error-message" id="businessName-error">Please enter your business name</div>
+              </div>
+              <div class="form-group">
+                <label for="ownerName">Owner / Contact Person <span class="required"
+                    aria-label="required">*</span></label>
+                <input type="text" id="ownerName" name="ownerName" placeholder="e.g. Ramesh Kumar" required
+                  autocomplete="name">
+                <div class="error-message" id="ownerName-error">Please enter the owner name</div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="businessEmail">Business Email <span class="required" aria-label="required">*</span></label>
+                <input type="email" id="businessEmail" name="businessEmail" placeholder="e.g. info@krishnacable.com"
+                  required autocomplete="email">
+                <div class="error-message" id="businessEmail-error">Please enter a valid email address</div>
+              </div>
+              <div class="form-group">
+                <label for="businessPhone">Business Phone <span class="required" aria-label="required">*</span></label>
+                <input type="tel" id="businessPhone" name="businessPhone" placeholder="e.g. 9876543210" maxlength="10"
+                  required autocomplete="tel-national">
+                <div class="error-message" id="businessPhone-error">Please enter a valid 10-digit phone number</div>
+                <div class="field-hint">10-digit Indian mobile number</div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="businessAddress">Business Address <span class="required"
+                  aria-label="required">*</span></label>
+              <input type="text" id="businessAddress" name="businessAddress"
+                placeholder="e.g. Shop No. 12, Main Road, Ameerpet" required autocomplete="street-address">
+              <div class="error-message" id="businessAddress-error">Please enter your business address</div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="businessCity">City <span class="required" aria-label="required">*</span></label>
+                <input type="text" id="businessCity" name="businessCity" placeholder="e.g. Hyderabad" required
+                  autocomplete="address-level2">
+                <div class="error-message" id="businessCity-error">Please enter your city</div>
+              </div>
+              <div class="form-group">
+                <label for="businessState">State <span class="required" aria-label="required">*</span></label>
+                <select id="businessState" name="businessState" required autocomplete="address-level1">
+                  <option value="">Select state</option>
+                </select>
+                <div class="error-message" id="businessState-error">Please select your state</div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="businessPincode">PIN Code <span class="required" aria-label="required">*</span></label>
+                <input type="text" id="businessPincode" name="businessPincode" placeholder="e.g. 500038" maxlength="6"
+                  required autocomplete="postal-code">
+                <div class="error-message" id="businessPincode-error">Please enter a valid 6-digit PIN code</div>
+              </div>
+              <div class="form-group"></div>
+            </div>
+
+            <div class="form-actions">
+              <div></div>
+              <button type="button" class="btn-next" id="step1Next">
+                Next: Services <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+
+
+          <!-- ═══════════ STEP 2: SERVICES ═══════════ -->
+          <div class="form-step" data-step="2" id="step-2">
+            <div class="step-header">
+              <h2>Services Provided</h2>
+              <p>What services do you currently provide? Select all that apply.</p>
+            </div>
+
+            <div class="checkbox-grid" role="group" aria-label="Service types">
+              <div class="checkbox-card">
+                <input type="checkbox" id="serviceCableTV" name="services" value="Cable TV">
+                <label class="checkbox-card-label" for="serviceCableTV">
+                  <span class="checkbox-icon" aria-hidden="true">✓</span>
+                  <span class="checkbox-card-text">Cable TV</span>
+                </label>
+              </div>
+              <div class="checkbox-card">
+                <input type="checkbox" id="serviceBroadband" name="services" value="Broadband">
+                <label class="checkbox-card-label" for="serviceBroadband">
+                  <span class="checkbox-icon" aria-hidden="true">✓</span>
+                  <span class="checkbox-card-text">Broadband / Internet</span>
+                </label>
+              </div>
+              <div class="checkbox-card">
+                <input type="checkbox" id="serviceWifi" name="services" value="Wi-Fi">
+                <label class="checkbox-card-label" for="serviceWifi">
+                  <span class="checkbox-icon" aria-hidden="true">✓</span>
+                  <span class="checkbox-card-text">Wi-Fi / Local Wi-Fi</span>
+                </label>
+              </div>
+              <div class="checkbox-card">
+                <input type="checkbox" id="serviceCableBroadband" name="services" value="Cable TV + Broadband">
+                <label class="checkbox-card-label" for="serviceCableBroadband">
+                  <span class="checkbox-icon" aria-hidden="true">✓</span>
+                  <span class="checkbox-card-text">Cable TV + Broadband</span>
+                </label>
+              </div>
+              <div class="checkbox-card full-width">
+                <input type="checkbox" id="serviceOther" name="services" value="Other">
+                <label class="checkbox-card-label" for="serviceOther">
+                  <span class="checkbox-icon" aria-hidden="true">✓</span>
+                  <span class="checkbox-card-text">Other Services</span>
+                </label>
+              </div>
+            </div>
+
+            <div class="other-service-input" id="otherServiceInput">
+              <div class="form-group">
+                <label for="otherServiceDescription">Please specify your other service <span class="required"
+                    aria-label="required">*</span></label>
+                <input type="text" id="otherServiceDescription" name="otherServiceDescription"
+                  placeholder="e.g. IPTV, CCTV surveillance, etc.">
+                <div class="error-message" id="otherServiceDescription-error">Please describe your other service</div>
+              </div>
+            </div>
+
+            <div class="error-message" id="services-error" style="margin-top: 10px;">Please select at least one service
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" id="step2Prev">← Previous</button>
+              <button type="button" class="btn-next" id="step2Next">
+                Next: Service Area <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+
+
+          <!-- ═══════════ STEP 3: SERVICE AREA ═══════════ -->
+          <div class="form-step" data-step="3" id="step-3">
+            <div class="step-header">
+              <h2>Service Area</h2>
+              <p>Where do you provide your services? This helps us map your reach.</p>
+            </div>
+
+            <div class="form-group">
+              <label for="serviceLocality">Area / Locality <span class="required" aria-label="required">*</span></label>
+              <input type="text" id="serviceLocality" name="serviceLocality"
+                placeholder="e.g. Ameerpet, SR Nagar, Punjagutta" required>
+              <div class="error-message" id="serviceLocality-error">Please enter your service area locality</div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="serviceCity">City <span class="required" aria-label="required">*</span></label>
+                <input type="text" id="serviceCity" name="serviceCity" placeholder="e.g. Hyderabad" required>
+                <div class="error-message" id="serviceCity-error">Please enter the city</div>
+              </div>
+              <div class="form-group">
+                <label for="serviceState">State <span class="required" aria-label="required">*</span></label>
+                <select id="serviceState" name="serviceState" required>
+                  <option value="">Select state</option>
+                </select>
+                <div class="error-message" id="serviceState-error">Please select the state</div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="servicePincode">PIN Code <span class="required" aria-label="required">*</span></label>
+                <input type="text" id="servicePincode" name="servicePincode" placeholder="e.g. 500038" maxlength="6"
+                  required>
+                <div class="error-message" id="servicePincode-error">Please enter a valid 6-digit PIN code</div>
+              </div>
+              <div class="form-group"></div>
+            </div>
+
+            <div class="form-group">
+              <label for="serviceDescription">Service Area Description <span
+                  style="color: var(--slate); font-weight: 400;">(optional)</span></label>
+              <textarea id="serviceDescription" name="serviceDescription"
+                placeholder="e.g. We cover Ameerpet, SR Nagar, and surrounding colonies within a 3 km radius..."></textarea>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" id="step3Prev">← Previous</button>
+              <button type="button" class="btn-next" id="step3Next">
+                Next: Documents <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+
+
+          <!-- ═══════════ STEP 4: DOCUMENTS ═══════════ -->
+          <div class="form-step" data-step="4" id="step-4">
+            <div class="step-header">
+              <h2>Verification Documents</h2>
+              <p>Upload supporting documents to verify your business.</p>
+            </div>
+
+            <div class="verification-notice">
+              <div class="notice-icon" aria-hidden="true">🔒</div>
+              <p>To protect the LCO CONNECT community and prevent unauthorized providers from creating accounts, we
+                verify every LCO before activation. Your documents are stored securely and are never publicly
+                accessible.</p>
+            </div>
+
+            <!-- Business Proof -->
+            <div class="doc-upload-section" data-doc-type="business_proof">
+              <div class="doc-label">1. Business Proof <span class="required" aria-label="required">*</span></div>
+              <div class="upload-zone" id="uploadZone-business_proof">
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" aria-label="Upload business proof document">
+                <div class="upload-icon" aria-hidden="true">📄</div>
+                <div class="upload-text"><strong>Click to upload</strong> or drag and drop</div>
+                <div class="upload-hint">PDF, JPG, PNG or WEBP — max 5 MB</div>
+              </div>
+              <div class="file-list" id="fileList-business_proof"></div>
+              <div class="doc-error" id="docError-business_proof">Please upload a business proof document</div>
+            </div>
+
+            <!-- Identity Proof -->
+            <div class="doc-upload-section" data-doc-type="identity_proof">
+              <div class="doc-label">2. Owner / Identity Proof <span class="required" aria-label="required">*</span>
+              </div>
+              <div class="upload-zone" id="uploadZone-identity_proof">
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" aria-label="Upload identity proof document">
+                <div class="upload-icon" aria-hidden="true">📄</div>
+                <div class="upload-text"><strong>Click to upload</strong> or drag and drop</div>
+                <div class="upload-hint">PDF, JPG, PNG or WEBP — max 5 MB</div>
+              </div>
+              <div class="file-list" id="fileList-identity_proof"></div>
+              <div class="doc-error" id="docError-identity_proof">Please upload an identity proof document</div>
+            </div>
+
+            <!-- Registration Certificate -->
+            <div class="doc-upload-section" data-doc-type="registration_certificate">
+              <div class="doc-label">3. Registration Certificate <span class="required" aria-label="required">*</span>
+              </div>
+              <div class="upload-zone" id="uploadZone-registration_certificate">
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" aria-label="Upload registration certificate">
+                <div class="upload-icon" aria-hidden="true">📄</div>
+                <div class="upload-text"><strong>Click to upload</strong> or drag and drop</div>
+                <div class="upload-hint">PDF, JPG, PNG or WEBP — max 5 MB</div>
+              </div>
+              <div class="file-list" id="fileList-registration_certificate"></div>
+              <div class="doc-error" id="docError-registration_certificate">Please upload your registration certificate
+              </div>
+            </div>
+
+            <!-- Other Supporting Document (optional) -->
+            <div class="doc-upload-section" data-doc-type="other_document">
+              <div class="doc-label">4. Other Supporting Document <span
+                  style="color: var(--slate); font-weight: 400;">(optional)</span></div>
+              <div class="upload-zone" id="uploadZone-other_document">
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" aria-label="Upload other supporting document">
+                <div class="upload-icon" aria-hidden="true">📄</div>
+                <div class="upload-text"><strong>Click to upload</strong> or drag and drop</div>
+                <div class="upload-hint">PDF, JPG, PNG or WEBP — max 5 MB</div>
+              </div>
+              <div class="file-list" id="fileList-other_document"></div>
+              <div class="doc-error" id="docError-other_document"></div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" id="step4Prev">← Previous</button>
+              <button type="button" class="btn-next" id="step4Next">
+                Next: Review <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+
+
+          <!-- ═══════════ STEP 5: REVIEW ═══════════ -->
+          <div class="form-step" data-step="5" id="step-5">
+            <div class="step-header">
+              <h2>Review & Submit</h2>
+              <p>Please review all your information before submitting your application.</p>
+            </div>
+
+            <!-- Business Info Review -->
+            <div class="review-section">
+              <div class="review-section-header">
+                <h3>Business Information</h3>
+                <button type="button" class="review-edit-btn" data-goto="1">Edit</button>
+              </div>
+              <div class="review-grid" id="reviewBusiness"></div>
+            </div>
+
+            <!-- Services Review -->
+            <div class="review-section">
+              <div class="review-section-header">
+                <h3>Services</h3>
+                <button type="button" class="review-edit-btn" data-goto="2">Edit</button>
+              </div>
+              <div id="reviewServices"></div>
+            </div>
+
+            <!-- Service Area Review -->
+            <div class="review-section">
+              <div class="review-section-header">
+                <h3>Service Area</h3>
+                <button type="button" class="review-edit-btn" data-goto="3">Edit</button>
+              </div>
+              <div class="review-grid" id="reviewArea"></div>
+            </div>
+
+            <!-- Documents Review -->
+            <div class="review-section">
+              <div class="review-section-header">
+                <h3>Documents</h3>
+                <button type="button" class="review-edit-btn" data-goto="4">Edit</button>
+              </div>
+              <div class="review-doc-list" id="reviewDocuments"></div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" id="step5Prev">← Previous</button>
+              <button type="submit" class="btn-submit" id="submitBtn">
+                Submit Application
+              </button>
+            </div>
+          </div>
+
+        </form>
+      </div>
+
+    </div>
+  </main>
+
+
+  <!-- ═══════════════════════════════════════════
+     FOOTER
+     ═══════════════════════════════════════════ -->
+  <footer>
+    <div class="wrap footer-grid">
+      <a href="../index.html" class="brand" style="font-size:16px;" aria-label="LCO Connect — Home">
+        <span class="brand-mark" style="width:24px; height:24px;" aria-hidden="true"></span>LCO Connect
+      </a>
+      <div class="footer-note">© 2026 LCO Connect. Built for local connectivity providers.</div>
+    </div>
+  </footer>
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Registration logic -->
+  <script src="../js/registration.js"></script>
+
+</body>
+
+</html>
