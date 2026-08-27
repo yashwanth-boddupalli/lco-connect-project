@@ -58,10 +58,44 @@ var LCOAuth = (function () {
     if (!sb) return null;
 
     try {
-      var result = await sb.auth.getSession();
-      if (!result.data || !result.data.session) return null;
+      var session = null;
 
-      var session = result.data.session;
+      // First attempt: direct getSession
+      var result = await sb.auth.getSession();
+      if (result.data && result.data.session) {
+        session = result.data.session;
+      }
+
+      // If no session yet, wait for Supabase to restore from storage.
+      // This handles the race condition after a cross-page redirect
+      // where localStorage session hasn't been parsed yet.
+      if (!session) {
+        session = await new Promise(function (resolve) {
+          var timeout = setTimeout(function () {
+            sub.unsubscribe();
+            resolve(null);
+          }, 3000);
+
+          var sub = sb.auth.onAuthStateChange(function (event, s) {
+            if (s) {
+              clearTimeout(timeout);
+              // Small delay to allow unsubscribe to exist
+              setTimeout(function () { sub.unsubscribe(); }, 0);
+              resolve(s);
+            } else if (event === 'INITIAL_SESSION') {
+              // INITIAL_SESSION with null session means truly no session
+              clearTimeout(timeout);
+              setTimeout(function () { sub.unsubscribe(); }, 0);
+              resolve(null);
+            }
+          });
+
+          // onAuthStateChange returns { data: { subscription } }
+          sub = sub.data.subscription;
+        });
+      }
+
+      if (!session) return null;
 
       // Fetch role from trusted profiles table
       var profileResult = await sb.from('profiles')
@@ -108,6 +142,10 @@ var LCOAuth = (function () {
       .single();
 
     if (profileResult.error || !profileResult.data) {
+      // Log the actual error for debugging — not shown to user
+      console.error('Profile lookup failed for user:', user.id,
+        'Error:', profileResult.error,
+        'Data:', profileResult.data);
       // No profile found — sign out for security
       await sb.auth.signOut();
       throw new Error('Account setup incomplete. Please contact support.');
