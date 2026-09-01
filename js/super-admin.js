@@ -1,6 +1,7 @@
 /* ============================================
    LCO CONNECT — Super Admin Dashboard Logic
-   Phase 2: Super Admin Dashboard
+   Phase 2 + Phase 3: Super Admin Dashboard
+   with Verification & Onboarding
    ============================================ */
 
 (function () {
@@ -325,7 +326,7 @@
       row += '<td data-label="App ID"><span class="sa-app-id">' + esc(app.application_id) + '</span></td>';
       row += '<td data-label="Business"><span class="sa-biz-name">' + esc(app.business_name) + '</span></td>';
       row += '<td data-label="Owner">' + esc(app.owner_name) + '</td>';
-      row += '<td data-label="Reason"><span style="font-size:13px;color:var(--slate);">' + esc(app.review_notes || '—') + '</span></td>';
+      row += '<td data-label="Reason"><span style="font-size:13px;color:var(--slate);">' + esc(app.rejection_reason || app.review_notes || '—') + '</span></td>';
       row += '<td data-label="Rejected"><span class="sa-date">' + formatDate(app.reviewed_at || app.updated_at) + '</span></td>';
       row += '<td data-label="Action"><button class="sa-view-btn" data-app-id="' + app.id + '">View</button></td>';
       row += '</tr>';
@@ -503,6 +504,16 @@
       detailField('State', app.state) +
       detailField('PIN Code', app.pincode);
 
+    // Registration info
+    var regGrid = document.getElementById('detailRegistrationGrid');
+    if (regGrid) {
+      regGrid.innerHTML =
+        detailField('Application ID', app.application_id) +
+        detailField('Submitted', formatDateFull(app.created_at)) +
+        detailField('Status', app.status) +
+        detailField('Login Email', app.email);
+    }
+
     // Services
     var svcDiv = document.getElementById('detailServices');
     var tags = '<div class="sa-service-tags">';
@@ -531,10 +542,20 @@
     var auditDiv = document.getElementById('detailAudit');
     if (app.reviewed_at) {
       auditSection.style.display = 'block';
-      auditDiv.innerHTML =
-        '<div class="sa-audit-row"><strong>Reviewed at</strong> ' + formatDateFull(app.reviewed_at) + '</div>' +
-        '<div class="sa-audit-row"><strong>Status</strong> ' + esc(app.status) + '</div>' +
-        (app.review_notes ? '<div class="sa-audit-row"><strong>Notes</strong> ' + esc(app.review_notes) + '</div>' : '');
+      var auditHtml = '<div class="sa-audit-row"><strong>Reviewed at</strong> ' + formatDateFull(app.reviewed_at) + '</div>';
+      auditHtml += '<div class="sa-audit-row"><strong>Decision</strong> ' + esc(app.status) + '</div>';
+      if (app.rejection_reason) {
+        auditHtml += '<div class="sa-audit-row"><strong>Rejection Reason</strong> ' + esc(app.rejection_reason) + '</div>';
+      }
+      if (app.review_notes) {
+        auditHtml += '<div class="sa-audit-row"><strong>Notes</strong> ' + esc(app.review_notes) + '</div>';
+      }
+      if (app.notification_status) {
+        var notifLabel = app.notification_status === 'SENT' ? '✓ Sent' :
+          app.notification_status === 'FAILED' ? '✕ Failed' : 'Not sent';
+        auditHtml += '<div class="sa-audit-row"><strong>Email Notification</strong> ' + notifLabel + '</div>';
+      }
+      auditDiv.innerHTML = auditHtml;
     } else {
       auditSection.style.display = 'none';
     }
@@ -556,7 +577,6 @@
 
   /* ── Back button ── */
   document.getElementById('detailBack').addEventListener('click', function () {
-    // Go back to previous view
     switchView(currentView === 'detail' ? 'applications' : currentView || 'applications');
   });
 
@@ -819,6 +839,11 @@
 
 
   function openApproveModal() {
+    // Pre-check: is the app already approved?
+    if (currentDetailApp && currentDetailApp.status === 'APPROVED') {
+      showToast('This application is already approved.', 'error');
+      return;
+    }
     document.getElementById('approveModal').classList.add('visible');
   }
 
@@ -827,6 +852,11 @@
   }
 
   function openRejectModal() {
+    // Pre-check: is the app already rejected?
+    if (currentDetailApp && currentDetailApp.status === 'REJECTED') {
+      showToast('This application is already rejected.', 'error');
+      return;
+    }
     document.getElementById('rejectReason').value = '';
     document.getElementById('rejectReason-error').classList.remove('visible');
     document.getElementById('rejectModal').classList.add('visible');
@@ -848,26 +878,45 @@
   }
 
 
+  /* ══════════════════════════════════════════════
+     CONFIRM APPROVAL (Phase 3 enhanced)
+     ══════════════════════════════════════════════
+     1. Update application status → APPROVED
+     2. Update LCO profile status → ACTIVE
+     3. Create audit trail entry
+     4. Attempt notification email
+     ══════════════════════════════════════════════ */
+
   async function confirmApproval() {
     if (!currentDetailApp) return;
+
+    // Double check status
+    if (currentDetailApp.status === 'APPROVED') {
+      showToast('This application is already approved.', 'error');
+      closeApproveModal();
+      return;
+    }
 
     var btn = document.getElementById('approveConfirmBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="sa-spinner"></span> Approving…';
 
     try {
-      var { error } = await sb.from('lco_applications')
-        .update({
-          status: 'APPROVED',
-          reviewed_by: currentUser.id,
-          reviewed_at: new Date().toISOString(),
-          review_notes: 'Approved by Super Admin'
-        })
-        .eq('id', currentDetailApp.id);
+      // One protected RPC updates the application, linked profile, and audit
+      // record in a single database transaction.
+      var { error: reviewError } = await sb.rpc('review_lco_application', {
+        p_application_id: currentDetailApp.id,
+        p_decision: 'APPROVED',
+        p_review_notes: 'Approved by Super Admin',
+        p_rejection_reason: null
+      });
+      if (reviewError) throw reviewError;
 
-      if (error) throw error;
+      // Email is deliberately separate: a delivery failure never undoes a
+      // completed approval. The Edge Function records its own delivery state.
+      var emailResult = await sendNotificationEmail(currentDetailApp.id, 'APPROVED');
 
-      showToast('Application approved successfully!', 'success');
+      showToast('Application approved successfully!' + (emailResult.success ? ' Notification sent.' : ' (Email notification pending configuration)'), 'success');
       closeApproveModal();
 
       // Refresh data
@@ -887,6 +936,16 @@
   }
 
 
+  /* ══════════════════════════════════════════════
+     CONFIRM REJECTION (Phase 3 enhanced)
+     ══════════════════════════════════════════════
+     1. Require rejection reason
+     2. Update application status → REJECTED
+     3. Update linked LCO profile status → REJECTED
+     4. Create audit trail entry
+     5. Attempt notification email
+     ══════════════════════════════════════════════ */
+
   async function confirmRejection() {
     var reason = document.getElementById('rejectReason').value.trim();
 
@@ -897,23 +956,29 @@
 
     if (!currentDetailApp) return;
 
+    // Double check status
+    if (currentDetailApp.status === 'REJECTED') {
+      showToast('This application is already rejected.', 'error');
+      closeRejectModal();
+      return;
+    }
+
     var btn = document.getElementById('rejectConfirmBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="sa-spinner"></span> Rejecting…';
 
     try {
-      var { error } = await sb.from('lco_applications')
-        .update({
-          status: 'REJECTED',
-          reviewed_by: currentUser.id,
-          reviewed_at: new Date().toISOString(),
-          review_notes: reason
-        })
-        .eq('id', currentDetailApp.id);
+      var { error: reviewError } = await sb.rpc('review_lco_application', {
+        p_application_id: currentDetailApp.id,
+        p_decision: 'REJECTED',
+        p_review_notes: reason,
+        p_rejection_reason: reason
+      });
+      if (reviewError) throw reviewError;
 
-      if (error) throw error;
+      var emailResult = await sendNotificationEmail(currentDetailApp.id, 'REJECTED');
 
-      showToast('Application rejected.', 'success');
+      showToast('Application rejected.' + (emailResult.success ? ' Notification sent.' : ' (Email notification pending configuration)'), 'success');
       closeRejectModal();
 
       // Refresh data
@@ -955,6 +1020,41 @@
     } finally {
       btn.disabled = false;
       btn.innerHTML = '✕ Reject Document';
+    }
+  }
+
+
+  /* ══════════════════════════════════════════════
+     EMAIL NOTIFICATION (Phase 3.9 / 3.10)
+     ══════════════════════════════════════════════
+     Structure for sending approval/rejection emails.
+     Uses Supabase Edge Function if available.
+     Falls back gracefully if not configured.
+     ══════════════════════════════════════════════ */
+
+  async function sendNotificationEmail(applicationId, decision) {
+    try {
+      // Attempt to call Supabase Edge Function
+      // This is the secure server-side approach.
+      // The Edge Function must be deployed separately.
+      var { data, error } = await sb.functions.invoke('send-lco-notification', {
+        body: {
+          application_id: applicationId,
+          decision: decision
+        }
+      });
+
+      if (error) {
+        console.warn('Email notification edge function error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: !!(data && data.ok) };
+
+    } catch (e) {
+      // Edge function not deployed or not available
+      console.warn('Email notification not available (Edge Function not deployed):', e.message);
+      return { success: false, error: 'Email service not configured' };
     }
   }
 
