@@ -1,7 +1,7 @@
 /* ============================================
    LCO CONNECT — Shared Authentication Module
    Centralized authentication, role detection,
-   and role-based routing for all user types.
+   status checking, and role-based routing.
    ============================================ */
 
 var LCOAuth = (function () {
@@ -31,7 +31,7 @@ var LCOAuth = (function () {
 
   var ROLE_ROUTES = {
     SUPER_ADMIN: 'super-admin.html',
-    LCO_ADMIN:   null, // TODO: Future — LCO Admin dashboard
+    LCO_ADMIN:   'lco-dashboard.html',
     CUSTOMER:    null, // TODO: Future — Customer dashboard
     TECHNICIAN:  null  // TODO: Future — Technician dashboard
   };
@@ -50,7 +50,7 @@ var LCOAuth = (function () {
 
 
   /* ══════════════════════════════════════════════
-     GET CURRENT SESSION + ROLE
+     GET CURRENT SESSION + ROLE + STATUS
      Returns: { session, profile } or null
      ══════════════════════════════════════════════ */
 
@@ -97,9 +97,9 @@ var LCOAuth = (function () {
 
       if (!session) return null;
 
-      // Fetch role from trusted profiles table
+      // Fetch role AND status from trusted profiles table
       var profileResult = await sb.from('profiles')
-        .select('role, email')
+        .select('role, email, status')
         .eq('id', session.user.id)
         .single();
 
@@ -119,7 +119,7 @@ var LCOAuth = (function () {
   /* ══════════════════════════════════════════════
      SIGN IN
      Authenticate with email/password, then fetch
-     role and return routing information.
+     role/status and return routing information.
      ══════════════════════════════════════════════ */
 
   async function signIn(email, password) {
@@ -135,9 +135,9 @@ var LCOAuth = (function () {
 
     var user = authResult.data.user;
 
-    // 2. Fetch role from trusted database profile
+    // 2. Fetch role and status from trusted database profile
     var profileResult = await sb.from('profiles')
-      .select('role, email')
+      .select('role, email, status')
       .eq('id', user.id)
       .single();
 
@@ -152,8 +152,26 @@ var LCOAuth = (function () {
     }
 
     var role = profileResult.data.role;
+    var status = profileResult.data.status;
 
-    // 3. Determine dashboard redirect
+    // 3. Check account status BEFORE routing
+    // SUPER_ADMIN is always active
+    if (role !== 'SUPER_ADMIN') {
+      if (status === 'PENDING') {
+        await sb.auth.signOut();
+        throw new Error('Your account is pending verification. You will be notified once your application is reviewed.');
+      }
+      if (status === 'REJECTED') {
+        await sb.auth.signOut();
+        throw new Error('Your LCO application was not approved. Please contact support if you need more information.');
+      }
+      if (status === 'SUSPENDED' || status !== 'ACTIVE') {
+        await sb.auth.signOut();
+        throw new Error('Your account is not active. Please contact support for assistance.');
+      }
+    }
+
+    // 4. Determine dashboard redirect
     var dashboardUrl = ROLE_ROUTES[role] || null;
 
     if (!dashboardUrl) {
@@ -170,6 +188,7 @@ var LCOAuth = (function () {
     return {
       user: user,
       role: role,
+      status: status,
       email: profileResult.data.email || user.email,
       redirectUrl: dashboardUrl
     };
@@ -190,13 +209,14 @@ var LCOAuth = (function () {
 
 
   /* ══════════════════════════════════════════════
-     GUARD: Require specific role
+     GUARD: Require specific role (and optionally status)
      Used on protected pages to verify the user
-     is authenticated AND has the required role.
+     is authenticated AND has the required role
+     AND (optionally) the required status.
      Redirects to login if not.
      ══════════════════════════════════════════════ */
 
-  async function requireRole(requiredRole) {
+  async function requireRole(requiredRole, requiredStatus) {
     var data = await getSessionWithRole();
 
     if (!data) {
@@ -209,6 +229,15 @@ var LCOAuth = (function () {
       await signOut();
       redirectToLogin();
       return null;
+    }
+
+    // Check status if required (SUPER_ADMIN bypasses status check)
+    if (requiredStatus && requiredRole !== 'SUPER_ADMIN') {
+      if (data.profile.status !== requiredStatus) {
+        await signOut();
+        redirectToLogin();
+        return null;
+      }
     }
 
     return {
