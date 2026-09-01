@@ -17,14 +17,21 @@ Deno.serve(async (request) => {
     const authorization = request.headers.get('Authorization');
     if (!authorization) return reply({ error: 'Authentication is required.' }, 401);
 
-    const url = Deno.env.get('SUPABASE_URL')!;
-    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
-    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const resendKey = Deno.env.get('RESEND_API_KEY')!;
-    const from = Deno.env.get('RESEND_FROM_EMAIL')!;
-    const loginUrl = Deno.env.get('APP_LOGIN_URL')!;
-    if (!url || !anonKey || !serviceRoleKey || !resendKey || !from || !loginUrl) {
-      console.error('Notification function is missing required configuration.');
+    const url = Deno.env.get('SUPABASE_URL');
+    // Hosted Supabase projects provide legacy keys and, on newer projects,
+    // named key maps. Support both without ever logging a key value.
+    const anonKey = getSupabaseKey('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEYS');
+    const serviceRoleKey = getSupabaseKey('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEYS');
+    const resendKey = Deno.env.get('RESEND_API_KEY');
+    const from = Deno.env.get('RESEND_FROM_EMAIL');
+    const loginUrl = Deno.env.get('APP_LOGIN_URL');
+    const platformMissing = [
+      !url && 'SUPABASE_URL',
+      !anonKey && 'SUPABASE_ANON_KEY or SUPABASE_PUBLISHABLE_KEYS.default',
+      !serviceRoleKey && 'SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEYS.default',
+    ].filter(Boolean);
+    if (!url || !anonKey || !serviceRoleKey) {
+      console.error('Notification function is missing platform configuration names:', platformMissing.join(', '));
       return reply({ error: 'Notification service is not configured.' }, 500);
     }
 
@@ -50,6 +57,20 @@ Deno.serve(async (request) => {
       .single();
     if (applicationError || !application || application.status !== decision) {
       return reply({ error: 'Application review state does not match this request.' }, 409);
+    }
+
+    const notificationMissing = [
+      !resendKey && 'RESEND_API_KEY',
+      !from && 'RESEND_FROM_EMAIL',
+      !loginUrl && 'APP_LOGIN_URL',
+    ].filter(Boolean);
+    if (!resendKey || !from || !loginUrl) {
+      console.error('Notification function is missing configuration names:', notificationMissing.join(', '));
+      const { error: statusError } = await admin.from('lco_applications')
+        .update({ notification_status: 'FAILED' })
+        .eq('id', application.id);
+      if (statusError) console.error('Could not record notification status:', statusError.message);
+      return reply({ ok: false, error: 'Notification service is not configured.' });
     }
 
     const subject = decision === 'APPROVED'
@@ -87,4 +108,17 @@ function escapeHtml(value: string) {
 
 function escapeAttribute(value: string) {
   return escapeHtml(value);
+}
+
+function getSupabaseKey(legacyName: string, keyMapName: string) {
+  const legacyValue = Deno.env.get(legacyName);
+  if (legacyValue) return legacyValue;
+
+  try {
+    const keyMap = JSON.parse(Deno.env.get(keyMapName) || '{}');
+    return typeof keyMap.default === 'string' ? keyMap.default : undefined;
+  } catch {
+    console.error(`Unable to read ${keyMapName}.`);
+    return undefined;
+  }
 }
