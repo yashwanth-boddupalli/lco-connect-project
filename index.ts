@@ -1,0 +1,90 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+Deno.serve(async (request) => {
+  if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
+  try {
+    const authorization = request.headers.get('Authorization');
+    if (!authorization) return reply({ error: 'Authentication is required.' }, 401);
+
+    const url = Deno.env.get('SUPABASE_URL')!;
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const resendKey = Deno.env.get('RESEND_API_KEY')!;
+    const from = Deno.env.get('RESEND_FROM_EMAIL')!;
+    const loginUrl = Deno.env.get('APP_LOGIN_URL')!;
+    if (!url || !anonKey || !serviceRoleKey || !resendKey || !from || !loginUrl) {
+      console.error('Notification function is missing required configuration.');
+      return reply({ error: 'Notification service is not configured.' }, 500);
+    }
+
+    const caller = createClient(url, anonKey, {
+      global: { headers: { Authorization: authorization } },
+      auth: { persistSession: false },
+    });
+    const { data: isAdmin, error: adminError } = await caller.rpc('is_super_admin');
+    if (adminError || !isAdmin) return reply({ error: 'Super Admin access is required.' }, 403);
+
+    const payload = await request.json();
+    const decision = String(payload.decision || '').toUpperCase();
+    const applicationId = String(payload.application_id || '');
+    if (!applicationId || !['APPROVED', 'REJECTED'].includes(decision)) {
+      return reply({ error: 'Invalid notification request.' }, 400);
+    }
+
+    const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
+    const { data: application, error: applicationError } = await admin
+      .from('lco_applications')
+      .select('id, application_id, business_name, email, status, rejection_reason')
+      .eq('id', applicationId)
+      .single();
+    if (applicationError || !application || application.status !== decision) {
+      return reply({ error: 'Application review state does not match this request.' }, 409);
+    }
+
+    const subject = decision === 'APPROVED'
+      ? 'Your LCO Connect account is approved'
+      : 'Update on your LCO Connect application';
+    const body = decision === 'APPROVED'
+      ? `<p>Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Sign in with the email address you registered and the password you created during registration: <a href="${escapeAttribute(loginUrl)}">Sign in to LCO Connect</a>.</p><p>For security, we never send or retrieve passwords by email.</p>`
+      : `<p>Hello,</p><p>Your application for <strong>${escapeHtml(application.business_name)}</strong> has not been approved.</p><p><strong>Reason:</strong> ${escapeHtml(application.rejection_reason || 'Please contact support for more information.')}</p><p>If you need help, please contact the LCO Connect support channel provided to you.</p>`;
+
+    const emailResponse = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from, to: [application.email], subject, html: body }),
+    });
+    const sent = emailResponse.ok;
+    if (!sent) console.error('Email provider rejected notification:', await emailResponse.text());
+
+    const { error: statusError } = await admin.from('lco_applications')
+      .update({ notification_status: sent ? 'SENT' : 'FAILED' })
+      .eq('id', application.id);
+    if (statusError) console.error('Could not record notification status:', statusError.message);
+
+    return reply({ ok: sent });
+  } catch (error) {
+    console.error('Notification function error:', error instanceof Error ? error.message : error);
+    return reply({ error: 'Notification delivery failed.' }, 500);
+  }
+});
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[character]!));
+}
+
+function escapeAttribute(value: string) {
+  return escapeHtml(value);
+}
