@@ -74,6 +74,11 @@
         <span class="progress-arrow" aria-hidden="true">→</span>
         <div class="progress-step" data-step="5" id="progress-step-5">
           <span class="step-number"><span class="step-num-text">5</span></span>
+          <span class="step-label">Account</span>
+        </div>
+        <span class="progress-arrow" aria-hidden="true">→</span>
+        <div class="progress-step" data-step="6" id="progress-step-6">
+          <span class="step-number"><span class="step-num-text">6</span></span>
           <span class="step-label">Review</span>
         </div>
       </div>
@@ -360,14 +365,66 @@
             <div class="form-actions">
               <button type="button" class="btn-secondary" id="step4Prev">← Previous</button>
               <button type="button" class="btn-next" id="step4Next">
+                Next: Account <span aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
+
+
+          <!-- ═══════════ STEP 5: ACCOUNT CREATION ═══════════ -->
+          <div class="form-step" data-step="5" id="step-5">
+            <div class="step-header">
+              <h2>Create Your Account</h2>
+              <p>Set up your login credentials. You will use these to access the LCO Dashboard after your application is approved.</p>
+            </div>
+
+            <div class="verification-notice">
+              <div class="notice-icon" aria-hidden="true">🔐</div>
+              <p>Your email from Step 1 (<strong id="accountEmailDisplay"></strong>) will be your login email. Please create a secure password below. Remember this password — it will not be sent via email.</p>
+            </div>
+
+            <div class="form-group">
+              <label for="accountPassword">Password <span class="required" aria-label="required">*</span></label>
+              <div class="password-input-wrap">
+                <input type="password" id="accountPassword" name="accountPassword"
+                  placeholder="Create a password (minimum 8 characters)" required autocomplete="new-password">
+                <button type="button" class="toggle-password-btn" id="toggleAccountPassword" aria-label="Show password">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+              <div class="error-message" id="accountPassword-error">Password must be at least 8 characters</div>
+              <div class="field-hint">Minimum 8 characters. Letters, numbers, and special characters allowed.</div>
+            </div>
+
+            <div class="form-group">
+              <label for="accountPasswordConfirm">Confirm Password <span class="required" aria-label="required">*</span></label>
+              <div class="password-input-wrap">
+                <input type="password" id="accountPasswordConfirm" name="accountPasswordConfirm"
+                  placeholder="Re-enter your password" required autocomplete="new-password">
+                <button type="button" class="toggle-password-btn" id="toggleAccountPasswordConfirm" aria-label="Show password">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+              <div class="error-message" id="accountPasswordConfirm-error">Passwords do not match</div>
+            </div>
+
+            <div class="form-actions">
+              <button type="button" class="btn-secondary" id="step5Prev">← Previous</button>
+              <button type="button" class="btn-next" id="step5Next">
                 Next: Review <span aria-hidden="true">→</span>
               </button>
             </div>
           </div>
 
 
-          <!-- ═══════════ STEP 5: REVIEW ═══════════ -->
-          <div class="form-step" data-step="5" id="step-5">
+          <!-- ═══════════ STEP 6: REVIEW ═══════════ -->
+          <div class="form-step" data-step="6" id="step-6">
             <div class="step-header">
               <h2>Review & Submit</h2>
               <p>Please review all your information before submitting your application.</p>
@@ -409,8 +466,17 @@
               <div class="review-doc-list" id="reviewDocuments"></div>
             </div>
 
+            <!-- Account Review -->
+            <div class="review-section">
+              <div class="review-section-header">
+                <h3>Account</h3>
+                <button type="button" class="review-edit-btn" data-goto="5">Edit</button>
+              </div>
+              <div class="review-grid" id="reviewAccount"></div>
+            </div>
+
             <div class="form-actions">
-              <button type="button" class="btn-secondary" id="step5Prev">← Previous</button>
+              <button type="button" class="btn-secondary" id="step6Prev">← Previous</button>
               <button type="submit" class="btn-submit" id="submitBtn">
                 Submit Application
               </button>

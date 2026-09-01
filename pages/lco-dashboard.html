@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LCO Dashboard — LCO Connect</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <nav class="nav" role="navigation" aria-label="Main navigation">
+    <div class="nav-inner">
+      <a href="../index.html" class="brand"><span class="brand-mark" aria-hidden="true"></span>LCO Connect</a>
+      <div class="nav-actions"><button class="btn btn-ghost" id="logoutBtn">Logout</button></div>
+    </div>
+  </nav>
+  <main class="wrap" style="padding-top:120px; min-height:70vh;">
+    <p class="eyebrow">LCO ADMIN</p>
+    <h1 id="welcome">Welcome to LCO Connect</h1>
+    <p style="max-width:650px; color:var(--slate);">Your LCO account is active. The operational dashboard will be added in the next project phase.</p>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/auth.js"></script>
+  <script>
+    (async function () {
+      var account = await LCOAuth.requireRole('LCO_ADMIN', 'ACTIVE');
+      if (!account) return;
+      var client = LCOAuth.getClient();
+      var result = await client.from('lco_applications').select('business_name').eq('user_id', account.session.user.id).limit(1).maybeSingle();
+      if (result.data && result.data.business_name) {
+        document.getElementById('welcome').textContent = 'Welcome, ' + result.data.business_name;
+      }
+      document.getElementById('logoutBtn').addEventListener('click', async function () {
+        await LCOAuth.signOut();
+        LCOAuth.redirectToLogin();
+      });
+    })();
+  </script>
+</body>
+</html>
