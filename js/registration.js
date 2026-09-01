@@ -1,6 +1,7 @@
 /* ============================================
    LCO CONNECT — Registration Logic
-   Phase 1: LCO Registration & Verification
+   Phase 1 + Phase 3: LCO Registration,
+   Verification & Account Creation
    ============================================ */
 
 (function () {
@@ -10,8 +11,6 @@
      SUPABASE INITIALIZATION
      ══════════════════════════════════════════════ */
 
-  // Supabase credentials from environment / config
-  // These are the PUBLIC anon key — safe for frontend use
   var SUPABASE_URL = 'https://qlidbycuvuurnalbvfcc.supabase.co';
   var SUPABASE_ANON_KEY = 'sb_publishable_LpSmIK-o-DO1_-fKIQ7yWg_VYbVddGC';
 
@@ -31,47 +30,17 @@
      ══════════════════════════════════════════════ */
 
   var INDIAN_STATES = [
-    // States (28)
-    'Andhra Pradesh',
-    'Arunachal Pradesh',
-    'Assam',
-    'Bihar',
-    'Chhattisgarh',
-    'Goa',
-    'Gujarat',
-    'Haryana',
-    'Himachal Pradesh',
-    'Jharkhand',
-    'Karnataka',
-    'Kerala',
-    'Madhya Pradesh',
-    'Maharashtra',
-    'Manipur',
-    'Meghalaya',
-    'Mizoram',
-    'Nagaland',
-    'Odisha',
-    'Punjab',
-    'Rajasthan',
-    'Sikkim',
-    'Tamil Nadu',
-    'Telangana',
-    'Tripura',
-    'Uttar Pradesh',
-    'Uttarakhand',
-    'West Bengal',
-    // Union Territories (8)
-    'Andaman and Nicobar Islands',
-    'Chandigarh',
-    'Dadra and Nagar Haveli and Daman and Diu',
-    'Delhi',
-    'Jammu and Kashmir',
-    'Ladakh',
-    'Lakshadweep',
-    'Puducherry'
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar',
+    'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana',
+    'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala',
+    'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya',
+    'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
+    'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+    'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh',
+    'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
   ];
-
-  // Already alphabetically sorted above
 
 
   /* ══════════════════════════════════════════════
@@ -79,9 +48,8 @@
      ══════════════════════════════════════════════ */
 
   var currentStep = 1;
-  var totalSteps = 5;
+  var totalSteps = 6; // Updated: now includes Account step
 
-  // Store uploaded files in memory
   var uploadedFiles = {
     business_proof: [],
     identity_proof: [],
@@ -112,6 +80,7 @@
     setupEditButtons();
     setupFormSubmit();
     setupInputListeners();
+    setupPasswordToggles();
   }
 
 
@@ -136,7 +105,6 @@
 
   /* ── Setup real-time input listeners for validation feedback ── */
   function setupInputListeners() {
-    // Clear error on typing
     var inputs = form.querySelectorAll('input, select, textarea');
     inputs.forEach(function (input) {
       input.addEventListener('input', function () {
@@ -167,6 +135,27 @@
   }
 
 
+  /* ── Password visibility toggles ── */
+  function setupPasswordToggles() {
+    var togglePairs = [
+      { toggle: 'toggleAccountPassword', input: 'accountPassword' },
+      { toggle: 'toggleAccountPasswordConfirm', input: 'accountPasswordConfirm' }
+    ];
+
+    togglePairs.forEach(function (pair) {
+      var toggleBtn = document.getElementById(pair.toggle);
+      var inputEl = document.getElementById(pair.input);
+      if (toggleBtn && inputEl) {
+        toggleBtn.addEventListener('click', function () {
+          var isPassword = inputEl.type === 'password';
+          inputEl.type = isPassword ? 'text' : 'password';
+          toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+        });
+      }
+    });
+  }
+
+
   /* ══════════════════════════════════════════════
      STEP NAVIGATION
      ══════════════════════════════════════════════ */
@@ -177,12 +166,14 @@
     bindClick('step2Next', function () { goToStep(3); });
     bindClick('step3Next', function () { goToStep(4); });
     bindClick('step4Next', function () { goToStep(5); });
+    bindClick('step5Next', function () { goToStep(6); });
 
     // Previous buttons
     bindClick('step2Prev', function () { goToStep(1); });
     bindClick('step3Prev', function () { goToStep(2); });
     bindClick('step4Prev', function () { goToStep(3); });
     bindClick('step5Prev', function () { goToStep(4); });
+    bindClick('step6Prev', function () { goToStep(5); });
 
     // Completed progress steps are clickable
     progressSteps.forEach(function (ps) {
@@ -204,8 +195,16 @@
       }
     }
 
-    // If going to review, populate review data
+    // If going to account step (5), show email
     if (step === 5) {
+      var emailDisplay = document.getElementById('accountEmailDisplay');
+      if (emailDisplay) {
+        emailDisplay.textContent = getVal('businessEmail').trim();
+      }
+    }
+
+    // If going to review, populate review data
+    if (step === 6) {
       populateReview();
     }
 
@@ -216,7 +215,6 @@
 
 
   function updateUI() {
-    // Update form steps
     formSteps.forEach(function (fs) {
       fs.classList.remove('active');
       if (parseInt(fs.dataset.step) === currentStep) {
@@ -224,8 +222,7 @@
       }
     });
 
-    // Update progress indicator
-    progressSteps.forEach(function (ps, index) {
+    progressSteps.forEach(function (ps) {
       var stepNum = parseInt(ps.dataset.step);
       ps.classList.remove('active', 'completed');
 
@@ -236,7 +233,6 @@
       }
     });
 
-    // Update arrows
     progressArrows.forEach(function (arrow, idx) {
       arrow.classList.remove('active');
       if (idx < currentStep - 1) {
@@ -261,6 +257,7 @@
       case 2: return validateStep2();
       case 3: return validateStep3();
       case 4: return validateStep4();
+      case 5: return validateStep5();
       default: return true;
     }
   }
@@ -279,51 +276,43 @@
     var state = document.getElementById('businessState');
     var pincode = document.getElementById('businessPincode');
 
-    // Business name
     if (!businessName.value.trim()) {
       showFieldError(businessName, 'businessName-error', 'Please enter your business name');
       valid = false;
     }
 
-    // Owner name
     if (!ownerName.value.trim()) {
       showFieldError(ownerName, 'ownerName-error', 'Please enter the owner name');
       valid = false;
     }
 
-    // Email
     var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.value.trim() || !emailRegex.test(email.value.trim())) {
       showFieldError(email, 'businessEmail-error', 'Please enter a valid email address');
       valid = false;
     }
 
-    // Phone — 10 digits, starts with 6-9 for Indian numbers
     var phoneRegex = /^[6-9]\d{9}$/;
     if (!phone.value.trim() || !phoneRegex.test(phone.value.trim())) {
       showFieldError(phone, 'businessPhone-error', 'Please enter a valid 10-digit Indian phone number');
       valid = false;
     }
 
-    // Address
     if (!address.value.trim()) {
       showFieldError(address, 'businessAddress-error', 'Please enter your business address');
       valid = false;
     }
 
-    // City
     if (!city.value.trim()) {
       showFieldError(city, 'businessCity-error', 'Please enter your city');
       valid = false;
     }
 
-    // State
     if (!state.value) {
       showFieldError(state, 'businessState-error', 'Please select your state');
       valid = false;
     }
 
-    // Pincode — 6 digits, starts with 1-9
     var pincodeRegex = /^[1-9]\d{5}$/;
     if (!pincode.value.trim() || !pincodeRegex.test(pincode.value.trim())) {
       showFieldError(pincode, 'businessPincode-error', 'Please enter a valid 6-digit PIN code');
@@ -331,7 +320,6 @@
     }
 
     if (!valid) {
-      // Focus first error field
       var firstError = document.querySelector('#step-1 input.error, #step-1 select.error');
       if (firstError) firstError.focus();
     }
@@ -353,7 +341,6 @@
       servicesError.classList.remove('visible');
     }
 
-    // If "Other" is checked, description is required
     var otherChecked = document.getElementById('serviceOther').checked;
     if (otherChecked) {
       var desc = document.getElementById('otherServiceDescription');
@@ -425,6 +412,34 @@
   }
 
 
+  /* ── Step 5: Account / Password ── */
+  function validateStep5() {
+    var valid = true;
+
+    var password = document.getElementById('accountPassword');
+    var confirmPassword = document.getElementById('accountPasswordConfirm');
+
+    // Password: minimum 8 characters
+    if (!password.value || password.value.length < 8) {
+      showFieldError(password, 'accountPassword-error', 'Password must be at least 8 characters');
+      valid = false;
+    }
+
+    // Confirm password must match
+    if (!confirmPassword.value || confirmPassword.value !== password.value) {
+      showFieldError(confirmPassword, 'accountPasswordConfirm-error', 'Passwords do not match');
+      valid = false;
+    }
+
+    if (!valid) {
+      var firstError = document.querySelector('#step-5 input.error');
+      if (firstError) firstError.focus();
+    }
+
+    return valid;
+  }
+
+
   /* ── Field Error Helpers ── */
   function showFieldError(inputEl, errorId, message) {
     inputEl.classList.add('error');
@@ -463,7 +478,6 @@
       }
     });
 
-    // Clear service error when any checkbox changes
     allCheckboxes.forEach(function (cb) {
       cb.addEventListener('change', function () {
         var servicesError = document.getElementById('services-error');
@@ -491,13 +505,11 @@
       var zone = section.querySelector('.upload-zone');
       var fileInput = zone.querySelector('input[type="file"]');
 
-      // Click to upload
       fileInput.addEventListener('change', function (e) {
         handleFiles(e.target.files, docType);
-        e.target.value = ''; // Reset so same file can be re-selected
+        e.target.value = '';
       });
 
-      // Drag and drop
       zone.addEventListener('dragover', function (e) {
         e.preventDefault();
         zone.classList.add('drag-over');
@@ -518,19 +530,16 @@
 
   function handleFiles(fileList, docType) {
     Array.from(fileList).forEach(function (file) {
-      // Validate type
       if (!ALLOWED_TYPES.includes(file.type)) {
         showToast('Invalid file type: ' + file.name + '. Please use PDF, JPG, PNG or WEBP.', 'error');
         return;
       }
 
-      // Validate size
       if (file.size > MAX_FILE_SIZE) {
         showToast(file.name + ' is too large. Maximum file size is 5 MB.', 'error');
         return;
       }
 
-      // Add to uploaded files
       var fileEntry = {
         file: file,
         id: generateFileId(),
@@ -543,7 +552,6 @@
       uploadedFiles[docType].push(fileEntry);
       renderFileList(docType);
 
-      // Clear doc error
       var errorEl = document.getElementById('docError-' + docType);
       if (errorEl) errorEl.classList.remove('visible');
     });
@@ -569,7 +577,6 @@
       container.appendChild(item);
     });
 
-    // Attach remove handlers
     container.querySelectorAll('.file-remove').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var fileId = this.dataset.fileId;
@@ -657,6 +664,14 @@
       docsHtml = '<p style="font-size: 14px; color: var(--slate);">No documents uploaded</p>';
     }
     docsContainer.innerHTML = docsHtml;
+
+    // Account info
+    var accountGrid = document.getElementById('reviewAccount');
+    if (accountGrid) {
+      accountGrid.innerHTML =
+        createReviewItem('Login Email', getVal('businessEmail')) +
+        createReviewItem('Password', '••••••••');
+    }
   }
 
 
@@ -683,8 +698,8 @@
   async function handleSubmit() {
     var submitBtn = document.getElementById('submitBtn');
 
-    // Re-validate all steps
-    for (var s = 1; s <= 4; s++) {
+    // Re-validate all steps (1-5)
+    for (var s = 1; s <= 5; s++) {
       if (!validateStep(s)) {
         goToStep(s, true);
         showToast('Please complete all required fields in step ' + s, 'error');
@@ -694,14 +709,63 @@
 
     // Disable submit button and show loading
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner"></span> Submitting…';
+    submitBtn.innerHTML = '<span class="spinner"></span> Creating account…';
 
     try {
       if (!supabase) {
         throw new Error('Database connection unavailable. Please check your internet connection and try again.');
       }
 
-      // 1. Generate application ID
+      var email = getVal('businessEmail').trim().toLowerCase();
+      var password = document.getElementById('accountPassword').value;
+
+      // ═══════════════════════════════════════
+      // STEP A: Create Supabase Auth Account
+      // ═══════════════════════════════════════
+      // The handle_new_user() trigger will auto-create
+      // a profiles row with role=LCO_ADMIN, status=PENDING
+
+      submitBtn.innerHTML = '<span class="spinner"></span> Creating account…';
+
+      var signUpResult = await supabase.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+          data: {
+            role: 'LCO_ADMIN',
+            account_status: 'PENDING',
+            business_name: getVal('businessName').trim()
+          }
+        }
+      });
+
+      if (signUpResult.error) {
+        // Handle specific errors
+        var errMsg = signUpResult.error.message;
+        if (errMsg.indexOf('already registered') !== -1 || errMsg.indexOf('already been registered') !== -1) {
+          throw new Error('An account with this email already exists. Please use a different email or log in.');
+        }
+        throw new Error('Failed to create account: ' + errMsg);
+      }
+
+      var userId = signUpResult.data.user ? signUpResult.data.user.id : null;
+
+      if (!userId) {
+        throw new Error('Account creation failed. Please try again.');
+      }
+      if (!signUpResult.data.session) {
+        // This flow immediately creates an application and uploads private
+        // documents under the authenticated user's folder. It therefore needs
+        // a session; see the deployment checklist for the Auth setting.
+        throw new Error('Account created, but email confirmation is enabled. Please contact support to complete your registration.');
+      }
+
+      // ═══════════════════════════════════════
+      // STEP B: Generate Application ID
+      // ═══════════════════════════════════════
+
+      submitBtn.innerHTML = '<span class="spinner"></span> Generating application ID…';
+
       var appIdResult = await supabase.rpc('generate_application_id');
 
       if (appIdResult.error) {
@@ -710,9 +774,13 @@
 
       var applicationId = appIdResult.data;
 
-      // 2. Prepare services array
+      // ═══════════════════════════════════════
+      // STEP C: Prepare & Insert Application
+      // ═══════════════════════════════════════
+
+      submitBtn.innerHTML = '<span class="spinner"></span> Saving application…';
+
       var services = getSelectedServices();
-      // If "Cable TV + Broadband" is selected, expand it
       var expandedServices = [];
       services.forEach(function (s) {
         if (s === 'Cable TV + Broadband') {
@@ -723,12 +791,12 @@
         }
       });
 
-      // 3. Insert application record
       var appData = {
         application_id: applicationId,
+        user_id: userId,
         business_name: getVal('businessName').trim(),
         owner_name: getVal('ownerName').trim(),
-        email: getVal('businessEmail').trim().toLowerCase(),
+        email: email,
         phone: getVal('businessPhone').trim(),
         address: getVal('businessAddress').trim(),
         city: getVal('businessCity').trim(),
@@ -756,7 +824,12 @@
 
       var appUUID = insertResult.data.id;
 
-      // 4. Upload documents to Supabase Storage and save references
+      // ═══════════════════════════════════════
+      // STEP D: Upload Documents
+      // ═══════════════════════════════════════
+
+      submitBtn.innerHTML = '<span class="spinner"></span> Uploading documents…';
+
       var docTypes = ['business_proof', 'identity_proof', 'registration_certificate', 'other_document'];
 
       for (var i = 0; i < docTypes.length; i++) {
@@ -765,9 +838,10 @@
 
         for (var j = 0; j < files.length; j++) {
           var fileEntry = files[j];
-          var filePath = applicationId + '/' + docType + '/' + Date.now() + '_' + sanitizeFileName(fileEntry.name);
+          // Storage policies bind this prefix to the authenticated applicant.
+          // Never use a public application ID as the access-control boundary.
+          var filePath = userId + '/' + docType + '/' + Date.now() + '_' + sanitizeFileName(fileEntry.name);
 
-          // Upload to storage
           var uploadResult = await supabase.storage
             .from('verification-documents')
             .upload(filePath, fileEntry.file, {
@@ -780,7 +854,6 @@
             throw new Error('Failed to upload document: ' + fileEntry.name + '. ' + uploadResult.error.message);
           }
 
-          // Save document reference
           var docRecord = {
             application_id: appUUID,
             document_type: docType,
@@ -802,14 +875,24 @@
         }
       }
 
-      // 5. Success! Save to session and redirect
+      // ═══════════════════════════════════════
+      // STEP E: Sign out the new user
+      // ═══════════════════════════════════════
+      // The LCO account is PENDING. They should not
+      // be logged in until approved.
+
+      await supabase.auth.signOut();
+
+      // ═══════════════════════════════════════
+      // STEP F: Success — redirect to status
+      // ═══════════════════════════════════════
+
       sessionStorage.setItem('lco_app_id', applicationId);
       sessionStorage.setItem('lco_biz_name', appData.business_name);
       sessionStorage.setItem('lco_submitted_date', new Date().toISOString());
 
       showToast('Application submitted successfully!', 'success');
 
-      // Redirect to status page after a brief delay
       setTimeout(function () {
         window.location.href = 'application-status.html?id=' +
           encodeURIComponent(applicationId) +
@@ -842,7 +925,6 @@
     toast.innerHTML = '<span class="toast-icon">' + icon + '</span>' + escapeHtml(message);
     container.appendChild(toast);
 
-    // Auto-remove after 5s
     setTimeout(function () {
       toast.classList.add('removing');
       setTimeout(function () {
@@ -914,7 +996,6 @@
      BOOTSTRAP
      ══════════════════════════════════════════════ */
 
-  // Initialize when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
