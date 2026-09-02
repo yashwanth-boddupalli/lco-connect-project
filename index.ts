@@ -22,8 +22,8 @@ Deno.serve(async (request) => {
     // named key maps. Support both without ever logging a key value.
     const anonKey = getSupabaseKey('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEYS');
     const serviceRoleKey = getSupabaseKey('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEYS');
-    const resendKey = Deno.env.get('RESEND_API_KEY');
-    const from = Deno.env.get('RESEND_FROM_EMAIL');
+    const smtp2goKey = Deno.env.get('SMTP2GO_API_KEY');
+    const from = Deno.env.get('SMTP2GO_FROM_EMAIL');
     const loginUrl = Deno.env.get('APP_LOGIN_URL');
     const platformMissing = [
       !url && 'SUPABASE_URL',
@@ -60,11 +60,11 @@ Deno.serve(async (request) => {
     }
 
     const notificationMissing = [
-      !resendKey && 'RESEND_API_KEY',
-      !from && 'RESEND_FROM_EMAIL',
+      !smtp2goKey && 'SMTP2GO_API_KEY',
+      !from && 'SMTP2GO_FROM_EMAIL',
       !loginUrl && 'APP_LOGIN_URL',
     ].filter(Boolean);
-    if (!resendKey || !from || !loginUrl) {
+    if (!smtp2goKey || !from || !loginUrl) {
       console.error('Notification function is missing configuration names:', notificationMissing.join(', '));
       const { error: statusError } = await admin.from('lco_applications')
         .update({ notification_status: 'FAILED' })
@@ -79,21 +79,42 @@ Deno.serve(async (request) => {
     const body = decision === 'APPROVED'
       ? `<p>Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Sign in with the email address you registered and the password you created during registration: <a href="${escapeAttribute(loginUrl)}">Sign in to LCO Connect</a>.</p><p>For security, we never send or retrieve passwords by email.</p>`
       : `<p>Hello,</p><p>Your application for <strong>${escapeHtml(application.business_name)}</strong> has not been approved.</p><p><strong>Reason:</strong> ${escapeHtml(application.rejection_reason || 'Please contact support for more information.')}</p><p>If you need help, please contact the LCO Connect support channel provided to you.</p>`;
+    const textBody = decision === 'APPROVED'
+      ? `Hello,\n\n${application.business_name} has been approved and your LCO Connect account is now active.\n\nSign in with the email address you registered and the password you created during registration: ${loginUrl}\n\nFor security, we never send or retrieve passwords by email.`
+      : `Hello,\n\nYour application for ${application.business_name} has not been approved.\n\nReason: ${application.rejection_reason || 'Please contact support for more information.'}\n\nIf you need help, please contact the LCO Connect support channel provided to you.`;
 
-    const emailResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from, to: [application.email], subject, html: body }),
-    });
-    const sent = emailResponse.ok;
-    if (!sent) console.error('Email provider rejected notification:', await emailResponse.text());
+    let sent = false;
+    try {
+      const emailResponse = await fetch('https://api.smtp2go.com/v3/email/send', {
+        method: 'POST',
+        headers: {
+          'X-Smtp2go-Api-Key': smtp2goKey,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          sender: from,
+          to: [application.email],
+          subject,
+          text_body: textBody,
+          html_body: body,
+        }),
+      });
+      sent = emailResponse.ok;
+      if (!sent) console.error(`SMTP2GO rejected notification with HTTP ${emailResponse.status}.`);
+    } catch (emailError) {
+      console.error('SMTP2GO request failed:', emailError instanceof Error ? emailError.message : 'Unknown error');
+    }
 
     const { error: statusError } = await admin.from('lco_applications')
       .update({ notification_status: sent ? 'SENT' : 'FAILED' })
       .eq('id', application.id);
     if (statusError) console.error('Could not record notification status:', statusError.message);
 
-    return reply({ ok: sent });
+    return reply({
+      ok: sent,
+      ...(sent ? {} : { error: 'SMTP2GO did not accept the notification.' }),
+    });
   } catch (error) {
     console.error('Notification function error:', error instanceof Error ? error.message : error);
     return reply({ error: 'Notification delivery failed.' }, 500);
