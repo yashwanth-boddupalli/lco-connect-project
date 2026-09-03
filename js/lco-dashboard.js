@@ -1,6 +1,6 @@
 /* ============================================
    LCO CONNECT — LCO Dashboard Logic
-   Phase 4: LCO Admin Dashboard
+   Phase 4 & 5: LCO Admin Dashboard, Plans & Subscriptions
    ============================================
    Follows the same IIFE pattern as super-admin.js.
    Uses LCOAuth shared module for authentication.
@@ -24,10 +24,19 @@
   var lcoData = null;       // lco_applications row
   var lcoId = null;         // lco_applications.id (tenant key)
   var currentView = 'overview';
+
+  // Customer state
   var allCustomers = [];
   var currentDetailCustomer = null;
   var currentFilter = 'all';
   var currentSearch = '';
+
+  // Phase 5: Plans & Subscriptions state
+  var allPlans = [];
+  var allSubscriptions = [];
+  var currentPlanFilterType = 'all';
+  var currentPlanFilterStatus = 'all';
+  var currentPlanSearch = '';
 
 
   /* ══════════════════════════════════════════════
@@ -96,10 +105,14 @@
     setupFilters();
     setupStatCardClicks();
     setupAddCustomerModal();
+    setupPlanListeners();
+    setupSubscriptionModal();
 
-    // Load data
+    // Load initial data
     loadStats();
     loadCustomers();
+    loadPlans();
+    loadSubscriptions();
     loadNotifications();
   }
 
@@ -139,6 +152,8 @@
       loadRecentCustomers();
     } else if (viewName === 'customers') {
       renderCustomersTable();
+    } else if (viewName === 'plans') {
+      loadPlans();
     } else if (viewName === 'services') {
       renderServicesSummary();
     } else if (viewName === 'notifications') {
@@ -160,6 +175,8 @@
     var sidebar = document.getElementById('lcoSidebar');
     var overlay = document.getElementById('lcoSidebarOverlay');
 
+    if (!toggleBtn || !sidebar || !overlay) return;
+
     toggleBtn.addEventListener('click', function () {
       sidebar.classList.toggle('open');
       overlay.classList.toggle('visible');
@@ -169,8 +186,10 @@
   }
 
   function closeMobileNav() {
-    document.getElementById('lcoSidebar').classList.remove('open');
-    document.getElementById('lcoSidebarOverlay').classList.remove('visible');
+    var sidebar = document.getElementById('lcoSidebar');
+    var overlay = document.getElementById('lcoSidebarOverlay');
+    if (sidebar) sidebar.classList.remove('open');
+    if (overlay) overlay.classList.remove('visible');
   }
 
 
@@ -179,10 +198,13 @@
      ══════════════════════════════════════════════ */
 
   function setupLogout() {
-    document.getElementById('lcoLogoutBtn').addEventListener('click', async function () {
-      await LCOAuth.signOut();
-      LCOAuth.redirectToLogin();
-    });
+    var btn = document.getElementById('lcoLogoutBtn');
+    if (btn) {
+      btn.addEventListener('click', async function () {
+        await LCOAuth.signOut();
+        LCOAuth.redirectToLogin();
+      });
+    }
   }
 
 
@@ -191,21 +213,33 @@
      ══════════════════════════════════════════════ */
 
   function setupStatCardClicks() {
-    document.getElementById('lcoStatTotal').addEventListener('click', function () {
-      switchView('customers');
-      setFilter('all');
-    });
-    document.getElementById('lcoStatActive').addEventListener('click', function () {
-      switchView('customers');
-      setFilter('ACTIVE');
-    });
-    document.getElementById('lcoStatInactive').addEventListener('click', function () {
-      switchView('customers');
-      setFilter('INACTIVE');
-    });
-    document.getElementById('lcoStatServices').addEventListener('click', function () {
-      switchView('services');
-    });
+    var totalCard = document.getElementById('lcoStatTotal');
+    if (totalCard) {
+      totalCard.addEventListener('click', function () {
+        switchView('customers');
+        setFilter('all');
+      });
+    }
+    var activeCard = document.getElementById('lcoStatActive');
+    if (activeCard) {
+      activeCard.addEventListener('click', function () {
+        switchView('customers');
+        setFilter('ACTIVE');
+      });
+    }
+    var inactiveCard = document.getElementById('lcoStatInactive');
+    if (inactiveCard) {
+      inactiveCard.addEventListener('click', function () {
+        switchView('customers');
+        setFilter('INACTIVE');
+      });
+    }
+    var servicesCard = document.getElementById('lcoStatServices');
+    if (servicesCard) {
+      servicesCard.addEventListener('click', function () {
+        switchView('plans');
+      });
+    }
   }
 
 
@@ -215,20 +249,27 @@
 
   async function loadStats() {
     try {
-      var { data, error } = await sb.from('customers')
+      var { data: customersData, error: custError } = await sb.from('customers')
         .select('service_status')
         .eq('lco_id', lcoId);
 
-      if (error) throw error;
+      if (custError) throw custError;
 
-      var total = data.length;
-      var active = data.filter(function (c) { return c.service_status === 'ACTIVE'; }).length;
-      var inactive = data.filter(function (c) { return c.service_status !== 'ACTIVE'; }).length;
+      var total = customersData.length;
+      var active = customersData.filter(function (c) { return c.service_status === 'ACTIVE'; }).length;
+      var inactive = customersData.filter(function (c) { return c.service_status !== 'ACTIVE'; }).length;
 
       document.getElementById('lcoStatTotalValue').textContent = total;
       document.getElementById('lcoStatActiveValue').textContent = active;
       document.getElementById('lcoStatInactiveValue').textContent = inactive;
-      document.getElementById('lcoStatServicesValue').textContent = active;
+
+      // Active service plans count
+      var { data: plansData } = await sb.from('service_plans')
+        .select('id')
+        .eq('lco_id', lcoId)
+        .eq('status', 'ACTIVE');
+
+      document.getElementById('lcoStatServicesValue').textContent = (plansData || []).length;
 
     } catch (e) {
       console.error('Load stats error:', e);
@@ -270,10 +311,12 @@
 
   function loadRecentCustomers() {
     var tbody = document.getElementById('lcoRecentTableBody');
+    if (!tbody) return;
+
     var recent = allCustomers.slice(0, 5);
 
     if (recent.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="lco-empty"><div class="lco-empty-icon">👤</div><h3>No customers yet</h3><p>Add your first customer to get started.</p><button class="lco-quick-btn primary" onclick="document.getElementById(\'addCustomerModal\').classList.add(\'visible\')">+ Add Customer</button></div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7"><div class="lco-empty"><div class="lco-empty-icon">👤</div><h3>No customers yet</h3><p>Add your first customer to get started.</p><button class="lco-quick-btn primary" onclick="document.getElementById(\'addCustomerModal\').classList.add(\'visible\')">+ Add Customer</button></div></td></tr>';
       return;
     }
 
@@ -291,6 +334,8 @@
 
   function renderCustomersTable() {
     var tbody = document.getElementById('lcoCustomersTableBody');
+    if (!tbody) return;
+
     var filtered = getFilteredCustomers();
 
     if (filtered.length === 0) {
@@ -337,11 +382,13 @@
 
 
   /* ══════════════════════════════════════════════
-     SEARCH & FILTER
+     SEARCH & FILTER (Customers)
      ══════════════════════════════════════════════ */
 
   function setupSearch() {
     var searchInput = document.getElementById('lcoSearchInput');
+    if (!searchInput) return;
+
     var debounceTimer;
     searchInput.addEventListener('input', function () {
       clearTimeout(debounceTimer);
@@ -354,6 +401,8 @@
 
   function setupFilters() {
     var filterGroup = document.getElementById('lcoFilterGroup');
+    if (!filterGroup) return;
+
     filterGroup.querySelectorAll('.lco-filter-btn').forEach(function (btn) {
       btn.addEventListener('click', function () {
         setFilter(btn.dataset.filter);
@@ -427,7 +476,7 @@
     var serviceGrid = document.getElementById('lcoDetailServiceGrid');
     serviceGrid.innerHTML =
       detailField('Service Type', cust.service_type) +
-      detailField('Plan', cust.plan_name) +
+      detailField('Plan Name', cust.plan_name) +
       detailField('Service Status', cust.service_status) +
       detailField('Connection Date', cust.connection_date ? formatDate(cust.connection_date) : '—');
 
@@ -447,6 +496,9 @@
       notesSection.style.display = 'none';
     }
 
+    // Phase 5: Render customer subscription details
+    renderCustomerDetailSubscriptions(cust);
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -458,13 +510,577 @@
   }
 
   // Back button
-  document.getElementById('lcoDetailBack').addEventListener('click', function () {
-    switchView('customers');
-  });
+  var backBtn = document.getElementById('lcoDetailBack');
+  if (backBtn) {
+    backBtn.addEventListener('click', function () {
+      switchView('customers');
+    });
+  }
 
 
   /* ══════════════════════════════════════════════
-     SERVICES SUMMARY
+     PHASE 5: SERVICE PLANS LOGIC
+     ══════════════════════════════════════════════ */
+
+  async function loadPlans() {
+    try {
+      var { data, error } = await sb.from('service_plans')
+        .select('*')
+        .eq('lco_id', lcoId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      allPlans = data || [];
+      updatePlanStats();
+      renderPlansGrid();
+
+    } catch (e) {
+      console.error('Load plans error:', e);
+      showToast('Failed to load service plans.', 'error');
+    }
+  }
+
+  function updatePlanStats() {
+    var total = allPlans.length;
+    var active = allPlans.filter(function (p) { return p.status === 'ACTIVE'; }).length;
+    var broadband = allPlans.filter(function (p) { return p.service_type === 'Broadband'; }).length;
+    var cable = allPlans.filter(function (p) { return p.service_type === 'Cable TV'; }).length;
+
+    var totalEl = document.getElementById('lcoPlanStatTotal');
+    if (totalEl) totalEl.textContent = total;
+
+    var activeEl = document.getElementById('lcoPlanStatActive');
+    if (activeEl) activeEl.textContent = active;
+
+    var bbEl = document.getElementById('lcoPlanStatBroadband');
+    if (bbEl) bbEl.textContent = broadband;
+
+    var cableEl = document.getElementById('lcoPlanStatCable');
+    if (cableEl) cableEl.textContent = cable;
+  }
+
+  function renderPlansGrid() {
+    var container = document.getElementById('lcoPlansGrid');
+    if (!container) return;
+
+    var filtered = getFilteredPlans();
+
+    if (filtered.length === 0) {
+      var msg = currentPlanSearch ? 'No plans match your search.' : 'No service plans created yet.';
+      container.innerHTML = '<div class="lco-empty" style="grid-column: 1 / -1;"><div class="lco-empty-icon">📦</div><h3>' + msg + '</h3><p>Create your first Broadband or Cable TV plan to start subscribing customers.</p><button class="lco-quick-btn primary" data-action="add-plan">+ Create Plan</button></div>';
+
+      container.querySelectorAll('[data-action="add-plan"]').forEach(function (btn) {
+        btn.addEventListener('click', function () { openPlanModal(); });
+      });
+      return;
+    }
+
+    container.innerHTML = filtered.map(function (plan) {
+      var isInactive = plan.status === 'INACTIVE';
+      var durationStr = plan.duration + ' ' + plan.duration_unit.toLowerCase();
+
+      var featuresHtml = '';
+      if (plan.service_type === 'Broadband' || plan.service_type === 'Both') {
+        if (plan.speed_mbps) {
+          featuresHtml += '<div class="lco-plan-feature-item"><span class="lco-plan-feature-icon">⚡</span> <strong>' + plan.speed_mbps + ' Mbps</strong> Speed</div>';
+        }
+        featuresHtml += '<div class="lco-plan-feature-item"><span class="lco-plan-feature-icon">📊</span> ' + (plan.data_limit_gb ? plan.data_limit_gb + ' GB Data' : 'Unlimited Data') + '</div>';
+      }
+
+      if (plan.service_type === 'Cable TV' || plan.service_type === 'Both') {
+        if (plan.package_type) {
+          featuresHtml += '<div class="lco-plan-feature-item"><span class="lco-plan-feature-icon">📺</span> ' + esc(plan.package_type) + '</div>';
+        }
+        if (plan.channel_count) {
+          featuresHtml += '<div class="lco-plan-feature-item"><span class="lco-plan-feature-icon">📡</span> ' + plan.channel_count + ' Channels</div>';
+        }
+      }
+
+      return '<div class="lco-plan-card' + (isInactive ? ' inactive' : '') + '" data-plan-id="' + plan.id + '">' +
+        '<div>' +
+        '<div class="lco-plan-header">' +
+        '<div>' +
+        '<div class="lco-plan-title">' + esc(plan.name) + '</div>' +
+        '<div style="margin-top:4px;">' + renderServiceTag(plan.service_type) + '</div>' +
+        '</div>' +
+        '<div>' + renderStatusBadge(plan.status) + '</div>' +
+        '</div>' +
+
+        '<div class="lco-plan-price-wrap">' +
+        '<span class="lco-plan-price">₹' + plan.price + '</span>' +
+        '<span class="lco-plan-duration">/ ' + durationStr + '</span>' +
+        '</div>' +
+
+        (plan.description ? '<div class="lco-plan-desc">' + esc(plan.description) + '</div>' : '') +
+
+        '<div class="lco-plan-features">' + featuresHtml + '</div>' +
+        '</div>' +
+
+        '<div class="lco-plan-actions">' +
+        '<button class="lco-plan-btn edit-plan-btn" data-id="' + plan.id + '">Edit</button>' +
+        '<button class="lco-plan-btn primary toggle-plan-btn" data-id="' + plan.id + '" data-status="' + plan.status + '">' +
+        (isInactive ? 'Activate' : 'Deactivate') +
+        '</button>' +
+        '</div>' +
+        '</div>';
+    }).join('');
+
+    // Attach click handlers
+    container.querySelectorAll('.edit-plan-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var plan = allPlans.find(function (p) { return p.id === btn.dataset.id; });
+        if (plan) openPlanModal(plan);
+      });
+    });
+
+    container.querySelectorAll('.toggle-plan-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        togglePlanStatus(btn.dataset.id, btn.dataset.status);
+      });
+    });
+  }
+
+  function setupPlanListeners() {
+    // Toolbar search & filters
+    var searchInput = document.getElementById('lcoPlanSearchInput');
+    if (searchInput) {
+      var timer;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          currentPlanSearch = searchInput.value.trim().toLowerCase();
+          renderPlansGrid();
+        }, 250);
+      });
+    }
+
+    var typeFilterGroup = document.getElementById('lcoPlanTypeFilterGroup');
+    if (typeFilterGroup) {
+      typeFilterGroup.querySelectorAll('.lco-filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentPlanFilterType = btn.dataset.planType;
+          typeFilterGroup.querySelectorAll('.lco-filter-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          renderPlansGrid();
+        });
+      });
+    }
+
+    var statusFilterGroup = document.getElementById('lcoPlanStatusFilterGroup');
+    if (statusFilterGroup) {
+      statusFilterGroup.querySelectorAll('.lco-filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentPlanFilterStatus = btn.dataset.planStatus;
+          statusFilterGroup.querySelectorAll('.lco-filter-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          renderPlansGrid();
+        });
+      });
+    }
+
+    // Modal open buttons
+    document.querySelectorAll('[data-action="add-plan"]').forEach(function (btn) {
+      btn.addEventListener('click', function () { openPlanModal(); });
+    });
+
+    // Form logic inside modal
+    var modal = document.getElementById('planModal');
+    var cancelBtn = document.getElementById('planCancelBtn');
+    var form = document.getElementById('planForm');
+    var serviceTypeSelect = document.getElementById('planServiceType');
+
+    if (serviceTypeSelect) {
+      serviceTypeSelect.addEventListener('change', updatePlanModalFields);
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+        form.reset();
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        savePlan();
+      });
+    }
+  }
+
+  function updatePlanModalFields() {
+    var type = document.getElementById('planServiceType').value;
+    var bbFields = document.getElementById('broadbandFields');
+    var cableFields = document.getElementById('cableFields');
+
+    if (type === 'Broadband') {
+      bbFields.style.display = 'grid';
+      cableFields.style.display = 'none';
+    } else if (type === 'Cable TV') {
+      bbFields.style.display = 'none';
+      cableFields.style.display = 'grid';
+    } else if (type === 'Both') {
+      bbFields.style.display = 'grid';
+      cableFields.style.display = 'grid';
+    } else {
+      bbFields.style.display = 'none';
+      cableFields.style.display = 'none';
+    }
+  }
+
+  function openPlanModal(plan) {
+    var modal = document.getElementById('planModal');
+    var form = document.getElementById('planForm');
+    var title = document.getElementById('planModalTitle');
+    var editId = document.getElementById('planEditId');
+
+    form.reset();
+
+    if (plan) {
+      title.textContent = 'Edit Service Plan';
+      editId.value = plan.id;
+      document.getElementById('planName').value = plan.name;
+      document.getElementById('planServiceType').value = plan.service_type;
+      document.getElementById('planPrice').value = plan.price;
+      document.getElementById('planDuration').value = plan.duration;
+      document.getElementById('planDurationUnit').value = plan.duration_unit;
+      document.getElementById('planSpeed').value = plan.speed_mbps || '';
+      document.getElementById('planDataLimit').value = plan.data_limit_gb || '';
+      document.getElementById('planPackageType').value = plan.package_type || 'Base Pack';
+      document.getElementById('planChannelCount').value = plan.channel_count || '';
+      document.getElementById('planDescription').value = plan.description || '';
+      document.getElementById('planStatus').value = plan.status;
+    } else {
+      title.textContent = 'Create Service Plan';
+      editId.value = '';
+      document.getElementById('planStatus').value = 'ACTIVE';
+    }
+
+    updatePlanModalFields();
+    modal.classList.add('visible');
+  }
+
+  async function savePlan() {
+    var editId = document.getElementById('planEditId').value;
+    var name = document.getElementById('planName').value.trim();
+    var serviceType = document.getElementById('planServiceType').value;
+    var price = parseFloat(document.getElementById('planPrice').value);
+    var duration = parseInt(document.getElementById('planDuration').value) || 1;
+    var durationUnit = document.getElementById('planDurationUnit').value;
+    var speed = parseInt(document.getElementById('planSpeed').value) || null;
+    var dataLimit = parseInt(document.getElementById('planDataLimit').value) || null;
+    var packageType = document.getElementById('planPackageType').value;
+    var channelCount = parseInt(document.getElementById('planChannelCount').value) || null;
+    var description = document.getElementById('planDescription').value.trim();
+    var status = document.getElementById('planStatus').value;
+
+    if (!name || isNaN(price)) {
+      showToast('Please fill in required plan details.', 'error');
+      return;
+    }
+
+    var btn = document.getElementById('planConfirmBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="lco-spinner"></span> Saving…';
+
+    try {
+      var planData = {
+        lco_id: lcoId,
+        name: name,
+        service_type: serviceType,
+        price: price,
+        duration: duration,
+        duration_unit: durationUnit,
+        speed_mbps: (serviceType === 'Broadband' || serviceType === 'Both') ? speed : null,
+        data_limit_gb: (serviceType === 'Broadband' || serviceType === 'Both') ? dataLimit : null,
+        package_type: (serviceType === 'Cable TV' || serviceType === 'Both') ? packageType : null,
+        channel_count: (serviceType === 'Cable TV' || serviceType === 'Both') ? channelCount : null,
+        description: description || null,
+        status: status
+      };
+
+      if (editId) {
+        var { error } = await sb.from('service_plans')
+          .update(planData)
+          .eq('id', editId)
+          .eq('lco_id', lcoId);
+
+        if (error) throw error;
+        showToast('Plan updated successfully!', 'success');
+      } else {
+        var { error: insertError } = await sb.from('service_plans')
+          .insert(planData);
+
+        if (insertError) throw insertError;
+        showToast('Plan created successfully!', 'success');
+      }
+
+      document.getElementById('planModal').classList.remove('visible');
+      document.getElementById('planForm').reset();
+      await loadPlans();
+      await loadStats();
+
+    } catch (e) {
+      console.error('Save plan error:', e);
+      showToast('Failed to save plan. ' + (e.message || ''), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Save Plan';
+    }
+  }
+
+  async function togglePlanStatus(planId, currentStatus) {
+    var newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    try {
+      var { error } = await sb.from('service_plans')
+        .update({ status: newStatus })
+        .eq('id', planId)
+        .eq('lco_id', lcoId);
+
+      if (error) throw error;
+
+      showToast('Plan status changed to ' + newStatus, 'success');
+      await loadPlans();
+      await loadStats();
+    } catch (e) {
+      console.error('Toggle plan error:', e);
+      showToast('Failed to update status.', 'error');
+    }
+  }
+
+  function getFilteredPlans() {
+    return allPlans.filter(function (p) {
+      if (currentPlanFilterType !== 'all' && p.service_type !== currentPlanFilterType) return false;
+      if (currentPlanFilterStatus !== 'all' && p.status !== currentPlanFilterStatus) return false;
+      if (currentPlanSearch) {
+        var text = (p.name + ' ' + p.service_type + ' ' + p.price + ' ' + p.description).toLowerCase();
+        return text.indexOf(currentPlanSearch) !== -1;
+      }
+      return true;
+    });
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 5: CUSTOMER SUBSCRIPTIONS LOGIC
+     ══════════════════════════════════════════════ */
+
+  async function loadSubscriptions() {
+    try {
+      var { data, error } = await sb.from('customer_subscriptions')
+        .select('*, service_plans(*)')
+        .eq('lco_id', lcoId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      allSubscriptions = data || [];
+
+    } catch (e) {
+      console.error('Load subscriptions error:', e);
+    }
+  }
+
+  function setupSubscriptionModal() {
+    var modal = document.getElementById('subscriptionModal');
+    var form = document.getElementById('subForm');
+    var cancelBtn = document.getElementById('subCancelBtn');
+    var assignBtn = document.getElementById('lcoAssignSubBtn');
+    var planSelect = document.getElementById('subPlanSelect');
+
+    if (assignBtn) {
+      assignBtn.addEventListener('click', function () {
+        if (currentDetailCustomer) openSubscriptionModal(currentDetailCustomer);
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+        form.reset();
+      });
+    }
+
+    if (planSelect) {
+      planSelect.addEventListener('change', function () {
+        autoCalculateExpiryDate();
+      });
+    }
+
+    var startDateInput = document.getElementById('subStartDate');
+    if (startDateInput) {
+      startDateInput.addEventListener('change', function () {
+        autoCalculateExpiryDate();
+      });
+    }
+
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        saveSubscription();
+      });
+    }
+  }
+
+  function openSubscriptionModal(customer) {
+    var modal = document.getElementById('subscriptionModal');
+    var form = document.getElementById('subForm');
+    form.reset();
+
+    document.getElementById('subCustomerId').value = customer.id;
+    document.getElementById('subCustomerName').value = customer.full_name + ' (' + customer.customer_id + ')';
+
+    // Populate active plans dropdown
+    var select = document.getElementById('subPlanSelect');
+    var activePlans = allPlans.filter(function (p) { return p.status === 'ACTIVE'; });
+
+    if (activePlans.length === 0) {
+      select.innerHTML = '<option value="">No active plans available. Create a plan first!</option>';
+    } else {
+      select.innerHTML = '<option value="">Select a service plan</option>' +
+        activePlans.map(function (p) {
+          return '<option value="' + p.id + '">' + esc(p.name) + ' — ₹' + p.price + ' (' + p.service_type + ' / ' + p.duration + ' ' + p.duration_unit + ')</option>';
+        }).join('');
+    }
+
+    // Default start date = today
+    var today = new Date().toISOString().split('T')[0];
+    document.getElementById('subStartDate').value = today;
+    document.getElementById('subStatus').value = 'ACTIVE';
+
+    modal.classList.add('visible');
+  }
+
+  function autoCalculateExpiryDate() {
+    var planId = document.getElementById('subPlanSelect').value;
+    var startDateStr = document.getElementById('subStartDate').value;
+
+    if (!planId || !startDateStr) return;
+
+    var plan = allPlans.find(function (p) { return p.id === planId; });
+    if (!plan) return;
+
+    var start = new Date(startDateStr);
+    var end = new Date(start);
+
+    if (plan.duration_unit === 'DAYS') {
+      end.setDate(end.getDate() + plan.duration);
+    } else if (plan.duration_unit === 'YEARS') {
+      end.setFullYear(end.getFullYear() + plan.duration);
+    } else { // MONTHS
+      end.setMonth(end.getMonth() + plan.duration);
+    }
+
+    document.getElementById('subEndDate').value = end.toISOString().split('T')[0];
+  }
+
+  async function saveSubscription() {
+    var customerId = document.getElementById('subCustomerId').value;
+    var planId = document.getElementById('subPlanSelect').value;
+    var startDate = document.getElementById('subStartDate').value;
+    var endDate = document.getElementById('subEndDate').value;
+    var status = document.getElementById('subStatus').value;
+    var notes = document.getElementById('subNotes').value.trim();
+
+    if (!customerId || !planId || !startDate || !endDate) {
+      showToast('Please fill in all required subscription fields.', 'error');
+      return;
+    }
+
+    var btn = document.getElementById('subConfirmBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="lco-spinner"></span> Confirming…';
+
+    try {
+      var plan = allPlans.find(function (p) { return p.id === planId; });
+
+      // Insert customer subscription
+      var { error: subError } = await sb.from('customer_subscriptions')
+        .insert({
+          lco_id: lcoId,
+          customer_id: customerId,
+          plan_id: planId,
+          start_date: startDate,
+          end_date: endDate,
+          status: status,
+          notes: notes || null
+        });
+
+      if (subError) throw subError;
+
+      // Update customer table service fields to match active plan
+      if (plan) {
+        await sb.from('customers')
+          .update({
+            service_type: plan.service_type,
+            plan_name: plan.name,
+            service_status: status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'
+          })
+          .eq('id', customerId);
+      }
+
+      showToast('Subscription assigned successfully!', 'success');
+
+      document.getElementById('subscriptionModal').classList.remove('visible');
+      document.getElementById('subForm').reset();
+
+      await loadSubscriptions();
+      await loadCustomers();
+
+      // Refresh customer detail view if open
+      if (currentDetailCustomer && currentDetailCustomer.id === customerId) {
+        var updatedCust = allCustomers.find(function (c) { return c.id === customerId; });
+        if (updatedCust) openCustomerDetail(updatedCust.id);
+      }
+
+    } catch (e) {
+      console.error('Save subscription error:', e);
+      showToast('Failed to assign subscription. ' + (e.message || ''), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Confirm Subscription';
+    }
+  }
+
+  function renderCustomerDetailSubscriptions(customer) {
+    var container = document.getElementById('lcoDetailSubscriptionContent');
+    if (!container) return;
+
+    var subs = allSubscriptions.filter(function (s) { return s.customer_id === customer.id; });
+
+    if (subs.length === 0) {
+      container.innerHTML = '<div class="lco-sub-card"><div style="display:flex; align-items:center; justify-content:space-between;"><div><strong>No Active Subscription</strong><div style="font-size:13px; color:var(--slate); margin-top:2px;">This customer does not have any plan assigned yet.</div></div><button class="lco-quick-btn primary" onclick="document.getElementById(\'lcoAssignSubBtn\').click()">+ Assign Plan</button></div></div>';
+      return;
+    }
+
+    var activeSub = subs.find(function (s) { return s.status === 'ACTIVE'; }) || subs[0];
+    var plan = activeSub.service_plans;
+
+    var html = '<div class="lco-sub-card">' +
+      '<div class="lco-sub-header">' +
+      '<div>' +
+      '<div class="lco-sub-plan-name">' + esc(plan ? plan.name : (customer.plan_name || 'Custom Subscription')) + '</div>' +
+      '<div style="margin-top:4px;">' + renderServiceTag(plan ? plan.service_type : customer.service_type) + '</div>' +
+      '</div>' +
+      '<div>' + renderStatusBadge(activeSub.status) + '</div>' +
+      '</div>' +
+
+      '<div class="lco-detail-grid" style="margin-top:14px;">' +
+      detailField('Price', plan ? '₹' + plan.price + ' / ' + plan.duration + ' ' + plan.duration_unit.toLowerCase() : '—') +
+      detailField('Speed / Channels', plan ? (plan.speed_mbps ? plan.speed_mbps + ' Mbps' : (plan.channel_count ? plan.channel_count + ' Channels' : '—')) : '—') +
+      detailField('Start Date', formatDate(activeSub.start_date)) +
+      detailField('Expiry / End Date', formatDate(activeSub.end_date)) +
+      '</div>' +
+
+      (activeSub.notes ? '<div style="margin-top:10px; font-size:13px; color:var(--slate);">Notes: ' + esc(activeSub.notes) + '</div>' : '') +
+      '</div>';
+
+    container.innerHTML = html;
+  }
+
+
+  /* ══════════════════════════════════════════════
+     SERVICES SUMMARY VIEW
      ══════════════════════════════════════════════ */
 
   function renderServicesSummary() {
@@ -495,11 +1111,13 @@
     var disconnectedCount = allCustomers.filter(function (c) { return c.service_status === 'DISCONNECTED'; }).length;
 
     var statusGrid = document.getElementById('lcoServiceStatusGrid');
-    statusGrid.innerHTML =
-      '<div class="lco-detail-field"><div class="lco-detail-label">Active</div><div class="lco-detail-value">' + activeCount + '</div></div>' +
-      '<div class="lco-detail-field"><div class="lco-detail-label">Inactive</div><div class="lco-detail-value">' + inactiveCount + '</div></div>' +
-      '<div class="lco-detail-field"><div class="lco-detail-label">Suspended</div><div class="lco-detail-value">' + suspendedCount + '</div></div>' +
-      '<div class="lco-detail-field"><div class="lco-detail-label">Disconnected</div><div class="lco-detail-value">' + disconnectedCount + '</div></div>';
+    if (statusGrid) {
+      statusGrid.innerHTML =
+        '<div class="lco-detail-field"><div class="lco-detail-label">Active</div><div class="lco-detail-value">' + activeCount + '</div></div>' +
+        '<div class="lco-detail-field"><div class="lco-detail-label">Inactive</div><div class="lco-detail-value">' + inactiveCount + '</div></div>' +
+        '<div class="lco-detail-field"><div class="lco-detail-label">Suspended</div><div class="lco-detail-value">' + suspendedCount + '</div></div>' +
+        '<div class="lco-detail-field"><div class="lco-detail-label">Disconnected</div><div class="lco-detail-value">' + disconnectedCount + '</div></div>';
+    }
   }
 
 
@@ -558,7 +1176,8 @@
         item.addEventListener('click', function () {
           markNotificationRead(item.dataset.notifId);
           item.classList.remove('unread');
-          item.querySelector('.lco-notif-dot').classList.add('read');
+          var dot = item.querySelector('.lco-notif-dot');
+          if (dot) dot.classList.add('read');
         });
       });
 
@@ -659,17 +1278,21 @@
     var cancelBtn = document.getElementById('addCustCancelBtn');
     var form = document.getElementById('addCustomerForm');
 
+    if (!modal || !form) return;
+
     openBtns.forEach(function (btn) {
       btn.addEventListener('click', function () {
         modal.classList.add('visible');
       });
     });
 
-    cancelBtn.addEventListener('click', function () {
-      modal.classList.remove('visible');
-      form.reset();
-      clearFormErrors();
-    });
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+        form.reset();
+        clearFormErrors();
+      });
+    }
 
     modal.addEventListener('click', function (e) {
       if (e.target === modal) {
@@ -688,7 +1311,7 @@
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
         modal.classList.remove('visible');
-        form.reset();
+        if (form) form.reset();
         clearFormErrors();
       }
     });
@@ -732,7 +1355,7 @@
       var customerId = custIdData;
 
       // Insert customer
-      var { data: newCust, error: insertError } = await sb.from('customers')
+      var { error: insertError } = await sb.from('customers')
         .insert({
           customer_id: customerId,
           lco_id: lcoId,
@@ -748,9 +1371,7 @@
           service_status: 'ACTIVE',
           connection_date: new Date().toISOString().split('T')[0],
           notes: notes || null
-        })
-        .select()
-        .single();
+        });
 
       if (insertError) throw insertError;
 
@@ -770,7 +1391,7 @@
       showToast('Failed to add customer. ' + (e.message || ''), 'error');
     } finally {
       btn.disabled = false;
-      btn.innerHTML = '+ Add Customer';
+      btn.textContent = '+ Add Customer';
     }
   }
 
@@ -786,6 +1407,8 @@
 
   function showToast(message, type) {
     var container = document.getElementById('lcoToastContainer');
+    if (!container) return;
+
     var toast = document.createElement('div');
     toast.className = 'lco-toast ' + (type || '');
     var icon = type === 'error' ? '⚠️' : type === 'success' ? '✓' : '💬';
@@ -814,6 +1437,9 @@
     var label = status || 'ACTIVE';
     if (status === 'INACTIVE') cls = 'inactive';
     else if (status === 'SUSPENDED') cls = 'suspended';
+    else if (status === 'EXPIRED') cls = 'expired';
+    else if (status === 'CANCELLED') cls = 'cancelled';
+    else if (status === 'PENDING') cls = 'pending';
     else if (status === 'DISCONNECTED') cls = 'disconnected';
     return '<span class="lco-badge ' + cls + '">' + label + '</span>';
   }
