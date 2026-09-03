@@ -5,7 +5,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LCO Dashboard — LCO Connect</title>
-  <meta name="description" content="LCO Admin Dashboard for managing customers, services, and business operations.">
+  <meta name="description" content="LCO Admin Dashboard for managing customers, service plans, subscriptions, and business operations.">
   <meta name="theme-color" content="#0B7A6E">
   <meta name="robots" content="noindex, nofollow">
 
@@ -76,6 +76,9 @@
         <button class="lco-nav-item" data-view="customers" id="navCustomers">
           <span class="lco-nav-icon">👤</span> Customers
         </button>
+        <button class="lco-nav-item" data-view="plans" id="navPlans">
+          <span class="lco-nav-icon">📦</span> Service Plans
+        </button>
         <button class="lco-nav-item" data-view="services" id="navServices">
           <span class="lco-nav-icon">◉</span> Services
         </button>
@@ -118,7 +121,7 @@
             </div>
             <div class="lco-stat-card" id="lcoStatServices">
               <div class="lco-stat-label">
-                <span class="lco-stat-dot services"></span> Active Services
+                <span class="lco-stat-dot services"></span> Active Plans
               </div>
               <div class="lco-stat-value" id="lcoStatServicesValue"><div class="lco-stat-loading"></div></div>
             </div>
@@ -129,14 +132,14 @@
             <button class="lco-quick-btn primary" data-action="add-customer">
               <span class="lco-quick-icon">+</span> Add Customer
             </button>
+            <button class="lco-quick-btn" data-action="add-plan">
+              <span class="lco-quick-icon">+</span> Create Plan
+            </button>
             <button class="lco-quick-btn" onclick="document.querySelector('[data-view=customers]').click()">
               <span class="lco-quick-icon">👤</span> View Customers
             </button>
-            <button class="lco-quick-btn" onclick="document.querySelector('[data-view=profile]').click()">
-              <span class="lco-quick-icon">🏢</span> View Profile
-            </button>
-            <button class="lco-quick-btn" onclick="document.querySelector('[data-view=notifications]').click()">
-              <span class="lco-quick-icon">🔔</span> Notifications
+            <button class="lco-quick-btn" onclick="document.querySelector('[data-view=plans]').click()">
+              <span class="lco-quick-icon">📦</span> View Plans
             </button>
           </div>
 
@@ -226,6 +229,17 @@
             </div>
           </div>
 
+          <!-- Subscription & Current Plan -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span><span class="lco-detail-section-icon">📦</span> Current Subscription & Plan</span>
+              <button class="lco-quick-btn primary" id="lcoAssignSubBtn" style="padding:6px 14px; font-size:12px;">+ Assign / Change Plan</button>
+            </div>
+            <div id="lcoDetailSubscriptionContent">
+              <div style="font-size:14px; color:var(--slate);">Loading subscription status…</div>
+            </div>
+          </div>
+
           <!-- Personal Information -->
           <div class="lco-detail-section">
             <div class="lco-detail-section-title">
@@ -260,10 +274,83 @@
         </section>
 
 
+        <!-- ═══════════ VIEW: SERVICE PLANS (Phase 5) ═══════════ -->
+        <section class="lco-view" id="view-plans">
+          <h1 class="lco-view-title">Service Plans</h1>
+          <p class="lco-view-subtitle">Create and manage broadband & cable TV service offerings for your customers</p>
+
+          <!-- Plan Stats -->
+          <div class="lco-stats-grid">
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot total"></span> Total Plans
+              </div>
+              <div class="lco-stat-value" id="lcoPlanStatTotal">0</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot active"></span> Active Plans
+              </div>
+              <div class="lco-stat-value" id="lcoPlanStatActive">0</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot services"></span> Broadband Plans
+              </div>
+              <div class="lco-stat-value" id="lcoPlanStatBroadband">0</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot inactive"></span> Cable TV Plans
+              </div>
+              <div class="lco-stat-value" id="lcoPlanStatCable">0</div>
+            </div>
+          </div>
+
+          <!-- Toolbar -->
+          <div class="lco-toolbar">
+            <div class="lco-search-wrap">
+              <span class="lco-search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input type="text" class="lco-search-input" id="lcoPlanSearchInput" placeholder="Search plans by name, speed, price…">
+            </div>
+
+            <div class="lco-filter-group" id="lcoPlanTypeFilterGroup">
+              <button class="lco-filter-btn active" data-plan-type="all">All Types</button>
+              <button class="lco-filter-btn" data-plan-type="Broadband">Broadband</button>
+              <button class="lco-filter-btn" data-plan-type="Cable TV">Cable TV</button>
+              <button class="lco-filter-btn" data-plan-type="Both">Both</button>
+              <button class="lco-filter-btn" data-plan-type="Other">Other</button>
+            </div>
+
+            <div class="lco-filter-group" id="lcoPlanStatusFilterGroup" style="margin-left: 8px;">
+              <button class="lco-filter-btn active" data-plan-status="all">All Status</button>
+              <button class="lco-filter-btn" data-plan-status="ACTIVE">Active</button>
+              <button class="lco-filter-btn" data-plan-status="INACTIVE">Inactive</button>
+            </div>
+
+            <button class="lco-quick-btn primary" data-action="add-plan" style="margin-left:auto;">
+              + Create Plan
+            </button>
+          </div>
+
+          <!-- Plans Grid -->
+          <div class="lco-plans-grid" id="lcoPlansGrid">
+            <div class="lco-empty" style="grid-column: 1 / -1;">
+              <div class="lco-empty-icon">📦</div>
+              <h3>Loading service plans…</h3>
+            </div>
+          </div>
+        </section>
+
+
         <!-- ═══════════ VIEW: SERVICES ═══════════ -->
         <section class="lco-view" id="view-services">
-          <h1 class="lco-view-title">Services</h1>
-          <p class="lco-view-subtitle">Overview of your service distribution</p>
+          <h1 class="lco-view-title">Services Overview</h1>
+          <p class="lco-view-subtitle">Overview of your customer service distribution</p>
 
           <div class="lco-service-summary-grid">
             <div class="lco-service-summary-card">
@@ -441,6 +528,161 @@
         <div class="lco-modal-actions">
           <button type="button" class="lco-modal-cancel" id="addCustCancelBtn">Cancel</button>
           <button type="submit" class="lco-modal-confirm" id="addCustConfirmBtn">+ Add Customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     CREATE / EDIT PLAN MODAL (Phase 5)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="planModal">
+    <div class="lco-modal">
+      <h3 id="planModalTitle">Create Service Plan</h3>
+      <form id="planForm" autocomplete="off">
+        <input type="hidden" id="planEditId" value="">
+
+        <div class="lco-form-group">
+          <label for="planName">Plan Name *</label>
+          <input type="text" id="planName" placeholder="e.g. Ultra Fast 100 Mbps, Gold HD Pack" required>
+          <div class="lco-form-error" id="planName-error">Plan name is required</div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="planServiceType">Service Category *</label>
+            <select id="planServiceType" required>
+              <option value="Broadband">Broadband</option>
+              <option value="Cable TV">Cable TV</option>
+              <option value="Both">Both</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div class="lco-form-group">
+            <label for="planPrice">Price (₹) *</label>
+            <input type="number" id="planPrice" placeholder="499" min="0" step="0.01" required>
+            <div class="lco-form-error" id="planPrice-error">Valid price is required</div>
+          </div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="planDuration">Duration *</label>
+            <input type="number" id="planDuration" value="1" min="1" required>
+          </div>
+          <div class="lco-form-group">
+            <label for="planDurationUnit">Duration Unit *</label>
+            <select id="planDurationUnit" required>
+              <option value="MONTHS">Month(s)</option>
+              <option value="DAYS">Day(s)</option>
+              <option value="YEARS">Year(s)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Broadband specific fields -->
+        <div id="broadbandFields" class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="planSpeed">Speed (Mbps)</label>
+            <input type="number" id="planSpeed" placeholder="100" min="1">
+          </div>
+          <div class="lco-form-group">
+            <label for="planDataLimit">Data Limit (GB) — Leave empty for Unlimited</label>
+            <input type="number" id="planDataLimit" placeholder="Unlimited" min="1">
+          </div>
+        </div>
+
+        <!-- Cable TV specific fields -->
+        <div id="cableFields" class="lco-form-row" style="display:none;">
+          <div class="lco-form-group">
+            <label for="planPackageType">Package Type</label>
+            <select id="planPackageType">
+              <option value="Base Pack">Base Pack</option>
+              <option value="Add-on">Add-on</option>
+              <option value="Bouquet">Bouquet</option>
+              <option value="A-la-carte">A-la-carte</option>
+            </select>
+          </div>
+          <div class="lco-form-group">
+            <label for="planChannelCount">Channel Count</label>
+            <input type="number" id="planChannelCount" placeholder="150" min="1">
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="planDescription">Description (optional)</label>
+          <textarea id="planDescription" placeholder="Features, terms, included channels or OTT apps…"></textarea>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="planStatus">Status *</label>
+          <select id="planStatus" required>
+            <option value="ACTIVE">Active (Available for subscription)</option>
+            <option value="INACTIVE">Inactive (Hidden/Disabled)</option>
+          </select>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="planCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="planConfirmBtn">Save Plan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     ASSIGN SUBSCRIPTION MODAL (Phase 5)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="subscriptionModal">
+    <div class="lco-modal">
+      <h3 id="subModalTitle">Subscribe Customer to Plan</h3>
+      <form id="subForm" autocomplete="off">
+        <input type="hidden" id="subCustomerId" value="">
+
+        <div class="lco-form-group">
+          <label for="subCustomerName">Customer</label>
+          <input type="text" id="subCustomerName" readonly style="background:rgba(246,242,234,0.5);">
+        </div>
+
+        <div class="lco-form-group">
+          <label for="subPlanSelect">Select Active Service Plan *</label>
+          <select id="subPlanSelect" required>
+            <option value="">Loading plans…</option>
+          </select>
+          <div class="lco-form-error" id="subPlanSelect-error">Please select a plan</div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="subStartDate">Start Date *</label>
+            <input type="date" id="subStartDate" required>
+          </div>
+          <div class="lco-form-group">
+            <label for="subEndDate">Expiry / End Date *</label>
+            <input type="date" id="subEndDate" required>
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="subStatus">Subscription Status *</label>
+          <select id="subStatus" required>
+            <option value="ACTIVE">ACTIVE</option>
+            <option value="PENDING">PENDING</option>
+            <option value="EXPIRED">EXPIRED</option>
+            <option value="CANCELLED">CANCELLED</option>
+          </select>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="subNotes">Notes / Special terms (optional)</label>
+          <textarea id="subNotes" placeholder="e.g. Free installation applied, annual discount…"></textarea>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="subCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="subConfirmBtn">Confirm Subscription</button>
         </div>
       </form>
     </div>
