@@ -1,43 +1,461 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LCO Dashboard — LCO Connect</title>
+  <meta name="description" content="LCO Admin Dashboard for managing customers, services, and business operations.">
+  <meta name="theme-color" content="#0B7A6E">
   <meta name="robots" content="noindex, nofollow">
+
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
   <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/lco-dashboard.css">
 </head>
-<body>
-  <nav class="nav" role="navigation" aria-label="Main navigation">
-    <div class="nav-inner">
-      <a href="../index.html" class="brand"><span class="brand-mark" aria-hidden="true"></span>LCO Connect</a>
-      <div class="nav-actions"><button class="btn btn-ghost" id="logoutBtn">Logout</button></div>
+
+<body class="lco-dashboard-page">
+
+  <!-- Toast container -->
+  <div class="lco-toast-container" id="lcoToastContainer" aria-live="polite"></div>
+
+  <!-- Loading screen -->
+  <div class="lco-loading-screen" id="lcoLoadingScreen">
+    <div class="lco-loading-content">
+      <div class="lco-loading-spinner"></div>
+      <div class="lco-loading-text">Loading dashboard…</div>
     </div>
-  </nav>
-  <main class="wrap" style="padding-top:120px; min-height:70vh;">
-    <p class="eyebrow">LCO ADMIN</p>
-    <h1 id="welcome">Welcome to LCO Connect</h1>
-    <p style="max-width:650px; color:var(--slate);">Your LCO account is active. The operational dashboard will be added in the next project phase.</p>
-  </main>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+     DASHBOARD (hidden until authenticated)
+     ═══════════════════════════════════════════ -->
+  <div id="lcoDashboardContainer" style="display: none;">
+
+    <!-- Header -->
+    <header class="lco-header">
+      <div class="lco-header-inner">
+        <div class="lco-header-left">
+          <button class="lco-mobile-nav-toggle" id="lcoMobileNavToggle" aria-label="Toggle navigation">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+            <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+          </a>
+          <span class="lco-header-badge">LCO Admin</span>
+        </div>
+        <div class="lco-header-right">
+          <span class="lco-header-biz-name" id="lcoBizName"></span>
+          <button class="lco-logout-btn" id="lcoLogoutBtn">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Body layout -->
+    <div class="lco-body">
+
+      <!-- Sidebar overlay (mobile) -->
+      <div class="lco-sidebar-overlay" id="lcoSidebarOverlay"></div>
+
+      <!-- Sidebar navigation -->
+      <aside class="lco-sidebar" id="lcoSidebar">
+        <div class="lco-sidebar-title">Navigation</div>
+
+        <button class="lco-nav-item active" data-view="overview" id="navOverview">
+          <span class="lco-nav-icon">◎</span> Dashboard
+        </button>
+        <button class="lco-nav-item" data-view="customers" id="navCustomers">
+          <span class="lco-nav-icon">👤</span> Customers
+        </button>
+        <button class="lco-nav-item" data-view="services" id="navServices">
+          <span class="lco-nav-icon">◉</span> Services
+        </button>
+        <button class="lco-nav-item" data-view="notifications" id="navNotifications">
+          <span class="lco-nav-icon">🔔</span> Notifications
+          <span class="lco-nav-count" id="lcoNotifCount" style="display:none;">0</span>
+        </button>
+        <button class="lco-nav-item" data-view="profile" id="navProfile">
+          <span class="lco-nav-icon">🏢</span> Profile
+        </button>
+      </aside>
+
+      <!-- Main content area -->
+      <main class="lco-content">
+
+        <!-- ═══════════ VIEW: OVERVIEW ═══════════ -->
+        <section class="lco-view active" id="view-overview">
+          <h1 class="lco-view-title">Dashboard Overview</h1>
+          <p class="lco-view-subtitle">Your business at a glance</p>
+
+          <!-- Stat cards -->
+          <div class="lco-stats-grid">
+            <div class="lco-stat-card" id="lcoStatTotal">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot total"></span> Total Customers
+              </div>
+              <div class="lco-stat-value" id="lcoStatTotalValue"><div class="lco-stat-loading"></div></div>
+            </div>
+            <div class="lco-stat-card" id="lcoStatActive">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot active"></span> Active Customers
+              </div>
+              <div class="lco-stat-value" id="lcoStatActiveValue"><div class="lco-stat-loading"></div></div>
+            </div>
+            <div class="lco-stat-card" id="lcoStatInactive">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot inactive"></span> Inactive / Suspended
+              </div>
+              <div class="lco-stat-value" id="lcoStatInactiveValue"><div class="lco-stat-loading"></div></div>
+            </div>
+            <div class="lco-stat-card" id="lcoStatServices">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot services"></span> Active Services
+              </div>
+              <div class="lco-stat-value" id="lcoStatServicesValue"><div class="lco-stat-loading"></div></div>
+            </div>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="lco-quick-actions">
+            <button class="lco-quick-btn primary" data-action="add-customer">
+              <span class="lco-quick-icon">+</span> Add Customer
+            </button>
+            <button class="lco-quick-btn" onclick="document.querySelector('[data-view=customers]').click()">
+              <span class="lco-quick-icon">👤</span> View Customers
+            </button>
+            <button class="lco-quick-btn" onclick="document.querySelector('[data-view=profile]').click()">
+              <span class="lco-quick-icon">🏢</span> View Profile
+            </button>
+            <button class="lco-quick-btn" onclick="document.querySelector('[data-view=notifications]').click()">
+              <span class="lco-quick-icon">🔔</span> Notifications
+            </button>
+          </div>
+
+          <!-- Recent Customers -->
+          <h2 class="lco-section-heading">Recent Customers</h2>
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="lcoRecentTable">
+              <thead>
+                <tr>
+                  <th>Customer ID</th>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Service</th>
+                  <th>Status</th>
+                  <th>Registered</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="lcoRecentTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: CUSTOMERS ═══════════ -->
+        <section class="lco-view" id="view-customers">
+          <h1 class="lco-view-title">Customers</h1>
+          <p class="lco-view-subtitle">Manage your customer base</p>
+
+          <!-- Toolbar -->
+          <div class="lco-toolbar">
+            <div class="lco-search-wrap">
+              <span class="lco-search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input type="text" class="lco-search-input" id="lcoSearchInput" placeholder="Search by ID, name, phone, service…">
+            </div>
+            <div class="lco-filter-group" id="lcoFilterGroup">
+              <button class="lco-filter-btn active" data-filter="all">All</button>
+              <button class="lco-filter-btn" data-filter="ACTIVE">Active</button>
+              <button class="lco-filter-btn" data-filter="INACTIVE">Inactive</button>
+              <button class="lco-filter-btn" data-filter="SUSPENDED">Suspended</button>
+            </div>
+            <button class="lco-quick-btn primary" data-action="add-customer" style="margin-left:auto;">
+              + Add Customer
+            </button>
+          </div>
+
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="lcoCustomersTable">
+              <thead>
+                <tr>
+                  <th>Customer ID</th>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Service</th>
+                  <th>Status</th>
+                  <th>Registered</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="lcoCustomersTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading customers…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: CUSTOMER DETAIL ═══════════ -->
+        <section class="lco-view" id="view-customer-detail">
+          <button class="lco-detail-back" id="lcoDetailBack">← Back to customers</button>
+
+          <div class="lco-detail-header">
+            <div class="lco-detail-header-left">
+              <h2 id="lcoDetailName">—</h2>
+              <div class="lco-detail-meta">
+                <div class="lco-detail-meta-item">
+                  <span>ID:</span> <span class="mono" id="lcoDetailCustId">—</span>
+                </div>
+                <span id="lcoDetailStatusBadge"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Personal Information -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">👤</span> Personal Information
+            </div>
+            <div class="lco-detail-grid" id="lcoDetailPersonalGrid"></div>
+          </div>
+
+          <!-- Service Information -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">◎</span> Service Information
+            </div>
+            <div class="lco-detail-grid" id="lcoDetailServiceGrid"></div>
+          </div>
+
+          <!-- Account Information -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">📋</span> Account Information
+            </div>
+            <div class="lco-detail-grid" id="lcoDetailAccountGrid"></div>
+          </div>
+
+          <!-- Notes -->
+          <div class="lco-detail-section" id="lcoDetailNotesSection" style="display:none;">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">📝</span> Notes
+            </div>
+            <p id="lcoDetailNotes" style="font-size:14px; color:var(--slate);"></p>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: SERVICES ═══════════ -->
+        <section class="lco-view" id="view-services">
+          <h1 class="lco-view-title">Services</h1>
+          <p class="lco-view-subtitle">Overview of your service distribution</p>
+
+          <div class="lco-service-summary-grid">
+            <div class="lco-service-summary-card">
+              <div class="lco-service-summary-icon">📺</div>
+              <div class="lco-service-summary-name">Cable TV</div>
+              <div class="lco-service-summary-count" id="lcoServiceCableCount">0</div>
+              <div class="lco-service-summary-label">Active Customers</div>
+            </div>
+            <div class="lco-service-summary-card">
+              <div class="lco-service-summary-icon">📡</div>
+              <div class="lco-service-summary-name">Broadband / Wi-Fi</div>
+              <div class="lco-service-summary-count" id="lcoServiceBroadbandCount">0</div>
+              <div class="lco-service-summary-label">Active Customers</div>
+            </div>
+            <div class="lco-service-summary-card">
+              <div class="lco-service-summary-icon">🔗</div>
+              <div class="lco-service-summary-name">Both Services</div>
+              <div class="lco-service-summary-count" id="lcoServiceBothCount">0</div>
+              <div class="lco-service-summary-label">Active Customers</div>
+            </div>
+            <div class="lco-service-summary-card">
+              <div class="lco-service-summary-icon">⚙️</div>
+              <div class="lco-service-summary-name">Other</div>
+              <div class="lco-service-summary-count" id="lcoServiceOtherCount">0</div>
+              <div class="lco-service-summary-label">Active Customers</div>
+            </div>
+          </div>
+
+          <!-- Service Status Breakdown -->
+          <div class="lco-detail-section" style="margin-top: 24px;">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">📊</span> Service Status Breakdown
+            </div>
+            <div class="lco-detail-grid" id="lcoServiceStatusGrid"></div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: NOTIFICATIONS ═══════════ -->
+        <section class="lco-view" id="view-notifications">
+          <h1 class="lco-view-title">Notifications</h1>
+          <p class="lco-view-subtitle">Stay updated with your account activity</p>
+
+          <div class="lco-notif-list" id="lcoNotifList">
+            <div class="lco-empty">
+              <div class="lco-empty-icon">🔔</div>
+              <h3>Loading notifications…</h3>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: PROFILE ═══════════ -->
+        <section class="lco-view" id="view-profile">
+          <h1 class="lco-view-title">LCO Profile</h1>
+          <p class="lco-view-subtitle">Your business information</p>
+
+          <!-- Profile header -->
+          <div class="lco-profile-header">
+            <div class="lco-profile-avatar" id="lcoProfileAvatar">LC</div>
+            <div class="lco-profile-info">
+              <h2 id="lcoProfileBizName">—</h2>
+              <p id="lcoProfileStatus"></p>
+            </div>
+          </div>
+
+          <!-- Business Information -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">🏢</span> Business Information
+            </div>
+            <div class="lco-detail-grid" id="lcoProfileBizGrid"></div>
+          </div>
+
+          <!-- Services -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">◎</span> Registered Services
+            </div>
+            <div id="lcoProfileServices"></div>
+          </div>
+
+          <!-- Service Area -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">📍</span> Service Area
+            </div>
+            <div class="lco-detail-grid" id="lcoProfileAreaGrid"></div>
+          </div>
+
+          <!-- Account Info -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">📋</span> Account Information
+            </div>
+            <div class="lco-detail-grid" id="lcoProfileAccountGrid"></div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     ADD CUSTOMER MODAL
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="addCustomerModal">
+    <div class="lco-modal">
+      <h3>Add New Customer</h3>
+      <form id="addCustomerForm" autocomplete="off">
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="custFullName">Full Name *</label>
+            <input type="text" id="custFullName" placeholder="Customer's full name" required>
+            <div class="lco-form-error" id="custFullName-error">Full name is required</div>
+          </div>
+          <div class="lco-form-group">
+            <label for="custPhone">Phone *</label>
+            <input type="tel" id="custPhone" placeholder="10-digit mobile number" required>
+            <div class="lco-form-error" id="custPhone-error">Phone number is required</div>
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="custEmail">Email (optional)</label>
+          <input type="email" id="custEmail" placeholder="customer@email.com">
+        </div>
+
+        <div class="lco-form-group">
+          <label for="custAddress">Address</label>
+          <input type="text" id="custAddress" placeholder="Street address, locality">
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="custCity">City</label>
+            <input type="text" id="custCity" placeholder="City">
+          </div>
+          <div class="lco-form-group">
+            <label for="custState">State</label>
+            <input type="text" id="custState" placeholder="State">
+          </div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="custPincode">PIN Code</label>
+            <input type="text" id="custPincode" placeholder="6-digit code" maxlength="6">
+          </div>
+          <div class="lco-form-group">
+            <label for="custServiceType">Service Type *</label>
+            <select id="custServiceType" required>
+              <option value="">Select service</option>
+              <option value="Cable TV">Cable TV</option>
+              <option value="Broadband">Broadband</option>
+              <option value="Both">Both</option>
+              <option value="Other">Other</option>
+            </select>
+            <div class="lco-form-error" id="custServiceType-error">Service type is required</div>
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="custPlanName">Plan Name (optional)</label>
+          <input type="text" id="custPlanName" placeholder="e.g. Basic 50Mbps, HD Pack">
+        </div>
+
+        <div class="lco-form-group">
+          <label for="custNotes">Notes (optional)</label>
+          <textarea id="custNotes" placeholder="Any additional notes…"></textarea>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="addCustCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="addCustConfirmBtn">+ Add Customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Shared Auth Module -->
   <script src="../js/auth.js"></script>
-  <script>
-    (async function () {
-      var account = await LCOAuth.requireRole('LCO_ADMIN', 'ACTIVE');
-      if (!account) return;
-      var client = LCOAuth.getClient();
-      var result = await client.from('lco_applications').select('business_name').eq('user_id', account.session.user.id).limit(1).maybeSingle();
-      if (result.data && result.data.business_name) {
-        document.getElementById('welcome').textContent = 'Welcome, ' + result.data.business_name;
-      }
-      document.getElementById('logoutBtn').addEventListener('click', async function () {
-        await LCOAuth.signOut();
-        LCOAuth.redirectToLogin();
-      });
-    })();
-  </script>
+
+  <!-- Dashboard logic -->
+  <script src="../js/lco-dashboard.js"></script>
+
 </body>
+
 </html>
