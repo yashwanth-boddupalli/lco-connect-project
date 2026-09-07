@@ -359,11 +359,20 @@
     row += '<td data-label="Name"><span class="lco-cust-name">' + esc(cust.full_name) + '</span></td>';
     row += '<td data-label="Phone">' + esc(cust.phone) + '</td>';
     row += '<td data-label="Service">' + renderServiceTag(cust.service_type) + '</td>';
-    row += '<td data-label="Status">' + renderStatusBadge(cust.service_status) + '</td>';
+    row += '<td data-label="Status">' + renderStatusBadge(cust.service_status) + renderPortalAccessBadge(cust) + '</td>';
     row += '<td data-label="Registered"><span class="lco-date">' + formatDate(cust.created_at) + '</span></td>';
     row += '<td data-label="Action"><button class="lco-view-btn" data-cust-id="' + cust.id + '">View</button></td>';
     row += '</tr>';
     return row;
+  }
+
+  function renderPortalAccessBadge(cust) {
+    if (cust.user_id || cust.invitation_status === 'ACTIVATED') {
+      return ' <span class="lco-badge active" style="font-size:10px; padding:2px 6px;" title="Portal Access Active">✓ Portal</span>';
+    } else if (cust.invitation_status === 'INVITED') {
+      return ' <span class="lco-badge pending" style="font-size:10px; padding:2px 6px;" title="Activation Email Sent">📩 Invited</span>';
+    }
+    return '';
   }
 
   function attachCustomerRowListeners(tbody) {
@@ -482,10 +491,38 @@
 
     // Account info
     var accountGrid = document.getElementById('lcoDetailAccountGrid');
+    var activationStatusHtml = '<span class="lco-badge pending">⏳ Pending Activation</span>';
+    if (cust.user_id || cust.invitation_status === 'ACTIVATED') {
+      activationStatusHtml = '<span class="lco-badge active">✓ Activated</span>';
+    } else if (cust.invitation_status === 'INVITED') {
+      activationStatusHtml = '<span class="lco-badge pending">📩 Invitation Sent</span>';
+    } else if (cust.invitation_status === 'FAILED') {
+      activationStatusHtml = '<span class="lco-badge expired">⚠️ Delivery Failed</span>';
+    }
+
     accountGrid.innerHTML =
-      detailField('Account Status', cust.service_status) +
-      detailField('Created', formatDateFull(cust.created_at)) +
-      detailField('Last Updated', formatDateFull(cust.updated_at));
+      detailField('Service Status', cust.service_status) +
+      detailField('Portal Access', activationStatusHtml) +
+      detailField('Invitation Sent', cust.invitation_sent_at ? formatDateFull(cust.invitation_sent_at) : '—') +
+      detailField('Created', formatDateFull(cust.created_at));
+
+    // Resend activation email button setup
+    var resendBtn = document.getElementById('lcoResendActivationBtn');
+    if (resendBtn) {
+      if (cust.user_id || cust.invitation_status === 'ACTIVATED') {
+        resendBtn.disabled = true;
+        resendBtn.textContent = '✓ Account Activated';
+      } else if (!cust.email) {
+        resendBtn.disabled = true;
+        resendBtn.textContent = '📩 Resend Email (No Email Provided)';
+      } else {
+        resendBtn.disabled = false;
+        resendBtn.textContent = '📩 Resend Activation Email';
+        resendBtn.onclick = function () {
+          triggerCustomerInvitation(cust.id, resendBtn);
+        };
+      }
+    }
 
     // Notes
     var notesSection = document.getElementById('lcoDetailNotesSection');
@@ -500,6 +537,53 @@
     renderCustomerDetailSubscriptions(cust);
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function triggerCustomerInvitation(custId, btn) {
+    if (!sb) return;
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="lco-spinner"></span> Sending email…';
+    }
+
+    try {
+      var { data, error } = await sb.functions.invoke('send-customer-invitation', {
+        body: { customer_id: custId }
+      });
+
+      if (error) throw error;
+
+      if (data && data.ok) {
+        showToast('Activation email sent successfully!', 'success');
+        await loadCustomers();
+        if (currentDetailCustomer) {
+          var updated = allCustomers.find(function (c) { return c.id === custId; });
+          if (updated) openCustomerDetail(updated.id);
+        }
+      } else {
+        throw new Error(data ? (data.error || 'SMTP2GO delivery failed.') : 'Invitation failed.');
+      }
+    } catch (err) {
+      console.error('Trigger invitation error:', err);
+      showToast('Failed to send email: ' + (err.message || ''), 'error');
+    } finally {
+      if (btn) {
+        // Cooldown timer (30 seconds) to prevent spamming
+        var cooldown = 30;
+        btn.disabled = true;
+        var interval = setInterval(function () {
+          cooldown--;
+          if (cooldown <= 0) {
+            clearInterval(interval);
+            btn.disabled = false;
+            btn.textContent = '📩 Resend Activation Email';
+          } else {
+            btn.textContent = 'Resend in ' + cooldown + 's';
+          }
+        }, 1000);
+      }
+    }
   }
 
   function detailField(label, value, fullWidth) {
@@ -1355,7 +1439,7 @@
       var customerId = custIdData;
 
       // Insert customer
-      var { error: insertError } = await sb.from('customers')
+      var { data: newCust, error: insertError } = await sb.from('customers')
         .insert({
           customer_id: customerId,
           lco_id: lcoId,
@@ -1371,11 +1455,32 @@
           service_status: 'ACTIVE',
           connection_date: new Date().toISOString().split('T')[0],
           notes: notes || null
-        });
+        })
+        .select()
+        .single();
 
       if (insertError) throw insertError;
 
-      showToast('Customer added successfully! ID: ' + customerId, 'success');
+      // Automatically trigger activation email if email address was provided
+      if (email) {
+        try {
+          var targetId = (newCust && newCust.id) ? newCust.id : customerId;
+          var { data: invData, error: invErr } = await sb.functions.invoke('send-customer-invitation', {
+            body: { customer_id: targetId }
+          });
+          if (!invErr && invData && invData.ok) {
+            showToast('Customer added & activation email sent! ID: ' + customerId, 'success');
+          } else {
+            console.warn('Auto invitation send failed:', invErr || (invData ? invData.error : 'Unknown error'));
+            showToast('Customer added (ID: ' + customerId + ')! Note: Email delivery failed.', 'warning');
+          }
+        } catch (invErr) {
+          console.warn('Auto invitation send error:', invErr);
+          showToast('Customer added (ID: ' + customerId + ')! Email invitation could not be sent.', 'warning');
+        }
+      } else {
+        showToast('Customer added successfully! ID: ' + customerId, 'success');
+      }
 
       // Close modal and reset form
       document.getElementById('addCustomerModal').classList.remove('visible');

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Customer Dashboard — LCO Connect</title>
+  <meta name="description" content="Customer Portal for viewing your broadband & cable TV service, plans, and subscriptions.">
+  <meta name="theme-color" content="#0B7A6E">
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/lco-dashboard.css">
+  <link rel="stylesheet" href="../css/customer-dashboard.css">
+</head>
+
+<body class="cust-dashboard-page">
+
+  <!-- Toast container -->
+  <div class="lco-toast-container" id="custToastContainer" aria-live="polite"></div>
+
+  <!-- Loading screen -->
+  <div class="lco-loading-screen" id="custLoadingScreen">
+    <div class="lco-loading-content">
+      <div class="lco-loading-spinner"></div>
+      <div class="lco-loading-text">Loading Customer Portal…</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+     MAIN DASHBOARD
+     ═══════════════════════════════════════════ -->
+  <div id="custDashboardContainer" style="display: none;">
+
+    <!-- Header -->
+    <header class="cust-header">
+      <div class="cust-header-inner">
+        <div class="cust-header-left">
+          <button class="cust-mobile-nav-toggle" id="custMobileNavToggle" aria-label="Toggle navigation">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+            <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+          </a>
+          <span class="cust-header-badge">Customer Portal</span>
+        </div>
+        <div class="cust-header-right">
+          <span class="cust-header-user-name" id="custHeaderName">—</span>
+          <button class="cust-logout-btn" id="custLogoutBtn">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Body layout -->
+    <div class="cust-body">
+
+      <!-- Sidebar -->
+      <aside class="cust-sidebar" id="custSidebar">
+        <div class="cust-sidebar-title">Menu</div>
+
+        <button class="cust-nav-item active" data-view="overview" id="navCustOverview">
+          <span class="cust-nav-icon">◎</span> Dashboard
+        </button>
+        <button class="cust-nav-item" data-view="profile" id="navCustProfile">
+          <span class="cust-nav-icon">👤</span> My Profile
+        </button>
+        <button class="cust-nav-item" data-view="service" id="navCustService">
+          <span class="cust-nav-icon">◉</span> My Service
+        </button>
+        <button class="cust-nav-item" data-view="subscription" id="navCustSubscription">
+          <span class="cust-nav-icon">📦</span> My Subscription
+        </button>
+        <button class="cust-nav-item" data-view="plans" id="navCustPlans">
+          <span class="cust-nav-icon">🏷️</span> Available Plans
+        </button>
+        <button class="cust-nav-item" data-view="notifications" id="navCustNotifications">
+          <span class="cust-nav-icon">🔔</span> Notifications
+          <span class="cust-nav-badge" id="custNotifCount" style="display:none;">0</span>
+        </button>
+      </aside>
+
+      <!-- Main Content -->
+      <main class="cust-content">
+
+        <!-- ═══════════ VIEW: OVERVIEW ═══════════ -->
+        <section class="cust-view active" id="view-overview">
+          
+          <!-- Hero Banner -->
+          <div class="cust-hero-card">
+            <div class="cust-hero-name" id="custHeroName">Welcome Back!</div>
+            <div class="cust-hero-id" id="custHeroId">ID: —</div>
+            
+            <div class="cust-hero-meta-row">
+              <div class="cust-hero-meta-item">
+                <span class="cust-hero-meta-label">Service Type</span>
+                <span class="cust-hero-meta-val" id="custHeroServiceType">—</span>
+              </div>
+              <div class="cust-hero-meta-item">
+                <span class="cust-hero-meta-label">Current Plan</span>
+                <span class="cust-hero-meta-val" id="custHeroPlanName">—</span>
+              </div>
+              <div class="cust-hero-meta-item">
+                <span class="cust-hero-meta-label">Account Status</span>
+                <span class="cust-hero-meta-val" id="custHeroStatus">—</span>
+              </div>
+              <div class="cust-hero-meta-item">
+                <span class="cust-hero-meta-label">Expiry Date</span>
+                <span class="cust-hero-meta-val" id="custHeroExpiry">—</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Stats -->
+          <div class="cust-stats-grid">
+            <div class="cust-stat-card">
+              <div class="cust-stat-label">Subscription Status</div>
+              <div class="cust-stat-val" id="custOverviewSubStatus">—</div>
+            </div>
+            <div class="cust-stat-card">
+              <div class="cust-stat-label">Service Category</div>
+              <div class="cust-stat-val" id="custOverviewCategory">—</div>
+            </div>
+            <div class="cust-stat-card">
+              <div class="cust-stat-label">Plan Price</div>
+              <div class="cust-stat-val" id="custOverviewPrice">—</div>
+            </div>
+          </div>
+
+          <!-- Service Provider / LCO Card -->
+          <div class="cust-card">
+            <div class="cust-card-title">
+              <span>🏢 Your Cable / Broadband Operator</span>
+            </div>
+            <div class="cust-grid" id="custProviderGrid">
+              <div>Loading operator information…</div>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: MY PROFILE ═══════════ -->
+        <section class="cust-view" id="view-profile">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <div>
+              <h1 class="cust-view-title">My Profile</h1>
+              <p class="cust-view-subtitle">Your personal contact and service address details</p>
+            </div>
+            <button class="lco-quick-btn primary" id="openEditProfileBtn">Edit Profile</button>
+          </div>
+
+          <div class="cust-card">
+            <div class="cust-card-title">Personal Details</div>
+            <div class="cust-grid" id="custProfilePersonalGrid"></div>
+          </div>
+
+          <div class="cust-card">
+            <div class="cust-card-title">Service Address</div>
+            <div class="cust-grid" id="custProfileAddressGrid"></div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: MY SERVICE ═══════════ -->
+        <section class="cust-view" id="view-service">
+          <h1 class="cust-view-title">My Service</h1>
+          <p class="cust-view-subtitle">Information about your active internet or cable TV connection</p>
+
+          <div class="cust-card">
+            <div class="cust-card-title">
+              <span>◉ Active Service Information</span>
+              <span id="custServiceStatusBadge"></span>
+            </div>
+            <div class="cust-grid" id="custServiceGrid"></div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: MY SUBSCRIPTION ═══════════ -->
+        <section class="cust-view" id="view-subscription">
+          <h1 class="cust-view-title">My Subscription</h1>
+          <p class="cust-view-subtitle">Details of your subscribed service plan and expiry dates</p>
+
+          <div class="cust-card">
+            <div class="cust-card-title">Current Plan & Subscription</div>
+            <div id="custSubDetails">Loading subscription…</div>
+          </div>
+
+          <!-- Phase 7 Teaser Banner -->
+          <div class="cust-teaser-banner">
+            <div class="cust-teaser-icon">💳</div>
+            <div class="cust-teaser-text">
+              <h4>Online Billing & Invoices Coming Soon (Phase 7)</h4>
+              <p>Online payment collection, digital invoice downloads, and bill payment history will be available in the upcoming Phase 7 release.</p>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: AVAILABLE PLANS ═══════════ -->
+        <section class="cust-view" id="view-plans">
+          <h1 class="cust-view-title">Available Service Plans</h1>
+          <p class="cust-view-subtitle">Browse plans offered by your cable / internet provider</p>
+
+          <div class="cust-plans-grid" id="custAvailablePlansGrid">
+            <div>Loading plans…</div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: NOTIFICATIONS ═══════════ -->
+        <section class="cust-view" id="view-notifications">
+          <h1 class="cust-view-title">Notifications</h1>
+          <p class="cust-view-subtitle">Updates and messages from your operator</p>
+
+          <div class="lco-notif-list" id="custNotifList">
+            <div class="lco-empty">
+              <div class="lco-empty-icon">🔔</div>
+              <h3>Loading notifications…</h3>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     EDIT PROFILE MODAL
+     ═══════════════════════════════════════════ -->
+  <div class="cust-modal-overlay" id="editProfileModal">
+    <div class="cust-modal">
+      <h3>Edit Personal Details</h3>
+      <form id="editProfileForm" autocomplete="off">
+        <div class="lco-form-group">
+          <label for="editCustPhone">Phone Number</label>
+          <input type="tel" id="editCustPhone" required>
+        </div>
+        <div class="lco-form-group">
+          <label for="editCustEmail">Email Address</label>
+          <input type="email" id="editCustEmail">
+        </div>
+        <div class="lco-form-group">
+          <label for="editCustAddress">Address</label>
+          <input type="text" id="editCustAddress">
+        </div>
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="editCustCity">City</label>
+            <input type="text" id="editCustCity">
+          </div>
+          <div class="lco-form-group">
+            <label for="editCustState">State</label>
+            <input type="text" id="editCustState">
+          </div>
+        </div>
+        <div class="lco-form-group">
+          <label for="editCustPincode">PIN Code</label>
+          <input type="text" id="editCustPincode" maxlength="6">
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="cancelEditProfileBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="saveEditProfileBtn">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     REQUEST PLAN MODAL
+     ═══════════════════════════════════════════ -->
+  <div class="cust-modal-overlay" id="requestPlanModal">
+    <div class="cust-modal">
+      <h3>Request Plan Change</h3>
+      <form id="requestPlanForm">
+        <input type="hidden" id="reqPlanId" title="Plan ID">
+        <div class="lco-form-group">
+          <label>Requested Plan</label>
+          <input type="text" id="reqPlanName" readonly style="background:rgba(0,0,0,0.04);">
+        </div>
+        <div class="lco-form-group">
+          <label for="reqPlanNotes">Message for Operator (optional)</label>
+          <textarea id="reqPlanNotes" placeholder="e.g. Please upgrade my plan starting next month..."></textarea>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="cancelReqPlanBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="confirmReqPlanBtn">Send Request</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Shared Auth Module -->
+  <script src="../js/auth.js"></script>
+
+  <!-- Customer Dashboard logic -->
+  <script src="../js/customer-dashboard.js"></script>
+
+</body>
+
+</html>

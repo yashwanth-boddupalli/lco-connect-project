@@ -32,8 +32,8 @@ var LCOAuth = (function () {
   var ROLE_ROUTES = {
     SUPER_ADMIN: 'super-admin.html',
     LCO_ADMIN:   'lco-dashboard.html',
-    CUSTOMER:    null, // TODO: Future — Customer dashboard
-    TECHNICIAN:  null  // TODO: Future — Technician dashboard
+    CUSTOMER:    'customer-dashboard.html',
+    TECHNICIAN:  null
   };
 
   /* Common login page (relative to /pages/) */
