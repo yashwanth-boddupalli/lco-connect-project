@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activate Account — LCO Connect</title>
+  <meta name="description"
+    content="Activate your LCO Connect customer account. Set your password and log in to manage your broadband & cable TV service.">
+  <meta name="theme-color" content="#0B7A6E">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/super-admin.css">
+</head>
+
+<body class="sa-login-page">
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- ═══════════════════════════════════════════
+     ACTIVATION FORM
+     ═══════════════════════════════════════════ -->
+  <main class="sa-login-main">
+    <div class="sa-login-card" style="max-width: 460px;">
+
+      <!-- Brand -->
+      <div class="sa-login-brand">
+        <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+          <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+        </a>
+      </div>
+
+      <!-- Activation form -->
+      <form id="activateForm" novalidate autocomplete="off">
+        <h1 id="activateHeading">Activate Customer Account</h1>
+        <p class="sa-login-desc" id="activateSubtext">Enter your details to create your password and activate your portal access.</p>
+
+        <!-- Dynamic status notice banner -->
+        <div id="activateNotice" style="display:none; padding: 12px 16px; background: rgba(11,122,110,0.1); border-left: 4px solid #0B7A6E; border-radius: 6px; font-size: 13px; margin-bottom: 20px; color: #0B7A6E;">
+          <strong>Welcome!</strong> Complete the fields below to set your account password.
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activateCustId">Customer ID *</label>
+          <input type="text" id="activateCustId" name="customerId" placeholder="e.g. CUST-2026-0001" required style="text-transform: uppercase;">
+          <div class="sa-field-error" id="activateCustId-error">Please enter your Customer ID</div>
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activateEmail">Registered Email *</label>
+          <input type="email" id="activateEmail" name="email" placeholder="customer@email.com" required>
+          <div class="sa-field-error" id="activateEmail-error">Please enter a valid email</div>
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activatePassword">Create Password *</label>
+          <div class="sa-password-wrap">
+            <input type="password" id="activatePassword" name="password" placeholder="Minimum 6 characters" required minlength="6">
+          </div>
+          <div class="sa-field-error" id="activatePassword-error">Password must be at least 6 characters</div>
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activateConfirmPassword">Confirm Password *</label>
+          <div class="sa-password-wrap">
+            <input type="password" id="activateConfirmPassword" name="confirmPassword" placeholder="Re-enter password" required>
+          </div>
+          <div class="sa-field-error" id="activateConfirmPassword-error">Passwords do not match</div>
+        </div>
+
+        <button type="submit" class="sa-login-btn" id="activateBtn">
+          Set Password & Activate Account
+        </button>
+
+        <div class="sa-login-footer-text">
+          Already activated? <a href="login.html">Sign In →</a>
+        </div>
+      </form>
+
+    </div>
+
+    <!-- Background decoration -->
+    <div class="sa-login-bg" aria-hidden="true">
+      <div class="sa-bg-circle sa-bg-1"></div>
+      <div class="sa-bg-circle sa-bg-2"></div>
+      <div class="sa-bg-circle sa-bg-3"></div>
+    </div>
+  </main>
+
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Shared Auth Module -->
+  <script src="../js/auth.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var sb = LCOAuth.getClient();
+      var form = document.getElementById('activateForm');
+      var custIdInput = document.getElementById('activateCustId');
+      var emailInput = document.getElementById('activateEmail');
+      var passwordInput = document.getElementById('activatePassword');
+      var confirmPwInput = document.getElementById('activateConfirmPassword');
+      var activateBtn = document.getElementById('activateBtn');
+      var noticeEl = document.getElementById('activateNotice');
+
+      var isTokenActivation = false;
+
+      // Check URL search parameters
+      var urlParams = new URLSearchParams(window.location.search);
+      var paramCustId = urlParams.get('customer_id');
+      var paramEmail = urlParams.get('email');
+
+      if (paramCustId) {
+        custIdInput.value = paramCustId.trim().toUpperCase();
+        custIdInput.readOnly = true;
+        custIdInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+      }
+
+      if (paramEmail) {
+        emailInput.value = paramEmail.trim().toLowerCase();
+        emailInput.readOnly = true;
+        emailInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+      }
+
+      // Check for Supabase Auth hash tokens or active session from email invite link
+      if (sb) {
+        sb.auth.onAuthStateChange(function (event, session) {
+          if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || session) && session) {
+            isTokenActivation = true;
+            noticeEl.style.display = 'block';
+            noticeEl.innerHTML = '<strong>Account Verified via Activation Link!</strong> Create your password below to complete setup.';
+            
+            if (session.user && session.user.email && !emailInput.value) {
+              emailInput.value = session.user.email;
+              emailInput.readOnly = true;
+            }
+            if (session.user && session.user.user_metadata && session.user.user_metadata.customer_id && !custIdInput.value) {
+              custIdInput.value = session.user.user_metadata.customer_id;
+              custIdInput.readOnly = true;
+            }
+          }
+        });
+      }
+
+      // Clear errors on input
+      [custIdInput, emailInput, passwordInput, confirmPwInput].forEach(function (input) {
+        input.addEventListener('input', function () {
+          input.classList.remove('error');
+          var errEl = document.getElementById(input.id + '-error');
+          if (errEl) errEl.classList.remove('visible');
+        });
+      });
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var valid = true;
+
+        var custId = custIdInput.value.trim().toUpperCase();
+        var email = emailInput.value.trim().toLowerCase();
+        var password = passwordInput.value;
+        var confirmPw = confirmPwInput.value;
+
+        if (!custId) {
+          custIdInput.classList.add('error');
+          document.getElementById('activateCustId-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          emailInput.classList.add('error');
+          document.getElementById('activateEmail-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (!password || password.length < 6) {
+          passwordInput.classList.add('error');
+          document.getElementById('activatePassword-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (password !== confirmPw) {
+          confirmPwInput.classList.add('error');
+          document.getElementById('activateConfirmPassword-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (!valid) return;
+
+        activateBtn.disabled = true;
+        activateBtn.innerHTML = '<span class="sa-spinner"></span> Activating account…';
+
+        try {
+          var sessionRes = await sb.auth.getSession();
+          var currentSession = sessionRes.data ? sessionRes.data.session : null;
+
+          if (currentSession) {
+            // Case A: User arrived via Supabase invite/recovery link with active session token
+            var updateRes = await sb.auth.updateUser({ password: password });
+            if (updateRes.error) throw updateRes.error;
+          } else {
+            // Case B: Manual registration / invitation fallback
+            var signUpRes = await sb.auth.signUp({
+              email: email,
+              password: password,
+              options: {
+                data: {
+                  role: 'CUSTOMER',
+                  customer_id: custId
+                }
+              }
+            });
+
+            if (signUpRes.error) {
+              if (signUpRes.error.message.includes('already registered')) {
+                var loginRes = await sb.auth.signInWithPassword({
+                  email: email,
+                  password: password
+                });
+                if (loginRes.error) {
+                  throw new Error('An account with this email already exists. Try signing in on the login page.');
+                }
+              } else {
+                throw signUpRes.error;
+              }
+            }
+          }
+
+          // Link auth user ID to customer record and update invitation_status = 'ACTIVATED'
+          var linkRes = await sb.rpc('link_customer_account', {
+            p_customer_id: custId,
+            p_email: email
+          });
+
+          if (linkRes.error) throw linkRes.error;
+
+          showToast('Account activated successfully! Redirecting to dashboard…', 'success');
+
+          setTimeout(function () {
+            window.location.href = 'customer-dashboard.html';
+          }, 1200);
+
+        } catch (err) {
+          console.error('Activation failed:', err);
+          activateBtn.disabled = false;
+          activateBtn.innerHTML = 'Set Password & Activate Account';
+          showToast(err.message || 'Activation failed. Please check your Customer ID and Email.', 'error');
+        }
+      });
+
+      function showToast(message, type) {
+        var container = document.getElementById('toastContainer');
+        var toast = document.createElement('div');
+        toast.className = 'sa-toast ' + (type || '');
+        var icon = type === 'error' ? '⚠️' : type === 'success' ? '✓' : '💬';
+        toast.innerHTML = '<span class="sa-toast-icon">' + icon + '</span>' + escapeHtml(message);
+        container.appendChild(toast);
+        setTimeout(function () {
+          toast.classList.add('removing');
+          setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+        }, 5000);
+      }
+
+      function escapeHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+    })();
+  </script>
+
+</body>
+
+</html>
