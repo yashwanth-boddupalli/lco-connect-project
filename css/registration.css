@@ -16,7 +16,9 @@
 }
 
 @media (max-width: 720px) {
-  .reg-main { padding: 20px 0 48px; }
+  .reg-main {
+    padding: 20px 0 48px;
+  }
 }
 
 .reg-container {
@@ -130,9 +132,11 @@
   .progress-step .step-label {
     display: none;
   }
+
   .progress-step {
     padding: 8px;
   }
+
   .progress-arrow {
     padding: 0 2px;
     font-size: 14px;
@@ -184,7 +188,9 @@
 }
 
 @media (max-width: 480px) {
-  .step-header h2 { font-size: 22px; }
+  .step-header h2 {
+    font-size: 22px;
+  }
 }
 
 .step-header p {
@@ -347,13 +353,13 @@
   background: rgba(11, 122, 110, 0.03);
 }
 
-.checkbox-card input:checked + .checkbox-card-label {
+.checkbox-card input:checked+.checkbox-card-label {
   border-color: var(--teal);
   background: var(--teal-light);
   box-shadow: 0 0 0 3px rgba(11, 122, 110, 0.1);
 }
 
-.checkbox-card input:focus-visible + .checkbox-card-label {
+.checkbox-card input:focus-visible+.checkbox-card-label {
   outline: 2px solid var(--teal);
   outline-offset: 2px;
 }
@@ -373,7 +379,7 @@
   background: #fff;
 }
 
-.checkbox-card input:checked + .checkbox-card-label .checkbox-icon {
+.checkbox-card input:checked+.checkbox-card-label .checkbox-icon {
   background: var(--teal);
   border-color: var(--teal);
   color: #fff;
@@ -888,6 +894,7 @@
     opacity: 0;
     transform: translateX(40px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -914,7 +921,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 
@@ -975,7 +984,9 @@
 }
 
 @media (max-width: 480px) {
-  .status-card h1 { font-size: 24px; }
+  .status-card h1 {
+    font-size: 24px;
+  }
 }
 
 .status-card .status-subtitle {
@@ -1094,6 +1105,55 @@
 }
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+
+/* ── PASSWORD INPUT ── */
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 48px;
+}
+
+.toggle-password-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--slate);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.toggle-password-btn:hover {
+  color: var(--teal);
+  background: var(--teal-light);
+}
+
+.verification-notice strong {
+  color: #fff;
 }

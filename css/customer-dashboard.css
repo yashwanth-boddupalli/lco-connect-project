@@ -1,0 +1,505 @@
+/* ============================================
+   LCO CONNECT — Customer Dashboard Styles
+   Phase 6: Customer Accounts & Dashboard
+   ============================================
+   Claymorphism Design System matching LCO Dashboard.
+   ============================================ */
+
+/* ── Base Page Layout ── */
+body.cust-dashboard-page {
+  background-color: var(--sand-50, #FAF8F5);
+  color: var(--charcoal, #1E293B);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* ── Header ── */
+.cust-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(11, 122, 110, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+}
+
+.cust-header-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cust-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cust-header-badge {
+  background: rgba(11, 122, 110, 0.1);
+  color: var(--primary, #0B7A6E);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(11, 122, 110, 0.2);
+}
+
+.cust-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cust-header-user-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--charcoal, #1E293B);
+}
+
+.cust-logout-btn {
+  background: rgba(225, 29, 72, 0.08);
+  color: #E11D48;
+  border: 1px solid rgba(225, 29, 72, 0.2);
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cust-logout-btn:hover {
+  background: #E11D48;
+  color: #FFFFFF;
+}
+
+/* ── Body & Sidebar Layout ── */
+.cust-body {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  min-height: calc(100vh - 65px);
+}
+
+.cust-sidebar {
+  width: 240px;
+  background: #FFFFFF;
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cust-sidebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #94A3B8;
+  padding: 0 12px 10px;
+}
+
+.cust-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: #64748B;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+}
+
+.cust-nav-item:hover {
+  background: rgba(11, 122, 110, 0.05);
+  color: var(--primary, #0B7A6E);
+}
+
+.cust-nav-item.active {
+  background: var(--primary, #0B7A6E);
+  color: #FFFFFF;
+  box-shadow: 0 4px 14px rgba(11, 122, 110, 0.25);
+}
+
+.cust-nav-icon {
+  font-size: 16px;
+}
+
+.cust-nav-badge {
+  margin-left: auto;
+  background: #E11D48;
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+/* ── Content View Area ── */
+.cust-content {
+  flex: 1;
+  padding: 32px;
+  max-width: 1000px;
+}
+
+.cust-view {
+  display: none;
+}
+
+.cust-view.active {
+  display: block;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cust-view-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: #0F172A;
+}
+
+.cust-view-subtitle {
+  color: #64748B;
+  font-size: 14px;
+  margin: 0 0 28px;
+}
+
+/* ── Hero / Welcome Card ── */
+.cust-hero-card {
+  background: linear-gradient(135deg, #0B7A6E 0%, #08564D 100%);
+  color: #FFFFFF;
+  border-radius: 20px;
+  padding: 28px 32px;
+  box-shadow: 0 10px 30px rgba(11, 122, 110, 0.25);
+  margin-bottom: 28px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cust-hero-card::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 180px;
+  height: 180px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.cust-hero-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.cust-hero-id {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.15);
+  padding: 4px 10px;
+  border-radius: 6px;
+  display: inline-block;
+  margin-bottom: 16px;
+}
+
+.cust-hero-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.cust-hero-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cust-hero-meta-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.8;
+}
+
+.cust-hero-meta-val {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* ── Stat Cards Grid ── */
+.cust-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.cust-stat-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+}
+
+.cust-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cust-stat-val {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+/* ── Section Cards (Claymorphism) ── */
+.cust-card {
+  background: #FFFFFF;
+  border-radius: 18px;
+  padding: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.03);
+  margin-bottom: 24px;
+}
+
+.cust-card-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Badges ── */
+.cust-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.cust-badge.active { background: rgba(16, 185, 129, 0.12); color: #059669; }
+.cust-badge.inactive { background: rgba(245, 158, 11, 0.12); color: #D97706; }
+.cust-badge.expired { background: rgba(225, 29, 72, 0.12); color: #E11D48; }
+.cust-badge.pending { background: rgba(59, 130, 246, 0.12); color: #2563EB; }
+
+/* ── Detail Grid ── */
+.cust-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.cust-field-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  margin-bottom: 4px;
+}
+
+.cust-field-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+/* ── Phase 7 Teaser Banner ── */
+.cust-teaser-banner {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.05) 100%);
+  border: 1px dashed rgba(245, 158, 11, 0.4);
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.cust-teaser-icon {
+  font-size: 24px;
+}
+
+.cust-teaser-text h4 {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #B45309;
+}
+
+.cust-teaser-text p {
+  margin: 0;
+  font-size: 12px;
+  color: #78350F;
+}
+
+/* ── Plan Cards Grid (Available Plans) ── */
+.cust-plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.cust-plan-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.03);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cust-plan-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 24px rgba(11, 122, 110, 0.12);
+  border-color: rgba(11, 122, 110, 0.3);
+}
+
+.cust-plan-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 6px;
+}
+
+.cust-plan-price {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--primary, #0B7A6E);
+  margin: 12px 0;
+}
+
+.cust-plan-price span {
+  font-size: 13px;
+  color: #64748B;
+  font-weight: 400;
+}
+
+.cust-plan-feature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #475569;
+  margin-bottom: 6px;
+}
+
+.cust-plan-btn {
+  background: var(--primary, #0B7A6E);
+  color: #FFFFFF;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 16px;
+  transition: background 0.2s ease;
+}
+
+.cust-plan-btn:hover {
+  background: #08564D;
+}
+
+/* ── Modal Overlays ── */
+.cust-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.cust-modal-overlay.visible {
+  display: flex;
+}
+
+.cust-modal {
+  background: #FFFFFF;
+  border-radius: 20px;
+  max-width: 500px;
+  width: 100%;
+  padding: 28px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+}
+
+.cust-modal h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  margin: 0 0 18px;
+}
+
+/* ── Mobile Nav Toggle ── */
+.cust-mobile-nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  color: #0F172A;
+}
+
+@media (max-width: 768px) {
+  .cust-mobile-nav-toggle { display: block; }
+  .cust-body { flex-direction: column; }
+  .cust-sidebar {
+    width: 100%;
+    display: none;
+    box-sizing: border-box;
+  }
+  .cust-sidebar.open { display: flex; }
+  .cust-content { padding: 20px 16px; }
+}
