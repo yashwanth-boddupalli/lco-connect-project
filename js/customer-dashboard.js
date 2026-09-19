@@ -59,7 +59,8 @@
 
       if (custError || !cust) {
         console.error('Customer profile error:', custError);
-        showToast('Unable to load customer profile. Please contact your operator.', 'error');
+        await LCOAuth.signOut();
+        LCOAuth.redirectToLogin();
         return;
       }
 

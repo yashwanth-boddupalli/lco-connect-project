@@ -103,7 +103,11 @@ var LCOAuth = (function () {
         .eq('id', session.user.id)
         .single();
 
-      if (profileResult.error || !profileResult.data) return null;
+      if (profileResult.error || !profileResult.data) {
+        // Orphan session: valid JWT but no profile row — terminate session
+        await signOut();
+        return null;
+      }
 
       return {
         session: session,
@@ -159,6 +163,9 @@ var LCOAuth = (function () {
     if (role !== 'SUPER_ADMIN') {
       if (status === 'PENDING') {
         await sb.auth.signOut();
+        if (role === 'CUSTOMER') {
+          throw new Error('Customer account not yet activated. Please check your email for the activation link.');
+        }
         throw new Error('Your account is pending verification. You will be notified once your application is reviewed.');
       }
       if (status === 'REJECTED') {
@@ -216,6 +223,27 @@ var LCOAuth = (function () {
      Redirects to login if not.
      ══════════════════════════════════════════════ */
 
+  /* ══════════════════════════════════════════════
+     RESOLVE DASHBOARD ROUTE FOR PROFILE
+     Applies the same status gates as signIn().
+     Returns dashboard path or null if blocked.
+     ══════════════════════════════════════════════ */
+
+  function resolveDashboardForProfile(profile) {
+    if (!profile || !profile.role) return null;
+
+    var role = profile.role;
+    var status = profile.status;
+
+    if (role !== 'SUPER_ADMIN') {
+      if (status === 'PENDING' || status === 'REJECTED') return null;
+      if (status === 'SUSPENDED' || status !== 'ACTIVE') return null;
+    }
+
+    return ROLE_ROUTES[role] || null;
+  }
+
+
   async function requireRole(requiredRole, requiredStatus) {
     var data = await getSessionWithRole();
 
@@ -266,6 +294,7 @@ var LCOAuth = (function () {
   return {
     getClient: getClient,
     getSessionWithRole: getSessionWithRole,
+    resolveDashboardForProfile: resolveDashboardForProfile,
     signIn: signIn,
     signOut: signOut,
     requireRole: requireRole,

@@ -68,7 +68,8 @@
         .maybeSingle();
 
       if (lcoError || !lco) {
-        showToast('Unable to load LCO profile. Please contact support.', 'error');
+        await LCOAuth.signOut();
+        LCOAuth.redirectToLogin();
         return;
       }
 
@@ -1432,16 +1433,9 @@
     btn.innerHTML = '<span class="lco-spinner"></span> Adding…';
 
     try {
-      // Generate customer ID via RPC
-      var { data: custIdData, error: custIdError } = await sb.rpc('generate_customer_id');
-      if (custIdError) throw custIdError;
-
-      var customerId = custIdData;
-
-      // Insert customer
+      // Insert customer — customer_id is assigned atomically by DB BEFORE INSERT trigger
       var { data: newCust, error: insertError } = await sb.from('customers')
         .insert({
-          customer_id: customerId,
           lco_id: lcoId,
           full_name: fullName,
           phone: phone,
@@ -1460,6 +1454,8 @@
         .single();
 
       if (insertError) throw insertError;
+
+      var customerId = newCust.customer_id;
 
       // Automatically trigger activation email if email address was provided
       if (email) {
