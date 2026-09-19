@@ -116,43 +116,56 @@
       var activateBtn = document.getElementById('activateBtn');
       var noticeEl = document.getElementById('activateNotice');
 
-      var isTokenActivation = false;
+      var hasInviteSession = false;
+      var subtextEl = document.getElementById('activateSubtext');
 
-      // Check URL search parameters
+      function applyInviteSession(session) {
+        if (!session || !session.user) return;
+        hasInviteSession = true;
+        activateBtn.disabled = false;
+        noticeEl.style.display = 'block';
+        noticeEl.innerHTML = '<strong>Account Verified via Activation Link!</strong> Create your password below to complete setup.';
+
+        if (session.user.email) {
+          emailInput.value = session.user.email.trim().toLowerCase();
+          emailInput.readOnly = true;
+          emailInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+        }
+        if (session.user.user_metadata && session.user.user_metadata.customer_id && !custIdInput.value) {
+          custIdInput.value = String(session.user.user_metadata.customer_id).trim().toUpperCase();
+          custIdInput.readOnly = true;
+          custIdInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+        }
+      }
+
+      // Pre-fill Customer ID from invite redirect (email comes from authenticated session only)
       var urlParams = new URLSearchParams(window.location.search);
       var paramCustId = urlParams.get('customer_id');
-      var paramEmail = urlParams.get('email');
-
       if (paramCustId) {
         custIdInput.value = paramCustId.trim().toUpperCase();
         custIdInput.readOnly = true;
         custIdInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
       }
 
-      if (paramEmail) {
-        emailInput.value = paramEmail.trim().toLowerCase();
-        emailInput.readOnly = true;
-        emailInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
-      }
-
-      // Check for Supabase Auth hash tokens or active session from email invite link
       if (sb) {
-        sb.auth.onAuthStateChange(function (event, session) {
-          if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || session) && session) {
-            isTokenActivation = true;
-            noticeEl.style.display = 'block';
-            noticeEl.innerHTML = '<strong>Account Verified via Activation Link!</strong> Create your password below to complete setup.';
-            
-            if (session.user && session.user.email && !emailInput.value) {
-              emailInput.value = session.user.email;
-              emailInput.readOnly = true;
-            }
-            if (session.user && session.user.user_metadata && session.user.user_metadata.customer_id && !custIdInput.value) {
-              custIdInput.value = session.user.user_metadata.customer_id;
-              custIdInput.readOnly = true;
+        sb.auth.getSession().then(function (res) {
+          if (res.data && res.data.session) {
+            applyInviteSession(res.data.session);
+          } else if (!hasInviteSession) {
+            activateBtn.disabled = true;
+            if (subtextEl) {
+              subtextEl.textContent = 'Open the activation link from your invitation email to continue. Manual activation without an invitation is not supported.';
             }
           }
         });
+
+        sb.auth.onAuthStateChange(function (event, session) {
+          if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION')) {
+            applyInviteSession(session);
+          }
+        });
+      } else {
+        activateBtn.disabled = true;
       }
 
       // Clear errors on input
@@ -203,42 +216,23 @@
         activateBtn.innerHTML = '<span class="sa-spinner"></span> Activating account…';
 
         try {
+          if (!sb) throw new Error('Connection unavailable. Please refresh and use your invitation link.');
+
           var sessionRes = await sb.auth.getSession();
           var currentSession = sessionRes.data ? sessionRes.data.session : null;
 
-          if (currentSession) {
-            // Case A: User arrived via Supabase invite/recovery link with active session token
-            var updateRes = await sb.auth.updateUser({ password: password });
-            if (updateRes.error) throw updateRes.error;
-          } else {
-            // Case B: Manual registration / invitation fallback
-            var signUpRes = await sb.auth.signUp({
-              email: email,
-              password: password,
-              options: {
-                data: {
-                  role: 'CUSTOMER',
-                  customer_id: custId
-                }
-              }
-            });
-
-            if (signUpRes.error) {
-              if (signUpRes.error.message.includes('already registered')) {
-                var loginRes = await sb.auth.signInWithPassword({
-                  email: email,
-                  password: password
-                });
-                if (loginRes.error) {
-                  throw new Error('An account with this email already exists. Try signing in on the login page.');
-                }
-              } else {
-                throw signUpRes.error;
-              }
-            }
+          if (!currentSession || !currentSession.user) {
+            throw new Error('Please open the activation link from your invitation email before setting a password.');
           }
 
-          // Link auth user ID to customer record and update invitation_status = 'ACTIVATED'
+          var sessionEmail = (currentSession.user.email || '').trim().toLowerCase();
+          if (!sessionEmail || sessionEmail !== email) {
+            throw new Error('Email must match the address that received your activation invitation.');
+          }
+
+          var updateRes = await sb.auth.updateUser({ password: password });
+          if (updateRes.error) throw updateRes.error;
+
           var linkRes = await sb.rpc('link_customer_account', {
             p_customer_id: custId,
             p_email: email

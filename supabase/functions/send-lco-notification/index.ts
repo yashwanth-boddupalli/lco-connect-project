@@ -18,20 +18,15 @@ Deno.serve(async (request) => {
     if (!authorization) return reply({ error: 'Authentication is required.' }, 401);
 
     const url = Deno.env.get('SUPABASE_URL');
-    // Hosted Supabase projects provide legacy keys and, on newer projects,
-    // named key maps. Support both without ever logging a key value.
     const anonKey = getSupabaseKey('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEYS');
     const serviceRoleKey = getSupabaseKey('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEYS');
     const smtp2goKey = Deno.env.get('SMTP2GO_API_KEY');
     const from = Deno.env.get('SMTP2GO_FROM_EMAIL');
-    const loginUrl = Deno.env.get('APP_LOGIN_URL');
-    const platformMissing = [
-      !url && 'SUPABASE_URL',
-      !anonKey && 'SUPABASE_ANON_KEY or SUPABASE_PUBLISHABLE_KEYS.default',
-      !serviceRoleKey && 'SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEYS.default',
-    ].filter(Boolean);
+    const loginUrl = Deno.env.get('APP_LOGIN_URL')
+      || 'https://lco-connect-project.vercel.app/pages/login.html';
+
     if (!url || !anonKey || !serviceRoleKey) {
-      console.error('Notification function is missing platform configuration names:', platformMissing.join(', '));
+      console.error('Notification function is missing platform configuration.');
       return reply({ error: 'Notification service is not configured.' }, 500);
     }
 
@@ -59,13 +54,8 @@ Deno.serve(async (request) => {
       return reply({ error: 'Application review state does not match this request.' }, 409);
     }
 
-    const notificationMissing = [
-      !smtp2goKey && 'SMTP2GO_API_KEY',
-      !from && 'SMTP2GO_FROM_EMAIL',
-      !loginUrl && 'APP_LOGIN_URL',
-    ].filter(Boolean);
     if (!smtp2goKey || !from || !loginUrl) {
-      console.error('Notification function is missing configuration names:', notificationMissing.join(', '));
+      console.error('Notification function is missing email configuration.');
       const { error: statusError } = await admin.from('lco_applications')
         .update({ notification_status: 'FAILED' })
         .eq('id', application.id);
@@ -100,8 +90,14 @@ Deno.serve(async (request) => {
           html_body: body,
         }),
       });
-      sent = emailResponse.ok;
-      if (!sent) console.error(`SMTP2GO rejected notification with HTTP ${emailResponse.status}.`);
+
+      if (emailResponse.ok) {
+        const smtpResult = await emailResponse.json();
+        sent = !!(smtpResult?.data?.succeeded > 0);
+        if (!sent) console.error('SMTP2GO returned succeeded = 0');
+      } else {
+        console.error(`SMTP2GO rejected notification with HTTP ${emailResponse.status}.`);
+      }
     } catch (emailError) {
       console.error('SMTP2GO request failed:', emailError instanceof Error ? emailError.message : 'Unknown error');
     }
