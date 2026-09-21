@@ -712,9 +712,7 @@
 
       // Check if Razorpay Checkout SDK is available
       if (typeof window.Razorpay === 'undefined') {
-        // Fallback for test mode if SDK failed to load
-        console.warn('Razorpay SDK not loaded, using test mode verification fallback');
-        await executeTestModeVerification(resData);
+        showToast('Online payment is currently unavailable. Please refresh the page and try again.', 'error');
         return;
       }
 
@@ -773,35 +771,6 @@
     } finally {
       payBtn.disabled = false;
       if (procEl) procEl.style.display = 'none';
-    }
-  }
-
-  async function executeTestModeVerification(resData) {
-    try {
-      showToast('Processing test mode payment…', 'info');
-      var testPaymentId = 'pay_test_' + Date.now();
-      var testOrderId = resData.order.id;
-      var testSignature = 'mock_signature_test';
-
-      var vRes = await sb.functions.invoke('verify-payment', {
-        body: {
-          razorpay_order_id: testOrderId,
-          razorpay_payment_id: testPaymentId,
-          razorpay_signature: testSignature,
-          bill_id: resData.bill.id
-        }
-      });
-
-      if (vRes.data && vRes.data.ok) {
-        showToast('Test payment recorded! Receipt #: ' + (vRes.data.payment_number || ''), 'success');
-        loadBillingData();
-        loadNotifications();
-      } else {
-        showToast(vRes.data?.error || 'Test payment verification failed.', 'error');
-      }
-    } catch (err) {
-      console.error('Test mode verification error:', err);
-      showToast('Test mode payment failed.', 'error');
     }
   }
 

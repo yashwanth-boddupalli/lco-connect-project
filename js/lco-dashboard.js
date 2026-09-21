@@ -2097,7 +2097,7 @@
 
       } catch (err) {
         console.error('Generate bill error:', err);
-        showToast('Failed to generate bill.', 'error');
+        showToast('Failed to generate bill. ' + (err.message || ''), 'error');
       } finally {
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Generate Bill';
@@ -2170,49 +2170,79 @@
         return;
       }
 
+      // Verify ownership (tenant guard)
+      if (bill.lco_id !== lcoId) {
+        showToast('Access denied: Bill does not belong to your account.', 'error');
+        return;
+      }
+
+      // Verify amount is positive
+      if (isNaN(amount) || amount <= 0) {
+        showToast('Payment amount must be greater than zero.', 'error');
+        return;
+      }
+
+      // Verify amount does not exceed outstanding balance
+      var outstanding = Number(bill.amount) - Number(bill.paid_amount);
+      if (amount > outstanding + 0.001) {
+        showToast('Payment amount (₹' + amount.toFixed(2) + ') cannot exceed outstanding balance (₹' + outstanding.toFixed(2) + ').', 'error');
+        return;
+      }
+
       var confirmBtn = document.getElementById('recPayConfirmBtn');
       confirmBtn.disabled = true;
       confirmBtn.innerHTML = '<span class="lco-spinner"></span> Recording…';
 
       try {
-        var newPaidAmount = Number(bill.paid_amount) + amount;
-        var newStatus = newPaidAmount >= Number(bill.amount) ? 'PAID' : bill.status;
+        // 1. Generate concurrency-safe payment number using DB sequence function
+        var { data: payNumResult, error: numErr } = await sb.rpc('generate_payment_number');
+        if (numErr) {
+          console.warn('generate_payment_number RPC warning:', numErr);
+        }
+        var paymentNumber = payNumResult || ('PAY-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000));
 
-        // 1. Update bill
-        var { error: updateErr } = await sb.from('customer_bills')
-          .update({
-            paid_amount: newPaidAmount,
-            status: newStatus
-          })
-          .eq('id', bill.id);
-
-        if (updateErr) throw updateErr;
-
-        // 2. Insert payment record
+        // 2. Insert payment record (no payment_status column)
         var { data: newPayment, error: payErr } = await sb.from('customer_payments')
           .insert({
+            payment_number: paymentNumber,
             lco_id: lcoId,
             customer_id: bill.customer_id,
             bill_id: bill.id,
             amount: amount,
             payment_method: method,
-            payment_status: 'COMPLETED',
-            transaction_reference: ref || 'MANUAL_' + Date.now(),
-            notes: notes || null
+            payment_date: new Date().toISOString(),
+            transaction_reference: ref || ('MANUAL_' + Date.now()),
+            notes: notes || null,
+            recorded_by: currentUser ? currentUser.id : null,
+            gateway: null
           })
           .select()
           .single();
 
         if (payErr) throw payErr;
 
-        showToast('Payment recorded successfully! Receipt #: ' + newPayment.payment_number, 'success');
+        // 3. Update bill paid_amount and status
+        var newPaidAmount = Number(bill.paid_amount) + amount;
+        var newStatus = newPaidAmount >= Number(bill.amount) ? 'PAID' : 'PENDING';
+
+        var { error: updateErr } = await sb.from('customer_bills')
+          .update({
+            paid_amount: Math.min(newPaidAmount, Number(bill.amount)),
+            status: newStatus
+          })
+          .eq('id', bill.id)
+          .eq('lco_id', lcoId);
+
+        if (updateErr) throw updateErr;
+
+        showToast('Payment recorded successfully! Receipt #: ' + (newPayment ? newPayment.payment_number : paymentNumber), 'success');
         modal.classList.remove('visible');
         form.reset();
         await loadBillingData();
 
       } catch (err) {
         console.error('Record payment error:', err);
-        showToast('Failed to record payment.', 'error');
+        showToast('Failed to record payment. ' + (err.message || ''), 'error');
       } finally {
         confirmBtn.disabled = false;
         confirmBtn.textContent = 'Record Payment';

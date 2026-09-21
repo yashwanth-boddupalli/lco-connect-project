@@ -95,7 +95,7 @@ GRANT EXECUTE ON FUNCTION public.generate_payment_number() TO authenticated;
 
 CREATE TABLE IF NOT EXISTS public.customer_bills (
   id                   UUID           DEFAULT gen_random_uuid() PRIMARY KEY,
-  bill_number          TEXT           UNIQUE NOT NULL,
+  bill_number          TEXT           UNIQUE NOT NULL DEFAULT public.generate_bill_number(),
   lco_id               UUID           NOT NULL REFERENCES public.lco_applications(id) ON DELETE CASCADE,
   customer_id          UUID           NOT NULL REFERENCES public.customers(id) ON DELETE CASCADE,
   subscription_id      UUID           REFERENCES public.customer_subscriptions(id) ON DELETE SET NULL,
@@ -114,6 +114,10 @@ CREATE TABLE IF NOT EXISTS public.customer_bills (
   created_at           TIMESTAMPTZ    NOT NULL DEFAULT now(),
   updated_at           TIMESTAMPTZ    NOT NULL DEFAULT now()
 );
+
+-- Ensure bill_number column default is set on existing tables
+ALTER TABLE public.customer_bills
+  ALTER COLUMN bill_number SET DEFAULT public.generate_bill_number();
 
 
 -- ══════════════════════════════════════════════

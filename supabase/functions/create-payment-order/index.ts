@@ -136,14 +136,6 @@ Deno.serve(async (request) => {
     let razorpayOrder;
     if (razorpayResponse.ok) {
       razorpayOrder = await razorpayResponse.json();
-    } else if (razorpayKeyId.startsWith('rzp_test_')) {
-      console.log('Razorpay API response non-200 in TEST mode, using test order ID');
-      razorpayOrder = {
-        id: `order_test_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-        amount: amountInPaise,
-        currency: 'INR',
-        receipt: bill.bill_number,
-      };
     } else {
       const errBody = await razorpayResponse.text();
       console.error('Razorpay order creation failed:', razorpayResponse.status, errBody);

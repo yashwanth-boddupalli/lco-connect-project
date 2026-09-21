@@ -78,14 +78,13 @@ Deno.serve(async (request) => {
 
     // ── 5. Verify Razorpay Signature ──
     const razorpayKeyId = Deno.env.get('RAZORPAY_KEY_ID') || '';
-    const isTestOrder = razorpayOrderId.startsWith('order_test_') || razorpayKeyId.startsWith('rzp_test_');
 
     const expectedSignature = await generateHmacSha256(
       `${razorpayOrderId}|${razorpayPaymentId}`,
       razorpayKeySecret
     );
 
-    if (!isTestOrder && expectedSignature !== razorpaySignature) {
+    if (expectedSignature !== razorpaySignature) {
       console.error('verify-payment: signature mismatch for order', razorpayOrderId);
       return reply({ error: 'Payment signature verification failed.' }, 400);
     }
@@ -132,29 +131,25 @@ Deno.serve(async (request) => {
     }
 
     // ── 8. Verify Payment Amount with Razorpay API ──
-    let paidAmountRupees = Number(bill.amount) - Number(bill.paid_amount);
+    const razorpayAuth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
 
-    if (!isTestOrder) {
-      const razorpayAuth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
+    const paymentCheckResponse = await fetch(`https://api.razorpay.com/v1/payments/${razorpayPaymentId}`, {
+      headers: { 'Authorization': `Basic ${razorpayAuth}` },
+    });
 
-      const paymentCheckResponse = await fetch(`https://api.razorpay.com/v1/payments/${razorpayPaymentId}`, {
-        headers: { 'Authorization': `Basic ${razorpayAuth}` },
-      });
-
-      if (!paymentCheckResponse.ok) {
-        console.error('verify-payment: failed to fetch payment from Razorpay');
-        return reply({ error: 'Could not verify payment with gateway.' }, 502);
-      }
-
-      const razorpayPayment = await paymentCheckResponse.json();
-
-      if (razorpayPayment.status !== 'captured') {
-        console.error('verify-payment: payment not captured, status:', razorpayPayment.status);
-        return reply({ error: 'Payment has not been captured. Status: ' + razorpayPayment.status }, 400);
-      }
-
-      paidAmountRupees = razorpayPayment.amount / 100;
+    if (!paymentCheckResponse.ok) {
+      console.error('verify-payment: failed to fetch payment from Razorpay');
+      return reply({ error: 'Could not verify payment with gateway.' }, 502);
     }
+
+    const razorpayPayment = await paymentCheckResponse.json();
+
+    if (razorpayPayment.status !== 'captured') {
+      console.error('verify-payment: payment not captured, status:', razorpayPayment.status);
+      return reply({ error: 'Payment has not been captured. Status: ' + razorpayPayment.status }, 400);
+    }
+
+    const paidAmountRupees = razorpayPayment.amount / 100;
     const outstandingAmount = Number(bill.amount) - Number(bill.paid_amount);
 
     // Verify amount does not exceed outstanding
