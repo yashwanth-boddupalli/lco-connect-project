@@ -21,16 +21,19 @@ Deno.serve(async (request) => {
     const url = Deno.env.get('SUPABASE_URL');
     const anonKey = getSupabaseKey('SUPABASE_ANON_KEY', 'SUPABASE_PUBLISHABLE_KEYS');
     const serviceRoleKey = getSupabaseKey('SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEYS');
-    const razorpayKeyId = Deno.env.get('RAZORPAY_KEY_ID');
-    const razorpayKeySecret = Deno.env.get('RAZORPAY_KEY_SECRET');
+    
+    // Cashfree Sandbox Credentials
+    const cashfreeAppId = Deno.env.get('CASHFREE_APP_ID');
+    const cashfreeSecretKey = Deno.env.get('CASHFREE_SECRET_KEY');
+    const cashfreeApiVersion = Deno.env.get('CASHFREE_API_VERSION') || '2023-08-01';
 
     if (!url || !anonKey || !serviceRoleKey) {
       console.error('create-payment-order: missing platform config.');
       return reply({ error: 'Server configuration error.' }, 500);
     }
 
-    if (!razorpayKeyId || !razorpayKeySecret) {
-      console.error('create-payment-order: missing Razorpay credentials.');
+    if (!cashfreeAppId || !cashfreeSecretKey) {
+      console.error('create-payment-order: missing Cashfree credentials.');
       return reply({ error: 'Payment gateway is not configured.' }, 500);
     }
 
@@ -105,58 +108,83 @@ Deno.serve(async (request) => {
       return reply({ error: 'No outstanding balance on this bill.' }, 409);
     }
 
-    // Razorpay expects amount in paise (smallest currency unit)
-    const amountInPaise = Math.round(outstandingAmount * 100);
+    // Cashfree expects amount in INR (float/number), not in paise
+    const roundedAmount = Math.round(outstandingAmount * 100) / 100;
 
-    // ── 9. Create Razorpay Order (server-side) ──
-    const razorpayAuth = btoa(`${razorpayKeyId}:${razorpayKeySecret}`);
+    // Generate unique Cashfree order ID (max 45 chars: order_ + 16-char uuid + _ + timestamp)
+    const orderId = `order_${bill.id.replace(/-/g, '').substring(0, 16)}_${Date.now()}`;
 
+    // Format phone (must be 10 digits for Indian numbers, remove non-numeric)
+    const rawPhone = String(customer.phone || '').replace(/[^0-9]/g, '');
+    const cleanPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9999999999';
+
+    // ── 9. Create Cashfree Sandbox Order (server-side) ──
     const orderPayload = {
-      amount: amountInPaise,
-      currency: 'INR',
-      receipt: bill.bill_number,
-      notes: {
-        bill_id: bill.id,
-        bill_number: bill.bill_number,
+      order_id: orderId,
+      order_amount: roundedAmount,
+      order_currency: 'INR',
+      customer_details: {
         customer_id: customer.id,
-        customer_name: customer.full_name,
-        lco_id: bill.lco_id,
+        customer_name: customer.full_name || 'Customer',
+        customer_email: customer.email || `${customer.customer_id.toLowerCase()}@lcoconnect.internal`,
+        customer_phone: cleanPhone,
       },
+      order_meta: {
+        return_url: `${request.headers.get('origin') || 'https://lcoconnect.internal'}/pages/customer-dashboard.html?order_id={order_id}`,
+      },
+      order_tags: {
+        bill_id: bill.id,
+        customer_id: customer.id,
+        lco_id: bill.lco_id,
+        bill_number: bill.bill_number,
+      },
+      order_note: `Bill ${bill.bill_number}`,
     };
 
-    const razorpayResponse = await fetch('https://api.razorpay.com/v1/orders', {
+    const cashfreeEndpoint = 'https://sandbox.cashfree.com/pg/orders';
+
+    const cfResponse = await fetch(cashfreeEndpoint, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${razorpayAuth}`,
+        'x-client-id': cashfreeAppId,
+        'x-client-secret': cashfreeSecretKey,
+        'x-api-version': cashfreeApiVersion,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(orderPayload),
     });
 
-    let razorpayOrder;
-    if (razorpayResponse.ok) {
-      razorpayOrder = await razorpayResponse.json();
+    let cfOrder;
+    if (cfResponse.ok) {
+      cfOrder = await cfResponse.json();
     } else {
-      const errBody = await razorpayResponse.text();
-      console.error('Razorpay order creation failed:', razorpayResponse.status, errBody);
-      return reply({ error: 'Failed to create payment order with gateway.' }, 502);
+      const errBody = await cfResponse.text();
+      console.error('Cashfree order creation failed:', cfResponse.status, errBody);
+      return reply({ error: 'Failed to create payment order with Cashfree gateway.' }, 502);
     }
 
-    // ── 10. Return safe checkout info (NO secrets) ──
+    if (!cfOrder.payment_session_id) {
+      console.error('Cashfree response missing payment_session_id:', cfOrder);
+      return reply({ error: 'Invalid response from payment gateway.' }, 502);
+    }
+
+    // ── 10. Return safe checkout info (NO secret keys) ──
     return reply({
       ok: true,
+      payment_session_id: cfOrder.payment_session_id,
+      order_id: cfOrder.order_id,
       order: {
-        id: razorpayOrder.id,
-        amount: razorpayOrder.amount,
-        currency: razorpayOrder.currency,
-        receipt: razorpayOrder.receipt,
+        id: cfOrder.order_id,
+        cf_order_id: cfOrder.cf_order_id,
+        amount: cfOrder.order_amount,
+        currency: cfOrder.order_currency,
       },
       bill: {
         id: bill.id,
         bill_number: bill.bill_number,
         amount: Number(bill.amount),
         paid_amount: Number(bill.paid_amount),
-        outstanding: outstandingAmount,
+        outstanding: roundedAmount,
         plan_name: bill.plan_name,
       },
       customer: {
@@ -165,7 +193,6 @@ Deno.serve(async (request) => {
         phone: customer.phone,
         customer_id: customer.customer_id,
       },
-      razorpay_key_id: razorpayKeyId, // Public key only — safe for frontend
     });
 
   } catch (error) {
