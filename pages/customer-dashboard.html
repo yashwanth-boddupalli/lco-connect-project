@@ -83,6 +83,9 @@
         <button class="cust-nav-item" data-view="plans" id="navCustPlans">
           <span class="cust-nav-icon">🏷️</span> Available Plans
         </button>
+        <button class="cust-nav-item" data-view="billing" id="navCustBilling">
+          <span class="cust-nav-icon">💳</span> Billing & Payments
+        </button>
         <button class="cust-nav-item" data-view="notifications" id="navCustNotifications">
           <span class="cust-nav-icon">🔔</span> Notifications
           <span class="cust-nav-badge" id="custNotifCount" style="display:none;">0</span>
@@ -195,12 +198,80 @@
             <div id="custSubDetails">Loading subscription…</div>
           </div>
 
-          <!-- Phase 7 Teaser Banner -->
-          <div class="cust-teaser-banner">
-            <div class="cust-teaser-icon">💳</div>
-            <div class="cust-teaser-text">
-              <h4>Online Billing & Invoices Coming Soon (Phase 7)</h4>
-              <p>Online payment collection, digital invoice downloads, and bill payment history will be available in the upcoming Phase 7 release.</p>
+        </section>
+
+
+        <!-- ═══════════ VIEW: BILLING & PAYMENTS ═══════════ -->
+        <section class="cust-view" id="view-billing">
+          <h1 class="cust-view-title">Billing & Payments</h1>
+          <p class="cust-view-subtitle">View your bills, make payments, and track payment history</p>
+
+          <!-- Outstanding Bill Card -->
+          <div id="custOutstandingBillSection">
+            <div class="cust-card" id="custOutstandingBillCard" style="display:none;">
+              <div class="cust-card-title">
+                <span>📄 Current Outstanding Bill</span>
+                <span id="custBillStatusBadge"></span>
+              </div>
+              <div class="cust-grid" id="custBillDetailGrid"></div>
+              <div style="margin-top:20px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                <button class="cust-plan-btn" id="custPayNowBtn" style="width:auto; padding:12px 28px; font-size:15px;">
+                  💳 PAY NOW
+                </button>
+                <div id="custPaymentProcessing" style="display:none; font-size:13px; color:#64748B;">Processing payment…</div>
+              </div>
+            </div>
+            <div id="custNoBillMessage" style="display:none;">
+              <div class="cust-card" style="text-align:center; padding:40px;">
+                <div style="font-size:32px; margin-bottom:12px;">✅</div>
+                <h3 style="margin:0 0 6px; font-family:'Space Grotesk',sans-serif;">No Outstanding Bills</h3>
+                <p style="color:#64748B; font-size:14px; margin:0;">You're all caught up! No pending bills at this time.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Payment History -->
+          <div class="cust-card" style="margin-top:8px;">
+            <div class="cust-card-title">📋 Payment History</div>
+            <div class="lco-table-wrap">
+              <table class="lco-table" id="custPaymentHistoryTable">
+                <thead>
+                  <tr>
+                    <th>Payment #</th>
+                    <th>Amount</th>
+                    <th>Method</th>
+                    <th>Date</th>
+                    <th>Reference</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="custPaymentHistoryBody">
+                  <tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">Loading payment history…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Billing History -->
+          <div class="cust-card" style="margin-top:8px;">
+            <div class="cust-card-title">📑 All Bills</div>
+            <div class="lco-table-wrap">
+              <table class="lco-table" id="custBillingHistoryTable">
+                <thead>
+                  <tr>
+                    <th>Bill #</th>
+                    <th>Plan</th>
+                    <th>Period</th>
+                    <th>Amount</th>
+                    <th>Paid</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="custBillingHistoryBody">
+                  <tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading bills…</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>
@@ -303,6 +374,9 @@
     </div>
   </div>
 
+
+  <!-- Razorpay Checkout SDK -->
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 
   <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

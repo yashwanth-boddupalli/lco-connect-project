@@ -82,6 +82,9 @@
         <button class="lco-nav-item" data-view="services" id="navServices">
           <span class="lco-nav-icon">◉</span> Services
         </button>
+        <button class="lco-nav-item" data-view="billing" id="navBilling">
+          <span class="lco-nav-icon">💳</span> Billing & Payments
+        </button>
         <button class="lco-nav-item" data-view="notifications" id="navNotifications">
           <span class="lco-nav-icon">🔔</span> Notifications
           <span class="lco-nav-count" id="lcoNotifCount" style="display:none;">0</span>
@@ -427,6 +430,108 @@
               <span class="lco-detail-section-icon">📊</span> Service Status Breakdown
             </div>
             <div class="lco-detail-grid" id="lcoServiceStatusGrid"></div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: BILLING & PAYMENTS ═══════════ -->
+        <section class="lco-view" id="view-billing">
+          <h1 class="lco-view-title">Billing & Payments</h1>
+          <p class="lco-view-subtitle">Manage customer bills, track financial collections, and record offline payments</p>
+
+          <!-- Billing Stats -->
+          <div class="lco-stats-grid">
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot total"></span> Total Billed
+              </div>
+              <div class="lco-stat-value" id="lcoBillingStatBilled">₹0.00</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot active"></span> Total Collected
+              </div>
+              <div class="lco-stat-value" id="lcoBillingStatCollected">₹0.00</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot inactive"></span> Outstanding Due
+              </div>
+              <div class="lco-stat-value" id="lcoBillingStatOutstanding">₹0.00</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label">
+                <span class="lco-stat-dot services"></span> Overdue Bills
+              </div>
+              <div class="lco-stat-value" id="lcoBillingStatOverdue">0</div>
+            </div>
+          </div>
+
+          <!-- Toolbar & Actions -->
+          <div class="lco-toolbar">
+            <div class="lco-search-wrap">
+              <span class="lco-search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input type="text" class="lco-search-input" id="lcoBillingSearchInput" placeholder="Search by Bill #, Customer Name, Plan…">
+            </div>
+
+            <div class="lco-filter-group" id="lcoBillingFilterGroup">
+              <button class="lco-filter-btn active" data-bill-filter="all">All</button>
+              <button class="lco-filter-btn" data-bill-filter="PENDING">Pending</button>
+              <button class="lco-filter-btn" data-bill-filter="PAID">Paid</button>
+              <button class="lco-filter-btn" data-bill-filter="OVERDUE">Overdue</button>
+            </div>
+
+            <div style="margin-left:auto; display:flex; gap:8px;">
+              <button class="lco-quick-btn primary" id="openGenerateBillBtn">+ Generate Bill</button>
+              <button class="lco-quick-btn secondary" id="openRecordPaymentBtn">💳 Record Payment</button>
+            </div>
+          </div>
+
+          <!-- Bills Table -->
+          <h2 class="lco-section-heading" style="margin-top:16px;">Customer Bills</h2>
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="lcoBillsTable">
+              <thead>
+                <tr>
+                  <th>Bill #</th>
+                  <th>Customer</th>
+                  <th>Plan</th>
+                  <th>Amount</th>
+                  <th>Paid</th>
+                  <th>Due Date</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="lcoBillsTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading bills…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Payments History Table -->
+          <h2 class="lco-section-heading" style="margin-top:24px;">Payment Transactions</h2>
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="lcoPaymentsTable">
+              <thead>
+                <tr>
+                  <th>Receipt #</th>
+                  <th>Customer</th>
+                  <th>Bill #</th>
+                  <th>Amount</th>
+                  <th>Method</th>
+                  <th>Date</th>
+                  <th>Reference</th>
+                </tr>
+              </thead>
+              <tbody id="lcoPaymentsTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading payments…</td></tr>
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -836,6 +941,115 @@
         <div class="lco-modal-actions">
           <button type="button" class="lco-modal-cancel" id="changeStatusCancelBtn">Cancel</button>
           <button type="submit" class="lco-modal-confirm" id="changeStatusConfirmBtn">Update Status</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     GENERATE BILL MODAL (Phase 8)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="generateBillModal">
+    <div class="lco-modal">
+      <h3>Generate Customer Bill</h3>
+      <form id="generateBillForm" autocomplete="off">
+
+        <div class="lco-form-group">
+          <label for="genBillCustomerSelect">Select Customer *</label>
+          <select id="genBillCustomerSelect" required>
+            <option value="">Loading customers…</option>
+          </select>
+          <div class="lco-form-error" id="genBillCustomerSelect-error">Please select a customer</div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="genBillPlanName">Plan / Service Name *</label>
+            <input type="text" id="genBillPlanName" placeholder="e.g. Broadband 100Mbps Monthly" required>
+          </div>
+          <div class="lco-form-group">
+            <label for="genBillAmount">Amount (₹) *</label>
+            <input type="number" id="genBillAmount" placeholder="499.00" min="1" step="0.01" required>
+          </div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="genBillPeriodStart">Period Start Date *</label>
+            <input type="date" id="genBillPeriodStart" required>
+          </div>
+          <div class="lco-form-group">
+            <label for="genBillPeriodEnd">Period End Date *</label>
+            <input type="date" id="genBillPeriodEnd" required>
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="genBillDueDate">Due Date *</label>
+          <input type="date" id="genBillDueDate" required>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="genBillNotes">Notes (optional)</label>
+          <textarea id="genBillNotes" placeholder="Additional billing details, discounts, taxes…"></textarea>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="genBillCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="genBillConfirmBtn">Generate Bill</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     RECORD PAYMENT MODAL (Phase 8)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="recordPaymentModal">
+    <div class="lco-modal">
+      <h3>Record Offline / Manual Payment</h3>
+      <form id="recordPaymentForm" autocomplete="off">
+
+        <div class="lco-form-group">
+          <label for="recPayBillSelect">Select Pending / Overdue Bill *</label>
+          <select id="recPayBillSelect" required>
+            <option value="">Loading pending bills…</option>
+          </select>
+          <div class="lco-form-error" id="recPayBillSelect-error">Please select a bill</div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="recPayAmount">Amount Received (₹) *</label>
+            <input type="number" id="recPayAmount" placeholder="499.00" min="1" step="0.01" required>
+          </div>
+          <div class="lco-form-group">
+            <label for="recPayMethod">Payment Method *</label>
+            <select id="recPayMethod" required>
+              <option value="CASH">CASH</option>
+              <option value="UPI">UPI</option>
+              <option value="BANK_TRANSFER">BANK TRANSFER</option>
+              <option value="CHEQUE">CHEQUE</option>
+              <option value="OTHER">OTHER</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="recPayReference">Transaction Reference / UTR (optional)</label>
+          <input type="text" id="recPayReference" placeholder="e.g. UPI Ref, Receipt No, Cheque #">
+        </div>
+
+        <div class="lco-form-group">
+          <label for="recPayNotes">Notes (optional)</label>
+          <textarea id="recPayNotes" placeholder="Payment notes…"></textarea>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="recPayCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="recPayConfirmBtn">Record Payment</button>
         </div>
       </form>
     </div>

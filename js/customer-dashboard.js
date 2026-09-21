@@ -27,6 +27,9 @@
   var activeSubscription = null;
   var availablePlans = [];
   var notifications = [];
+  var activeBill = null;
+  var billingHistory = [];
+  var paymentHistory = [];
   var currentView = 'overview';
 
 
@@ -104,6 +107,7 @@
     setupLogout();
     setupEditProfileModal();
     setupRequestPlanModal();
+    setupPayNow();
 
     // Render overview
     renderOverview();
@@ -112,6 +116,7 @@
     loadSubscriptions();
     loadAvailablePlans();
     loadNotifications();
+    loadBillingData();
   }
 
 
@@ -154,6 +159,8 @@
       renderService();
     } else if (viewName === 'subscription') {
       renderSubscription();
+    } else if (viewName === 'billing') {
+      loadBillingData();
     } else if (viewName === 'plans') {
       renderAvailablePlans();
     } else if (viewName === 'notifications') {
@@ -554,6 +561,217 @@
     document.getElementById('reqPlanName').value = planName;
     document.getElementById('reqPlanNotes').value = '';
     modal.classList.add('visible');
+  }
+
+
+  /* ══════════════════════════════════════════════
+     BILLING & PAYMENTS LOGIC
+     ══════════════════════════════════════════════ */
+
+  async function loadBillingData() {
+    if (!customerData) return;
+
+    try {
+      // 1. Fetch bills
+      var { data: bills, error: billsErr } = await sb.from('customer_bills')
+        .select('*')
+        .eq('customer_id', customerData.id)
+        .order('created_at', { ascending: false });
+
+      if (billsErr) throw billsErr;
+      billingHistory = bills || [];
+
+      // Find first pending/overdue bill
+      activeBill = billingHistory.find(function (b) { return b.status === 'PENDING' || b.status === 'OVERDUE'; }) || null;
+
+      // 2. Fetch payments
+      var { data: payments, error: payErr } = await sb.from('customer_payments')
+        .select('*')
+        .eq('customer_id', customerData.id)
+        .order('payment_date', { ascending: false });
+
+      if (payErr) throw payErr;
+      paymentHistory = payments || [];
+
+      // 3. Render views
+      renderOutstandingBill();
+      renderBillingHistory();
+      renderPaymentHistory();
+
+    } catch (err) {
+      console.error('Load billing data error:', err);
+      showToast('Failed to load billing information.', 'error');
+    }
+  }
+
+  function renderOutstandingBill() {
+    var card = document.getElementById('custOutstandingBillCard');
+    var noBill = document.getElementById('custNoBillMessage');
+    var badge = document.getElementById('custBillStatusBadge');
+    var grid = document.getElementById('custBillDetailGrid');
+
+    if (!card || !noBill || !grid) return;
+
+    if (!activeBill) {
+      card.style.display = 'none';
+      noBill.style.display = 'block';
+      return;
+    }
+
+    noBill.style.display = 'none';
+    card.style.display = 'block';
+
+    if (badge) badge.innerHTML = renderStatusBadge(activeBill.status);
+
+    var outstanding = Number(activeBill.amount) - Number(activeBill.paid_amount);
+
+    grid.innerHTML =
+      detailField('Bill Number', activeBill.bill_number) +
+      detailField('Plan Name', activeBill.plan_name) +
+      detailField('Total Amount', '₹' + Number(activeBill.amount).toFixed(2)) +
+      detailField('Paid Amount', '₹' + Number(activeBill.paid_amount).toFixed(2)) +
+      detailField('Amount Due', '₹' + outstanding.toFixed(2)) +
+      detailField('Billing Period', formatDate(activeBill.billing_period_start) + ' to ' + formatDate(activeBill.billing_period_end)) +
+      detailField('Due Date', formatDate(activeBill.due_date)) +
+      (activeBill.notes ? detailField('Notes', activeBill.notes) : '');
+  }
+
+  function renderBillingHistory() {
+    var tbody = document.getElementById('custBillingHistoryBody');
+    if (!tbody) return;
+
+    if (billingHistory.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">No bills found.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = billingHistory.map(function (b) {
+      return '<tr>' +
+        '<td><strong>' + esc(b.bill_number) + '</strong></td>' +
+        '<td>' + esc(b.plan_name) + '</td>' +
+        '<td>' + formatDate(b.billing_period_start) + ' - ' + formatDate(b.billing_period_end) + '</td>' +
+        '<td>₹' + Number(b.amount).toFixed(2) + '</td>' +
+        '<td>₹' + Number(b.paid_amount).toFixed(2) + '</td>' +
+        '<td>' + formatDate(b.due_date) + '</td>' +
+        '<td>' + renderStatusBadge(b.status) + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function renderPaymentHistory() {
+    var tbody = document.getElementById('custPaymentHistoryBody');
+    if (!tbody) return;
+
+    if (paymentHistory.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:#64748B;">No payments recorded.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = paymentHistory.map(function (p) {
+      return '<tr>' +
+        '<td><strong>' + esc(p.payment_number) + '</strong></td>' +
+        '<td>₹' + Number(p.amount).toFixed(2) + '</td>' +
+        '<td><span class="cust-badge">' + esc(p.payment_method) + '</span></td>' +
+        '<td>' + formatDate(p.payment_date) + '</td>' +
+        '<td>' + esc(p.transaction_reference || '—') + '</td>' +
+        '<td><span class="cust-badge active">COMPLETED</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function setupPayNow() {
+    var payBtn = document.getElementById('custPayNowBtn');
+    if (!payBtn) return;
+
+    payBtn.addEventListener('click', handlePayNow);
+  }
+
+  async function handlePayNow() {
+    if (!activeBill) {
+      showToast('No outstanding bill to pay.', 'warning');
+      return;
+    }
+
+    var payBtn = document.getElementById('custPayNowBtn');
+    var procEl = document.getElementById('custPaymentProcessing');
+
+    payBtn.disabled = true;
+    if (procEl) procEl.style.display = 'inline-block';
+
+    try {
+      // Create payment order via Edge Function
+      var res = await sb.functions.invoke('create-payment-order', {
+        body: { bill_id: activeBill.id }
+      });
+
+      if (!res.data || !res.data.ok) {
+        throw new Error(res.data?.error || res.error?.message || 'Failed to initiate payment.');
+      }
+
+      var resData = res.data;
+
+      // Check if Razorpay Checkout SDK is available
+      if (typeof window.Razorpay === 'undefined') {
+        showToast('Online payment is currently unavailable. Please refresh the page and try again.', 'error');
+        return;
+      }
+
+      var options = {
+        key: resData.razorpay_key_id,
+        amount: resData.order.amount,
+        currency: resData.order.currency,
+        name: 'LCO Connect',
+        description: 'Payment for Bill ' + resData.bill.bill_number,
+        order_id: resData.order.id,
+        handler: async function (response) {
+          showToast('Payment successful, verifying with server…', 'info');
+          try {
+            var vRes = await sb.functions.invoke('verify-payment', {
+              body: {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                bill_id: resData.bill.id
+              }
+            });
+
+            if (vRes.data && vRes.data.ok) {
+              showToast('Payment verified successfully! Receipt #: ' + (vRes.data.payment_number || ''), 'success');
+              loadBillingData();
+              loadNotifications();
+            } else {
+              showToast(vRes.data?.error || 'Payment verification failed.', 'error');
+            }
+          } catch (vErr) {
+            console.error('Verify payment error:', vErr);
+            showToast('Verification error. Webhook will process if captured.', 'warning');
+          }
+        },
+        prefill: {
+          name: resData.customer.name,
+          email: resData.customer.email,
+          contact: resData.customer.phone
+        },
+        notes: {
+          bill_id: resData.bill.id,
+          customer_id: resData.customer.customer_id
+        },
+        theme: { color: '#0B7A6E' }
+      };
+
+      var rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', function (response) {
+        showToast('Payment failed: ' + (response.error.description || 'Cancelled'), 'error');
+      });
+      rzp.open();
+
+    } catch (err) {
+      console.error('Pay Now error:', err);
+      showToast(err.message || 'Payment processing error.', 'error');
+    } finally {
+      payBtn.disabled = false;
+      if (procEl) procEl.style.display = 'none';
+    }
   }
 
 

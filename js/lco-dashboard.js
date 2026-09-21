@@ -40,6 +40,12 @@
   var currentPlanFilterStatus = 'all';
   var currentPlanSearch = '';
 
+  // Phase 8: Billing & Payments state
+  var allBills = [];
+  var allPayments = [];
+  var currentBillFilter = 'all';
+  var currentBillSearch = '';
+
 
   /* ══════════════════════════════════════════════
      AUTH GUARD
@@ -112,6 +118,9 @@
     setupChangeStatusModal();   // Phase 7
     setupPlanListeners();
     setupSubscriptionModal();
+    setupBillingListeners();    // Phase 8
+    setupGenerateBillModal();  // Phase 8
+    setupRecordPaymentModal();  // Phase 8
 
     // Load initial data
     loadStats();
@@ -119,6 +128,7 @@
     loadPlans();
     loadSubscriptions();
     loadNotifications();
+    loadBillingData();         // Phase 8
   }
 
 
@@ -161,6 +171,8 @@
       loadPlans();
     } else if (viewName === 'services') {
       renderServicesSummary();
+    } else if (viewName === 'billing') {
+      loadBillingData();
     } else if (viewName === 'notifications') {
       loadNotifications();
     } else if (viewName === 'profile') {
@@ -1836,6 +1848,437 @@
       toast.classList.add('removing');
       setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
     }, 4000);
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 8: BILLING & PAYMENTS LOGIC
+     ══════════════════════════════════════════════ */
+
+  async function loadBillingData() {
+    if (!lcoId) return;
+
+    try {
+      // 1. Fetch all bills for this LCO
+      var { data: bills, error: billsErr } = await sb.from('customer_bills')
+        .select('*, customers(full_name, customer_id)')
+        .eq('lco_id', lcoId)
+        .order('created_at', { ascending: false });
+
+      if (billsErr) throw billsErr;
+      allBills = bills || [];
+
+      // 2. Fetch all payments for this LCO
+      var { data: payments, error: payErr } = await sb.from('customer_payments')
+        .select('*, customers(full_name, customer_id), customer_bills(bill_number)')
+        .eq('lco_id', lcoId)
+        .order('payment_date', { ascending: false });
+
+      if (payErr) throw payErr;
+      allPayments = payments || [];
+
+      // 3. Render stats & tables
+      renderBillingStats();
+      renderBillsTable();
+      renderPaymentsTable();
+
+    } catch (err) {
+      console.error('Load LCO billing data error:', err);
+      showToast('Failed to load billing information.', 'error');
+    }
+  }
+
+  function renderBillingStats() {
+    var totalBilled = 0;
+    var totalCollected = 0;
+    var totalOutstanding = 0;
+    var overdueCount = 0;
+
+    allBills.forEach(function (b) {
+      totalBilled += Number(b.amount || 0);
+      var due = Number(b.amount || 0) - Number(b.paid_amount || 0);
+      if (b.status === 'PENDING' || b.status === 'OVERDUE') {
+        totalOutstanding += (due > 0 ? due : 0);
+      }
+      if (b.status === 'OVERDUE') {
+        overdueCount++;
+      }
+    });
+
+    allPayments.forEach(function (p) {
+      totalCollected += Number(p.amount || 0);
+    });
+
+    var billedEl = document.getElementById('lcoBillingStatBilled');
+    if (billedEl) billedEl.textContent = '₹' + totalBilled.toFixed(2);
+
+    var collEl = document.getElementById('lcoBillingStatCollected');
+    if (collEl) collEl.textContent = '₹' + totalCollected.toFixed(2);
+
+    var outEl = document.getElementById('lcoBillingStatOutstanding');
+    if (outEl) outEl.textContent = '₹' + totalOutstanding.toFixed(2);
+
+    var odEl = document.getElementById('lcoBillingStatOverdue');
+    if (odEl) odEl.textContent = overdueCount;
+  }
+
+  function renderBillsTable() {
+    var tbody = document.getElementById('lcoBillsTableBody');
+    if (!tbody) return;
+
+    var filtered = getFilteredBills();
+
+    if (filtered.length === 0) {
+      var msg = currentBillSearch ? 'No bills match your search.' : 'No customer bills found.';
+      tbody.innerHTML = '<tr><td colspan="8"><div class="lco-empty"><div class="lco-empty-icon">💳</div><h3>' + msg + '</h3></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(function (b) {
+      var custName = b.customers ? b.customers.full_name : '—';
+      var custId = b.customers ? b.customers.customer_id : '';
+      var isUnpaid = b.status === 'PENDING' || b.status === 'OVERDUE';
+
+      return '<tr>' +
+        '<td><strong>' + esc(b.bill_number) + '</strong></td>' +
+        '<td>' + esc(custName) + (custId ? ' <span style="font-size:11px; color:var(--slate);">(' + esc(custId) + ')</span>' : '') + '</td>' +
+        '<td>' + esc(b.plan_name) + '</td>' +
+        '<td>₹' + Number(b.amount).toFixed(2) + '</td>' +
+        '<td>₹' + Number(b.paid_amount).toFixed(2) + '</td>' +
+        '<td>' + formatDate(b.due_date) + '</td>' +
+        '<td>' + renderStatusBadge(b.status) + '</td>' +
+        '<td>' +
+        (isUnpaid ? '<button class="lco-view-btn record-pay-btn" data-bill-id="' + b.id + '" style="font-size:11px; padding:4px 8px;">💳 Record Payment</button>' : '—') +
+        '</td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('.record-pay-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        openRecordPaymentModalForBill(btn.dataset.billId);
+      });
+    });
+  }
+
+  function getFilteredBills() {
+    return allBills.filter(function (b) {
+      if (currentBillFilter !== 'all' && b.status !== currentBillFilter) return false;
+
+      if (currentBillSearch) {
+        var custName = b.customers ? b.customers.full_name : '';
+        var custId = b.customers ? b.customers.customer_id : '';
+        var haystack = [b.bill_number, custName, custId, b.plan_name, b.status].join(' ').toLowerCase();
+        return haystack.indexOf(currentBillSearch) !== -1;
+      }
+      return true;
+    });
+  }
+
+  function renderPaymentsTable() {
+    var tbody = document.getElementById('lcoPaymentsTableBody');
+    if (!tbody) return;
+
+    if (allPayments.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="lco-empty"><div class="lco-empty-icon">🧾</div><h3>No payment transactions recorded</h3></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = allPayments.map(function (p) {
+      var custName = p.customers ? p.customers.full_name : '—';
+      var billNum = p.customer_bills ? p.customer_bills.bill_number : '—';
+
+      return '<tr>' +
+        '<td><strong>' + esc(p.payment_number) + '</strong></td>' +
+        '<td>' + esc(custName) + '</td>' +
+        '<td>' + esc(billNum) + '</td>' +
+        '<td>₹' + Number(p.amount).toFixed(2) + '</td>' +
+        '<td><span class="lco-badge">' + esc(p.payment_method) + '</span></td>' +
+        '<td>' + formatDateFull(p.payment_date) + '</td>' +
+        '<td>' + esc(p.transaction_reference || '—') + '</td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function setupBillingListeners() {
+    var searchInput = document.getElementById('lcoBillingSearchInput');
+    if (searchInput) {
+      var timer;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          currentBillSearch = searchInput.value.trim().toLowerCase();
+          renderBillsTable();
+        }, 250);
+      });
+    }
+
+    var filterGroup = document.getElementById('lcoBillingFilterGroup');
+    if (filterGroup) {
+      filterGroup.querySelectorAll('.lco-filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentBillFilter = btn.dataset.billFilter;
+          filterGroup.querySelectorAll('.lco-filter-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          renderBillsTable();
+        });
+      });
+    }
+
+    var openGenBtn = document.getElementById('openGenerateBillBtn');
+    if (openGenBtn) {
+      openGenBtn.addEventListener('click', openGenerateBillModal);
+    }
+
+    var openRecBtn = document.getElementById('openRecordPaymentBtn');
+    if (openRecBtn) {
+      openRecBtn.addEventListener('click', function () { openRecordPaymentModalForBill(null); });
+    }
+  }
+
+  function setupGenerateBillModal() {
+    var modal = document.getElementById('generateBillModal');
+    var form = document.getElementById('generateBillForm');
+    var cancelBtn = document.getElementById('genBillCancelBtn');
+    var custSelect = document.getElementById('genBillCustomerSelect');
+
+    if (!modal || !form) return;
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () { modal.classList.remove('visible'); });
+    }
+
+    if (custSelect) {
+      custSelect.addEventListener('change', function () {
+        var cust = allCustomers.find(function (c) { return c.id === custSelect.value; });
+        if (cust) {
+          if (cust.plan_name) document.getElementById('genBillPlanName').value = cust.plan_name;
+        }
+      });
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      var custId = custSelect.value;
+      var planName = document.getElementById('genBillPlanName').value.trim();
+      var amount = parseFloat(document.getElementById('genBillAmount').value);
+      var pStart = document.getElementById('genBillPeriodStart').value;
+      var pEnd = document.getElementById('genBillPeriodEnd').value;
+      var dueDate = document.getElementById('genBillDueDate').value;
+      var notes = document.getElementById('genBillNotes').value.trim();
+
+      var confirmBtn = document.getElementById('genBillConfirmBtn');
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="lco-spinner"></span> Generating…';
+
+      try {
+        var { data: newBill, error } = await sb.from('customer_bills')
+          .insert({
+            lco_id: lcoId,
+            customer_id: custId,
+            plan_name: planName,
+            amount: amount,
+            paid_amount: 0,
+            billing_period_start: pStart,
+            billing_period_end: pEnd,
+            due_date: dueDate,
+            status: 'PENDING',
+            notes: notes || null
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        showToast('Bill ' + newBill.bill_number + ' generated successfully!', 'success');
+        modal.classList.remove('visible');
+        form.reset();
+        await loadBillingData();
+
+      } catch (err) {
+        console.error('Generate bill error:', err);
+        showToast('Failed to generate bill. ' + (err.message || ''), 'error');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Generate Bill';
+      }
+    });
+  }
+
+  function openGenerateBillModal() {
+    var modal = document.getElementById('generateBillModal');
+    var custSelect = document.getElementById('genBillCustomerSelect');
+    if (!modal || !custSelect) return;
+
+    if (allCustomers.length === 0) {
+      showToast('No customers available to bill.', 'warning');
+      return;
+    }
+
+    custSelect.innerHTML = '<option value="">Select a customer…</option>' +
+      allCustomers.map(function (c) {
+        return '<option value="' + c.id + '">' + esc(c.full_name) + ' (' + esc(c.customer_id) + ')</option>';
+      }).join('');
+
+    // Pre-set dates
+    var today = new Date();
+    var firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
+    var lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
+    var due = new Date(today.getFullYear(), today.getMonth(), 15).toISOString().split('T')[0];
+
+    document.getElementById('genBillPeriodStart').value = firstDay;
+    document.getElementById('genBillPeriodEnd').value = lastDay;
+    document.getElementById('genBillDueDate').value = due;
+
+    modal.classList.add('visible');
+  }
+
+  function setupRecordPaymentModal() {
+    var modal = document.getElementById('recordPaymentModal');
+    var form = document.getElementById('recordPaymentForm');
+    var cancelBtn = document.getElementById('recPayCancelBtn');
+    var billSelect = document.getElementById('recPayBillSelect');
+
+    if (!modal || !form) return;
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () { modal.classList.remove('visible'); });
+    }
+
+    if (billSelect) {
+      billSelect.addEventListener('change', function () {
+        var bill = allBills.find(function (b) { return b.id === billSelect.value; });
+        if (bill) {
+          var due = Number(bill.amount) - Number(bill.paid_amount);
+          document.getElementById('recPayAmount').value = due > 0 ? due.toFixed(2) : bill.amount;
+        }
+      });
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      var billId = billSelect.value;
+      var amount = parseFloat(document.getElementById('recPayAmount').value);
+      var method = document.getElementById('recPayMethod').value;
+      var ref = document.getElementById('recPayReference').value.trim();
+      var notes = document.getElementById('recPayNotes').value.trim();
+
+      var bill = allBills.find(function (b) { return b.id === billId; });
+      if (!bill) {
+        showToast('Please select a valid bill.', 'error');
+        return;
+      }
+
+      // Verify ownership (tenant guard)
+      if (bill.lco_id !== lcoId) {
+        showToast('Access denied: Bill does not belong to your account.', 'error');
+        return;
+      }
+
+      // Verify amount is positive
+      if (isNaN(amount) || amount <= 0) {
+        showToast('Payment amount must be greater than zero.', 'error');
+        return;
+      }
+
+      // Verify amount does not exceed outstanding balance
+      var outstanding = Number(bill.amount) - Number(bill.paid_amount);
+      if (amount > outstanding + 0.001) {
+        showToast('Payment amount (₹' + amount.toFixed(2) + ') cannot exceed outstanding balance (₹' + outstanding.toFixed(2) + ').', 'error');
+        return;
+      }
+
+      var confirmBtn = document.getElementById('recPayConfirmBtn');
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="lco-spinner"></span> Recording…';
+
+      try {
+        // 1. Generate concurrency-safe payment number using DB sequence function
+        var { data: payNumResult, error: numErr } = await sb.rpc('generate_payment_number');
+        if (numErr) {
+          console.warn('generate_payment_number RPC warning:', numErr);
+        }
+        var paymentNumber = payNumResult || ('PAY-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000));
+
+        // 2. Insert payment record (no payment_status column)
+        var { data: newPayment, error: payErr } = await sb.from('customer_payments')
+          .insert({
+            payment_number: paymentNumber,
+            lco_id: lcoId,
+            customer_id: bill.customer_id,
+            bill_id: bill.id,
+            amount: amount,
+            payment_method: method,
+            payment_date: new Date().toISOString(),
+            transaction_reference: ref || ('MANUAL_' + Date.now()),
+            notes: notes || null,
+            recorded_by: currentUser ? currentUser.id : null,
+            gateway: null
+          })
+          .select()
+          .single();
+
+        if (payErr) throw payErr;
+
+        // 3. Update bill paid_amount and status
+        var newPaidAmount = Number(bill.paid_amount) + amount;
+        var newStatus = newPaidAmount >= Number(bill.amount) ? 'PAID' : 'PENDING';
+
+        var { error: updateErr } = await sb.from('customer_bills')
+          .update({
+            paid_amount: Math.min(newPaidAmount, Number(bill.amount)),
+            status: newStatus
+          })
+          .eq('id', bill.id)
+          .eq('lco_id', lcoId);
+
+        if (updateErr) throw updateErr;
+
+        showToast('Payment recorded successfully! Receipt #: ' + (newPayment ? newPayment.payment_number : paymentNumber), 'success');
+        modal.classList.remove('visible');
+        form.reset();
+        await loadBillingData();
+
+      } catch (err) {
+        console.error('Record payment error:', err);
+        showToast('Failed to record payment. ' + (err.message || ''), 'error');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Record Payment';
+      }
+    });
+  }
+
+  function openRecordPaymentModalForBill(billId) {
+    var modal = document.getElementById('recordPaymentModal');
+    var billSelect = document.getElementById('recPayBillSelect');
+    if (!modal || !billSelect) return;
+
+    var pendingBills = allBills.filter(function (b) { return b.status === 'PENDING' || b.status === 'OVERDUE'; });
+
+    if (pendingBills.length === 0) {
+      showToast('No pending or overdue bills to pay.', 'warning');
+      return;
+    }
+
+    billSelect.innerHTML = '<option value="">Select pending bill…</option>' +
+      pendingBills.map(function (b) {
+        var custName = b.customers ? b.customers.full_name : 'Customer';
+        var due = Number(b.amount) - Number(b.paid_amount);
+        return '<option value="' + b.id + '">' + esc(b.bill_number) + ' — ' + esc(custName) + ' (Due: ₹' + due.toFixed(2) + ')</option>';
+      }).join('');
+
+    if (billId) {
+      billSelect.value = billId;
+      var bill = pendingBills.find(function (b) { return b.id === billId; });
+      if (bill) {
+        var due = Number(bill.amount) - Number(bill.paid_amount);
+        document.getElementById('recPayAmount').value = due > 0 ? due.toFixed(2) : bill.amount;
+      }
+    }
+
+    modal.classList.add('visible');
   }
 
 
