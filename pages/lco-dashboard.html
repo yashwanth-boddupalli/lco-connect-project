@@ -179,17 +179,44 @@
                   <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
               </span>
-              <input type="text" class="lco-search-input" id="lcoSearchInput" placeholder="Search by ID, name, phone, service…">
-            </div>
-            <div class="lco-filter-group" id="lcoFilterGroup">
-              <button class="lco-filter-btn active" data-filter="all">All</button>
-              <button class="lco-filter-btn" data-filter="ACTIVE">Active</button>
-              <button class="lco-filter-btn" data-filter="INACTIVE">Inactive</button>
-              <button class="lco-filter-btn" data-filter="SUSPENDED">Suspended</button>
+              <input type="text" class="lco-search-input" id="lcoSearchInput" placeholder="Search by ID, name, phone, email, city, plan…">
             </div>
             <button class="lco-quick-btn primary" data-action="add-customer" style="margin-left:auto;">
               + Add Customer
             </button>
+          </div>
+
+          <!-- Filter row -->
+          <div class="lco-toolbar" style="margin-bottom: 16px; margin-top: -8px; flex-wrap: wrap;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Status:</span>
+              <div class="lco-filter-group" id="lcoFilterGroup">
+                <button class="lco-filter-btn active" data-filter="all">All</button>
+                <button class="lco-filter-btn" data-filter="ACTIVE">Active</button>
+                <button class="lco-filter-btn" data-filter="INACTIVE">Inactive</button>
+                <button class="lco-filter-btn" data-filter="SUSPENDED">Suspended</button>
+                <button class="lco-filter-btn" data-filter="DISCONNECTED">Disconnected</button>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Service:</span>
+              <div class="lco-filter-group" id="lcoServiceCategoryFilter">
+                <button class="lco-filter-btn active" data-service-cat="all">All</button>
+                <button class="lco-filter-btn" data-service-cat="Broadband">Broadband</button>
+                <button class="lco-filter-btn" data-service-cat="Cable TV">Cable TV</button>
+                <button class="lco-filter-btn" data-service-cat="Both">Both</button>
+                <button class="lco-filter-btn" data-service-cat="Other">Other</button>
+              </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Portal:</span>
+              <div class="lco-filter-group" id="lcoPortalStatusFilter">
+                <button class="lco-filter-btn active" data-portal-filter="all">All</button>
+                <button class="lco-filter-btn" data-portal-filter="ACTIVATED">Activated</button>
+                <button class="lco-filter-btn" data-portal-filter="INVITED">Invited</button>
+                <button class="lco-filter-btn" data-portal-filter="PENDING">Pending</button>
+              </div>
+            </div>
           </div>
 
           <div class="lco-table-wrap">
@@ -227,7 +254,9 @@
                 <span id="lcoDetailStatusBadge"></span>
               </div>
             </div>
-            <div class="lco-detail-header-right">
+            <div class="lco-detail-header-right" style="display:flex; gap:8px; flex-wrap:wrap;">
+              <button class="lco-quick-btn" id="lcoEditCustomerBtn" style="font-size:13px; padding:8px 16px;">✏️ Edit</button>
+              <button class="lco-quick-btn" id="lcoChangeStatusBtn" style="font-size:13px; padding:8px 16px;">⚡ Change Status</button>
               <button class="lco-quick-btn secondary" id="lcoResendActivationBtn" style="font-size:13px; padding:8px 16px;">📩 Resend Activation Email</button>
             </div>
           </div>
@@ -273,6 +302,16 @@
               <span class="lco-detail-section-icon">📝</span> Notes
             </div>
             <p id="lcoDetailNotes" style="font-size:14px; color:var(--slate);"></p>
+          </div>
+
+          <!-- Subscription History -->
+          <div class="lco-detail-section" id="lcoSubHistorySection">
+            <div class="lco-detail-section-title">
+              <span><span class="lco-detail-section-icon">📅</span> Subscription History</span>
+            </div>
+            <div id="lcoSubHistoryContent">
+              <div style="font-size:14px; color:var(--slate);">Loading history…</div>
+            </div>
           </div>
         </section>
 
@@ -686,6 +725,117 @@
         <div class="lco-modal-actions">
           <button type="button" class="lco-modal-cancel" id="subCancelBtn">Cancel</button>
           <button type="submit" class="lco-modal-confirm" id="subConfirmBtn">Confirm Subscription</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     EDIT CUSTOMER MODAL (Phase 7)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="editCustomerModal">
+    <div class="lco-modal">
+      <h3>Edit Customer</h3>
+      <form id="editCustomerForm" autocomplete="off">
+        <input type="hidden" id="editCustDbId" value="">
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="editCustFullName">Full Name *</label>
+            <input type="text" id="editCustFullName" placeholder="Customer's full name" required>
+            <div class="lco-form-error" id="editCustFullName-error">Full name is required</div>
+          </div>
+          <div class="lco-form-group">
+            <label for="editCustPhone">Phone *</label>
+            <input type="tel" id="editCustPhone" placeholder="10-digit mobile number" required>
+            <div class="lco-form-error" id="editCustPhone-error">Phone number is required</div>
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="editCustEmail">Email (optional)</label>
+          <input type="email" id="editCustEmail" placeholder="customer@email.com">
+        </div>
+
+        <div class="lco-form-group">
+          <label for="editCustAddress">Address</label>
+          <input type="text" id="editCustAddress" placeholder="Street address, locality">
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="editCustCity">City</label>
+            <input type="text" id="editCustCity" placeholder="City">
+          </div>
+          <div class="lco-form-group">
+            <label for="editCustState">State</label>
+            <input type="text" id="editCustState" placeholder="State">
+          </div>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="editCustPincode">PIN Code</label>
+            <input type="text" id="editCustPincode" placeholder="6-digit code" maxlength="6">
+          </div>
+          <div class="lco-form-group">
+            <label for="editCustServiceType">Service Type *</label>
+            <select id="editCustServiceType" required>
+              <option value="Cable TV">Cable TV</option>
+              <option value="Broadband">Broadband</option>
+              <option value="Both">Both</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="editCustNotes">Notes (optional)</label>
+          <textarea id="editCustNotes" placeholder="Any additional notes…"></textarea>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="editCustCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="editCustConfirmBtn">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     CHANGE STATUS MODAL (Phase 7)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="changeStatusModal">
+    <div class="lco-modal" style="max-width:420px;">
+      <h3>Change Service Status</h3>
+      <form id="changeStatusForm" autocomplete="off">
+        <input type="hidden" id="changeStatusCustId" value="">
+
+        <div class="lco-form-group">
+          <label for="changeStatusCustName">Customer</label>
+          <input type="text" id="changeStatusCustName" readonly style="background:rgba(246,242,234,0.5);">
+        </div>
+
+        <div class="lco-form-group">
+          <label for="changeStatusCurrentBadge">Current Status</label>
+          <div id="changeStatusCurrentBadge" style="margin-top:4px;"></div>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="changeStatusSelect">New Status *</label>
+          <select id="changeStatusSelect" required>
+            <option value="ACTIVE">ACTIVE — Customer is connected and active</option>
+            <option value="INACTIVE">INACTIVE — Service not started or paused</option>
+            <option value="SUSPENDED">SUSPENDED — Temporarily suspended</option>
+            <option value="DISCONNECTED">DISCONNECTED — Service terminated</option>
+          </select>
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="changeStatusCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="changeStatusConfirmBtn">Update Status</button>
         </div>
       </form>
     </div>
