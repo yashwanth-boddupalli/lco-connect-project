@@ -710,60 +710,48 @@
 
       var resData = res.data;
 
-      // Check if Razorpay Checkout SDK is available
-      if (typeof window.Razorpay === 'undefined') {
-        showToast('Online payment is currently unavailable. Please refresh the page and try again.', 'error');
+      // Check if Cashfree Web Checkout SDK is available
+      if (typeof window.Cashfree === 'undefined') {
+        showToast('Online payment gateway is currently loading. Please refresh the page and try again.', 'error');
         return;
       }
 
-      var options = {
-        key: resData.razorpay_key_id,
-        amount: resData.order.amount,
-        currency: resData.order.currency,
-        name: 'LCO Connect',
-        description: 'Payment for Bill ' + resData.bill.bill_number,
-        order_id: resData.order.id,
-        handler: async function (response) {
-          showToast('Payment successful, verifying with server…', 'info');
-          try {
-            var vRes = await sb.functions.invoke('verify-payment', {
-              body: {
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                bill_id: resData.bill.id
-              }
-            });
+      // Initialize Cashfree in Sandbox mode
+      var cashfree = window.Cashfree({ mode: 'sandbox' });
 
-            if (vRes.data && vRes.data.ok) {
-              showToast('Payment verified successfully! Receipt #: ' + (vRes.data.payment_number || ''), 'success');
-              loadBillingData();
-              loadNotifications();
-            } else {
-              showToast(vRes.data?.error || 'Payment verification failed.', 'error');
-            }
-          } catch (vErr) {
-            console.error('Verify payment error:', vErr);
-            showToast('Verification error. Webhook will process if captured.', 'warning');
-          }
-        },
-        prefill: {
-          name: resData.customer.name,
-          email: resData.customer.email,
-          contact: resData.customer.phone
-        },
-        notes: {
-          bill_id: resData.bill.id,
-          customer_id: resData.customer.customer_id
-        },
-        theme: { color: '#0B7A6E' }
+      // Trigger Cashfree Hosted Checkout
+      var checkoutOptions = {
+        paymentSessionId: resData.payment_session_id,
+        redirectTarget: '_modal'
       };
 
-      var rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (response) {
-        showToast('Payment failed: ' + (response.error.description || 'Cancelled'), 'error');
-      });
-      rzp.open();
+      var checkoutResult = await cashfree.checkout(checkoutOptions);
+
+      if (checkoutResult && checkoutResult.error) {
+        showToast('Payment cancelled or failed: ' + (checkoutResult.error.message || 'Cancelled'), 'warning');
+      }
+
+      // Server-side verification (never trust client result alone)
+      showToast('Verifying payment with gateway…', 'info');
+      try {
+        var vRes = await sb.functions.invoke('verify-payment', {
+          body: {
+            order_id: resData.order_id,
+            bill_id: resData.bill.id
+          }
+        });
+
+        if (vRes.data && vRes.data.ok) {
+          showToast('Payment verified successfully! Receipt #: ' + (vRes.data.payment_number || ''), 'success');
+          loadBillingData();
+          loadNotifications();
+        } else {
+          showToast(vRes.data?.error || 'Payment verification pending. Refresh in a moment.', 'warning');
+        }
+      } catch (vErr) {
+        console.error('Verify payment error:', vErr);
+        showToast('Verification check failed. Webhook will record if payment succeeded.', 'warning');
+      }
 
     } catch (err) {
       console.error('Pay Now error:', err);
