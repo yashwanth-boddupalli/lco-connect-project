@@ -1240,6 +1240,121 @@
   background: transparent;
 }
 
+/* Category Pill Badges */
+.lco-notif-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.lco-notif-cat-badge.cat-ACCOUNT { background: #E0F2FE; color: #0369A1; }
+.lco-notif-cat-badge.cat-SERVICE_REQUEST { background: #FEF3C7; color: #B45309; }
+.lco-notif-cat-badge.cat-PAYMENT { background: #DCFCE7; color: #15803D; }
+.lco-notif-cat-badge.cat-ANNOUNCEMENT { background: #F3E8FF; color: #6B21A8; }
+.lco-notif-cat-badge.cat-SYSTEM { background: #F1F5F9; color: #475569; }
+.lco-notif-cat-badge.cat-CUSTOMER_ACTIVITY { background: #E0E7FF; color: #3730A3; }
+.lco-notif-cat-badge.cat-TECHNICIAN_ACTIVITY { background: #FFEDD5; color: #C2410C; }
+
+/* Notification Preference Toggle Cards */
+.lco-pref-card {
+  background: #FFFFFF;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.lco-pref-card-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.lco-pref-card-desc {
+  font-size: 12px;
+  color: var(--slate);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+.lco-pref-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lco-pref-channel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+/* Custom Switch Toggle */
+.lco-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 22px;
+}
+
+.lco-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.lco-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #CBD5E1;
+  transition: 0.2s;
+  border-radius: 22px;
+}
+
+.lco-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.2s;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+input:checked + .lco-slider {
+  background-color: var(--teal);
+}
+
+input:focus + .lco-slider {
+  box-shadow: 0 0 1px var(--teal);
+}
+
+input:checked + .lco-slider:before {
+  transform: translateX(16px);
+}
+
+input:disabled + .lco-slider {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 
 /* ══════════════════════════════════════════════
    PROFILE VIEW
@@ -1607,4 +1722,61 @@
   font-size: 18px;
   font-weight: 600;
   margin-bottom: 14px;
+}
+
+
+/* ══════════════════════════════════════════════
+   NOTIFICATION SUB-TABS & URGENT NOTICES (Phase 11 Batch 2)
+   ══════════════════════════════════════════════ */
+
+.lco-sub-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 20px;
+  padding-bottom: 4px;
+}
+
+.lco-sub-tab-btn {
+  padding: 8px 16px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.lco-sub-tab-btn:hover {
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.lco-sub-tab-btn.active {
+  color: var(--teal-dark);
+  background: var(--card);
+}
+
+.lco-sub-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--teal);
+}
+
+.lco-badge.urgent {
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+  70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }

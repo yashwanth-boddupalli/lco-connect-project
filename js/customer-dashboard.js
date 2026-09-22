@@ -111,9 +111,11 @@
     setupCreateRequestModal();
     setupCustReqDetailModal();
     setupPayNow();
+    setupNotificationCenterListeners(); // Phase 11 Batch 1
 
     // Render overview
     renderOverview();
+    loadActiveUrgentNotices();
 
     // Load data async
     loadSubscriptions();
@@ -157,6 +159,7 @@
     // Specific view actions
     if (viewName === 'overview') {
       renderOverview();
+      loadActiveUrgentNotices();
     } else if (viewName === 'profile') {
       renderProfile();
     } else if (viewName === 'service') {
@@ -224,6 +227,81 @@
 
     // Provider info grid
     renderProviderInfo();
+  }
+
+
+  /* ══════════════════════════════════════════════
+     ACTIVE URGENT NOTICES (Phase 11 Batch 2)
+     ══════════════════════════════════════════════ */
+
+  async function loadActiveUrgentNotices() {
+    var container = document.getElementById('custActiveUrgentNoticesContainer');
+    if (!container) return;
+
+    try {
+      var { data, error } = await sb.rpc('get_active_urgent_notices_for_customer');
+      if (error) throw error;
+
+      var notices = data || [];
+      if (notices.length === 0) {
+        container.innerHTML = '';
+        container.style.display = 'none';
+        return;
+      }
+
+      container.style.display = 'block';
+      container.innerHTML = notices.map(function(un) {
+        var expiryText = un.expires_at ? (' • Valid until: ' + formatDate(un.expires_at)) : '';
+
+        return '<div class="cust-urgent-alert-card" data-notice-id="' + un.id + '" style="background:#FEF2F2; border:1px solid #FCA5A5; border-left:6px solid #DC2626; border-radius:8px; padding:16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:flex-start; gap:16px; box-shadow:0 4px 6px -1px rgba(220,38,38,0.1);">' +
+          '<div style="flex:1;">' +
+            '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">' +
+              '<span style="font-size:18px;">🚨</span>' +
+              '<h4 style="margin:0; font-size:16px; color:#991B1B; font-weight:700;">' + esc(un.title) + '</h4>' +
+              '<span class="cust-badge" style="background:#DC2626; color:white; font-size:11px; padding:2px 8px;">URGENT NOTICE</span>' +
+            '</div>' +
+            '<div style="font-size:14px; color:#7F1D1D; line-height:1.5;">' + esc(un.message) + '</div>' +
+            '<div style="font-size:12px; color:#991B1B; margin-top:8px; font-weight:500;">Posted: ' + formatDate(un.created_at) + expiryText + '</div>' +
+          '</div>' +
+          '<button class="btn-dismiss-urgent-notice" data-notice-id="' + un.id + '" style="background:#FEE2E2; color:#991B1B; border:1px solid #FCA5A5; border-radius:6px; padding:6px 12px; font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap; transition:all 0.2s;">Dismiss ✕</button>' +
+        '</div>';
+      }).join('');
+
+      container.querySelectorAll('.btn-dismiss-urgent-notice').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var nId = btn.dataset.noticeId;
+          dismissUrgentNotice(nId);
+        });
+      });
+
+    } catch (e) {
+      console.error('Load active urgent notices error:', e);
+      container.style.display = 'none';
+    }
+  }
+
+  async function dismissUrgentNotice(noticeId) {
+    try {
+      var { error } = await sb.rpc('dismiss_urgent_notice', { p_notice_id: noticeId });
+      if (error) throw error;
+
+      showToast('Urgent notice dismissed.', 'info');
+      var card = document.querySelector('.cust-urgent-alert-card[data-notice-id="' + noticeId + '"]');
+      if (card) {
+        card.style.opacity = '0';
+        card.style.transition = 'opacity 0.3s';
+        setTimeout(function() {
+          if (card.parentNode) card.parentNode.removeChild(card);
+          var container = document.getElementById('custActiveUrgentNoticesContainer');
+          if (container && container.children.length === 0) {
+            container.style.display = 'none';
+          }
+        }, 300);
+      }
+    } catch (e) {
+      console.error('Dismiss urgent notice error:', e);
+      showToast('Failed to dismiss notice', 'error');
+    }
   }
 
   function renderProviderInfo() {
@@ -776,29 +854,130 @@
      NOTIFICATIONS LOGIC
      ══════════════════════════════════════════════ */
 
+  /* ══════════════════════════════════════════════
+     NOTIFICATIONS LOGIC (Phase 11 Batch 1)
+     ══════════════════════════════════════════════ */
+
+  var custNotifCategoryFilter = 'ALL';
+  var custNotifStatusFilter = 'ALL';
+
+  function formatTimeAgo(dateStr) {
+    if (!dateStr) return '—';
+    var d = new Date(dateStr);
+    var now = new Date();
+    var diffMs = now - d;
+    var diffSec = Math.floor(diffMs / 1000);
+    var diffMin = Math.floor(diffSec / 60);
+    var diffHr = Math.floor(diffMin / 60);
+    var diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return diffMin + 'm ago';
+    if (diffHr < 24) return diffHr + 'h ago';
+    if (diffDay === 1) return 'Yesterday';
+    if (diffDay < 7) return diffDay + 'd ago';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function getCustCategoryMeta(cat) {
+    switch (cat) {
+      case 'ACCOUNT': return { label: 'Account', icon: '👤' };
+      case 'SERVICE_REQUEST': return { label: 'Service Request', icon: '🛠️' };
+      case 'PAYMENT': return { label: 'Payment', icon: '💳' };
+      case 'ANNOUNCEMENT': return { label: 'Announcement', icon: '📢' };
+      default: return { label: 'General', icon: '💬' };
+    }
+  }
+
+  function setupNotificationCenterListeners() {
+    var catGroup = document.getElementById('custNotifCategoryFilter');
+    if (catGroup) {
+      catGroup.querySelectorAll('.lco-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          catGroup.querySelectorAll('.lco-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          custNotifCategoryFilter = btn.dataset.cat || 'ALL';
+          loadNotifications();
+        });
+      });
+    }
+
+    var statusGroup = document.getElementById('custNotifStatusFilter');
+    if (statusGroup) {
+      statusGroup.querySelectorAll('.lco-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          statusGroup.querySelectorAll('.lco-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          custNotifStatusFilter = btn.dataset.status || 'ALL';
+          loadNotifications();
+        });
+      });
+    }
+
+    var markAllBtn = document.getElementById('custMarkAllReadBtn');
+    if (markAllBtn) {
+      markAllBtn.addEventListener('click', markAllNotificationsRead);
+    }
+
+    var togglePrefBtn = document.getElementById('custTogglePrefBtn');
+    var closePrefBtn = document.getElementById('custClosePrefBtn');
+    var prefCard = document.getElementById('custNotifPrefCard');
+    if (togglePrefBtn && prefCard) {
+      togglePrefBtn.addEventListener('click', function() {
+        var isHidden = prefCard.style.display === 'none';
+        prefCard.style.display = isHidden ? 'block' : 'none';
+        if (isHidden) loadNotificationPreferences();
+      });
+    }
+    if (closePrefBtn && prefCard) {
+      closePrefBtn.addEventListener('click', function() {
+        prefCard.style.display = 'none';
+      });
+    }
+
+    var savePrefBtn = document.getElementById('custSavePrefBtn');
+    if (savePrefBtn) {
+      savePrefBtn.addEventListener('click', saveNotificationPreferences);
+    }
+  }
+
   async function loadNotifications() {
     var container = document.getElementById('custNotifList');
     if (!container) return;
 
     try {
-      var { data, error } = await sb.from('notifications')
+      var query = sb.from('notifications')
         .select('*')
         .eq('lco_id', customerData.lco_id)
         .eq('customer_id', customerData.id)
-        .eq('recipient_role', 'CUSTOMER')
-        .order('created_at', { ascending: false })
-        .limit(30);
+        .eq('recipient_role', 'CUSTOMER');
 
+      if (custNotifCategoryFilter !== 'ALL') {
+        query = query.eq('category', custNotifCategoryFilter);
+      }
+      if (custNotifStatusFilter === 'UNREAD') {
+        query = query.eq('is_read', false);
+      } else if (custNotifStatusFilter === 'READ') {
+        query = query.eq('is_read', true);
+      }
+
+      var { data, error } = await query.order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
 
       notifications = data || [];
 
-      // Update badge
-      var unread = notifications.filter(function (n) { return !n.is_read; }).length;
+      // Update total unread count badge
+      var { count: unreadCount } = await sb.from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('lco_id', customerData.lco_id)
+        .eq('customer_id', customerData.id)
+        .eq('recipient_role', 'CUSTOMER')
+        .eq('is_read', false);
+
       var badge = document.getElementById('custNotifCount');
       if (badge) {
-        badge.textContent = unread;
-        badge.style.display = unread > 0 ? '' : 'none';
+        badge.textContent = unreadCount || 0;
+        badge.style.display = (unreadCount && unreadCount > 0) ? '' : 'none';
       }
 
       if (notifications.length === 0) {
@@ -807,20 +986,20 @@
       }
 
       container.innerHTML = notifications.map(function (n) {
-        var icon = n.type === 'SUCCESS' ? '✅' : n.type === 'WARNING' ? '⚠️' : 'ℹ️';
-
+        var catMeta = getCustCategoryMeta(n.category);
         return '<div class="lco-notif-item' + (n.is_read ? '' : ' unread') + '" data-id="' + n.id + '">' +
           '<div class="lco-notif-dot' + (n.is_read ? ' read' : '') + '"></div>' +
-          '<span class="lco-notif-icon">' + icon + '</span>' +
+          '<span class="lco-notif-icon">' + catMeta.icon + '</span>' +
           '<div class="lco-notif-body">' +
-          '<div class="lco-notif-title">' + esc(n.title) + '</div>' +
+          '<div class="lco-notif-title">' + esc(n.title) +
+          '<span class="lco-notif-cat-badge cat-' + (n.category || 'ACCOUNT') + '">' + esc(catMeta.label) + '</span>' +
+          '</div>' +
           '<div class="lco-notif-message">' + esc(n.message) + '</div>' +
-          '<div class="lco-notif-time">' + formatDate(n.created_at) + '</div>' +
+          '<div class="lco-notif-time">' + formatTimeAgo(n.created_at) + ' • ' + formatDate(n.created_at) + '</div>' +
           '</div>' +
           '</div>';
       }).join('');
 
-      // Mark as read on click
       container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
         item.addEventListener('click', function () {
           markNotificationRead(item.dataset.id);
@@ -832,6 +1011,7 @@
 
     } catch (err) {
       console.error('Load notifications error:', err);
+      container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3><button class="lco-quick-btn secondary" style="margin-top:12px;" onclick="loadNotifications()">Retry</button></div>';
     }
   }
 
@@ -852,6 +1032,110 @@
       }
     } catch (e) {
       console.error('Mark customer notification read error:', e);
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      var { error } = await sb.from('notifications')
+        .update({ is_read: true })
+        .eq('lco_id', customerData.lco_id)
+        .eq('customer_id', customerData.id)
+        .eq('recipient_role', 'CUSTOMER')
+        .eq('is_read', false);
+
+      if (error) throw error;
+      showToast('All notifications marked as read', 'success');
+      loadNotifications();
+    } catch (e) {
+      console.error('Customer mark all read error:', e);
+      showToast('Failed to mark all as read', 'error');
+    }
+  }
+
+  async function loadNotificationPreferences() {
+    var form = document.getElementById('custPrefForm');
+    if (!form) return;
+    form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">Loading preferences…</div>';
+
+    try {
+      var { data, error } = await sb.rpc('get_my_notification_preferences', { p_role: 'CUSTOMER' });
+      if (error) throw error;
+
+      var prefs = data || [];
+      var categoryDescriptions = {
+        'ACCOUNT': 'Account activation, security, and profile change alerts.',
+        'SERVICE_REQUEST': 'Service request progress updates and resolution notes.',
+        'PAYMENT': 'Payment receipts, bill invoices, and payment reminders.',
+        'ANNOUNCEMENT': 'Broadband & cable provider service announcements and offers.'
+      };
+
+      form.innerHTML = prefs.map(function(pref) {
+        var catMeta = getCustCategoryMeta(pref.category);
+        var desc = categoryDescriptions[pref.category] || 'Channel preferences for this category.';
+        var isMandatory = (pref.category === 'ACCOUNT');
+
+        return '<div class="lco-pref-card" data-cat="' + pref.category + '">' +
+          '<div class="lco-pref-card-title">' + catMeta.icon + ' ' + esc(catMeta.label) + '</div>' +
+          '<div class="lco-pref-card-desc">' + esc(desc) + '</div>' +
+          '<div class="lco-pref-channels">' +
+            '<div class="lco-pref-channel-row">' +
+              '<span>In-App Feed</span>' +
+              '<label class="lco-switch">' +
+                '<input type="checkbox" class="pref-in-app" ' + (pref.channel_in_app ? 'checked' : '') + (isMandatory ? ' disabled' : '') + '>' +
+                '<span class="lco-slider"></span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="lco-pref-channel-row">' +
+              '<span>Email Notification</span>' +
+              '<label class="lco-switch">' +
+                '<input type="checkbox" class="pref-email" ' + (pref.channel_email ? 'checked' : '') + '>' +
+                '<span class="lco-slider"></span>' +
+              '</label>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+    } catch (e) {
+      console.error('Load customer preferences error:', e);
+      form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:#E74C3C;">Failed to load preferences.</div>';
+    }
+  }
+
+  async function saveNotificationPreferences() {
+    var saveBtn = document.getElementById('custSavePrefBtn');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    try {
+      var form = document.getElementById('custPrefForm');
+      var updatedPrefs = [];
+      form.querySelectorAll('.lco-pref-card').forEach(function(card) {
+        var cat = card.dataset.cat;
+        var inApp = card.querySelector('.pref-in-app').checked;
+        var email = card.querySelector('.pref-email').checked;
+        updatedPrefs.push({ category: cat, channel_in_app: inApp, channel_email: email });
+      });
+
+      var { data, error } = await sb.rpc('save_my_notification_preferences', {
+        p_role: 'CUSTOMER',
+        p_preferences: updatedPrefs
+      });
+
+      if (error) throw error;
+      showToast('Notification preferences saved!', 'success');
+      document.getElementById('custNotifPrefCard').style.display = 'none';
+    } catch (e) {
+      console.error('Save customer preferences error:', e);
+      showToast('Failed to save preferences', 'error');
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Preferences';
+      }
     }
   }
 

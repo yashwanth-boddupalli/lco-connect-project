@@ -138,6 +138,7 @@
     setupManageRequestModal();  // Phase 9
     setupTechnicianListeners(); // Phase 10
     setupAddTechModal();        // Phase 10
+    setupNotificationCenterListeners(); // Phase 11 Batch 1
 
     // Load initial data
     loadStats();
@@ -1364,56 +1365,162 @@
      NOTIFICATIONS
      ══════════════════════════════════════════════ */
 
+  /* ══════════════════════════════════════════════
+     NOTIFICATIONS & PREFERENCES (Phase 11 Batch 1)
+     ══════════════════════════════════════════════ */
+
+  var notifCategoryFilter = 'ALL';
+  var notifStatusFilter = 'ALL';
+  var notifPreferencesCache = [];
+
+  function formatTimeAgo(dateStr) {
+    if (!dateStr) return '—';
+    var d = new Date(dateStr);
+    var now = new Date();
+    var diffMs = now - d;
+    var diffSec = Math.floor(diffMs / 1000);
+    var diffMin = Math.floor(diffSec / 60);
+    var diffHr = Math.floor(diffMin / 60);
+    var diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return diffMin + 'm ago';
+    if (diffHr < 24) return diffHr + 'h ago';
+    if (diffDay === 1) return 'Yesterday';
+    if (diffDay < 7) return diffDay + 'd ago';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function getCategoryMeta(cat) {
+    switch (cat) {
+      case 'ACCOUNT': return { label: 'Account', icon: '👤' };
+      case 'SERVICE_REQUEST': return { label: 'Service Request', icon: '🛠️' };
+      case 'PAYMENT': return { label: 'Payment', icon: '💳' };
+      case 'ANNOUNCEMENT': return { label: 'Announcement', icon: '📢' };
+      case 'SYSTEM': return { label: 'System', icon: '🔧' };
+      case 'CUSTOMER_ACTIVITY': return { label: 'Customer Activity', icon: '👥' };
+      case 'TECHNICIAN_ACTIVITY': return { label: 'Technician Activity', icon: '👷' };
+      default: return { label: 'General', icon: '💬' };
+    }
+  }
+
+  function setupNotificationCenterListeners() {
+    var catGroup = document.getElementById('lcoNotifCategoryFilter');
+    if (catGroup) {
+      catGroup.querySelectorAll('.lco-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          catGroup.querySelectorAll('.lco-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          notifCategoryFilter = btn.dataset.cat || 'ALL';
+          loadNotifications();
+        });
+      });
+    }
+
+    var statusGroup = document.getElementById('lcoNotifStatusFilter');
+    if (statusGroup) {
+      statusGroup.querySelectorAll('.lco-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          statusGroup.querySelectorAll('.lco-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          notifStatusFilter = btn.dataset.status || 'ALL';
+          loadNotifications();
+        });
+      });
+    }
+
+    var markAllBtn = document.getElementById('lcoMarkAllReadBtn');
+    if (markAllBtn) {
+      markAllBtn.addEventListener('click', markAllNotificationsRead);
+    }
+
+    var togglePrefBtn = document.getElementById('lcoTogglePrefBtn');
+    var closePrefBtn = document.getElementById('lcoClosePrefBtn');
+    var prefCard = document.getElementById('lcoNotifPrefCard');
+    if (togglePrefBtn && prefCard) {
+      togglePrefBtn.addEventListener('click', function() {
+        var isHidden = prefCard.style.display === 'none';
+        prefCard.style.display = isHidden ? 'block' : 'none';
+        if (isHidden) loadNotificationPreferences();
+      });
+    }
+    if (closePrefBtn && prefCard) {
+      closePrefBtn.addEventListener('click', function() {
+        prefCard.style.display = 'none';
+      });
+    }
+
+    var savePrefBtn = document.getElementById('lcoSavePrefBtn');
+    if (savePrefBtn) {
+      savePrefBtn.addEventListener('click', saveNotificationPreferences);
+    }
+
+    setupNotifSubTabs();
+    setupBroadcastModals();
+  }
+
   async function loadNotifications() {
     var container = document.getElementById('lcoNotifList');
     if (!container) return;
 
     try {
-      var { data, error } = await sb.from('notifications')
+      var query = sb.from('notifications')
         .select('*')
         .eq('lco_id', lcoId)
         .eq('recipient_role', 'LCO_ADMIN')
         .is('customer_id', null)
-        .is('technician_id', null)
-        .order('created_at', { ascending: false })
-        .limit(50);
+        .is('technician_id', null);
+
+      if (notifCategoryFilter !== 'ALL') {
+        query = query.eq('category', notifCategoryFilter);
+      }
+      if (notifStatusFilter === 'UNREAD') {
+        query = query.eq('is_read', false);
+      } else if (notifStatusFilter === 'READ') {
+        query = query.eq('is_read', true);
+      }
+
+      var { data, error } = await query.order('created_at', { ascending: false }).limit(50);
 
       if (error) throw error;
 
       var notifications = data || [];
 
-      // Update badge count
-      var unreadCount = notifications.filter(function (n) { return !n.is_read; }).length;
+      // Update total unread badge
+      var { count: unreadCount } = await sb.from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('lco_id', lcoId)
+        .eq('recipient_role', 'LCO_ADMIN')
+        .is('customer_id', null)
+        .is('technician_id', null)
+        .eq('is_read', false);
+
       var badge = document.getElementById('lcoNotifCount');
       if (badge) {
-        badge.textContent = unreadCount;
-        badge.style.display = unreadCount > 0 ? '' : 'none';
+        badge.textContent = unreadCount || 0;
+        badge.style.display = (unreadCount && unreadCount > 0) ? '' : 'none';
       }
 
       if (notifications.length === 0) {
-        container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">🔔</div><h3>No notifications</h3><p>You\'re all caught up!</p></div>';
+        container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">🔔</div><h3>No notifications found</h3><p>You\'re all caught up!</p></div>';
         return;
       }
 
       container.innerHTML = notifications.map(function (notif) {
-        var icon = '💬';
-        if (notif.type === 'SUCCESS') icon = '✅';
-        else if (notif.type === 'WARNING') icon = '⚠️';
-        else if (notif.type === 'SYSTEM') icon = '🔧';
-        else if (notif.type === 'INFO') icon = 'ℹ️';
-
+        var catMeta = getCategoryMeta(notif.category);
         return '<div class="lco-notif-item' + (notif.is_read ? '' : ' unread') + '" data-notif-id="' + notif.id + '">' +
           '<div class="lco-notif-dot' + (notif.is_read ? ' read' : '') + '"></div>' +
-          '<span class="lco-notif-icon">' + icon + '</span>' +
+          '<span class="lco-notif-icon">' + catMeta.icon + '</span>' +
           '<div class="lco-notif-body">' +
-          '<div class="lco-notif-title">' + esc(notif.title) + '</div>' +
+          '<div class="lco-notif-title">' + esc(notif.title) +
+          '<span class="lco-notif-cat-badge cat-' + (notif.category || 'SYSTEM') + '">' + esc(catMeta.label) + '</span>' +
+          '</div>' +
           '<div class="lco-notif-message">' + esc(notif.message) + '</div>' +
-          '<div class="lco-notif-time">' + formatDateFull(notif.created_at) + '</div>' +
+          '<div class="lco-notif-time">' + formatTimeAgo(notif.created_at) + ' • ' + formatDateFull(notif.created_at) + '</div>' +
           '</div>' +
           '</div>';
       }).join('');
 
-      // Mark as read on click
       container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
         item.addEventListener('click', function () {
           markNotificationRead(item.dataset.notifId);
@@ -1425,7 +1532,7 @@
 
     } catch (e) {
       console.error('Load notifications error:', e);
-      container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3></div>';
+      container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3><button class="lco-quick-btn secondary" style="margin-top:12px;" onclick="loadNotifications()">Retry</button></div>';
     }
   }
 
@@ -1436,7 +1543,6 @@
         .eq('id', notifId)
         .eq('recipient_role', 'LCO_ADMIN');
 
-      // Update badge
       var badge = document.getElementById('lcoNotifCount');
       if (badge) {
         var current = parseInt(badge.textContent) || 0;
@@ -1446,6 +1552,486 @@
       }
     } catch (e) {
       console.error('Mark notification read error:', e);
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      var { error } = await sb.from('notifications')
+        .update({ is_read: true })
+        .eq('lco_id', lcoId)
+        .eq('recipient_role', 'LCO_ADMIN')
+        .is('customer_id', null)
+        .is('technician_id', null)
+        .eq('is_read', false);
+
+      if (error) throw error;
+      showToast('All notifications marked as read', 'success');
+      loadNotifications();
+    } catch (e) {
+      console.error('Mark all read error:', e);
+      showToast('Failed to mark all as read', 'error');
+    }
+  }
+
+  async function loadNotificationPreferences() {
+    var form = document.getElementById('lcoPrefForm');
+    if (!form) return;
+    form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">Loading preferences…</div>';
+
+    try {
+      var { data, error } = await sb.rpc('get_my_notification_preferences', { p_role: 'LCO_ADMIN' });
+      if (error) throw error;
+
+      notifPreferencesCache = data || [];
+
+      var categoryDescriptions = {
+        'CUSTOMER_ACTIVITY': 'Alerts for customer account activations & updates.',
+        'SERVICE_REQUEST': 'Notifications when service requests are created or updated.',
+        'TECHNICIAN_ACTIVITY': 'Updates when technicians start work or resolve tickets.',
+        'PAYMENT': 'Payment receipts & bill settlements.',
+        'SYSTEM': 'System maintenance & security events.',
+        'ANNOUNCEMENT': 'Platform feature releases & announcements.'
+      };
+
+      form.innerHTML = notifPreferencesCache.map(function(pref) {
+        var catMeta = getCategoryMeta(pref.category);
+        var desc = categoryDescriptions[pref.category] || 'Custom notification delivery preferences.';
+        var isMandatory = (pref.category === 'SYSTEM');
+
+        return '<div class="lco-pref-card" data-cat="' + pref.category + '">' +
+          '<div class="lco-pref-card-title">' + catMeta.icon + ' ' + esc(catMeta.label) + '</div>' +
+          '<div class="lco-pref-card-desc">' + esc(desc) + '</div>' +
+          '<div class="lco-pref-channels">' +
+            '<div class="lco-pref-channel-row">' +
+              '<span>In-App Feed</span>' +
+              '<label class="lco-switch">' +
+                '<input type="checkbox" class="pref-in-app" ' + (pref.channel_in_app ? 'checked' : '') + (isMandatory ? ' disabled' : '') + '>' +
+                '<span class="lco-slider"></span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="lco-pref-channel-row">' +
+              '<span>Email Alert</span>' +
+              '<label class="lco-switch">' +
+                '<input type="checkbox" class="pref-email" ' + (pref.channel_email ? 'checked' : '') + '>' +
+                '<span class="lco-slider"></span>' +
+              '</label>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+    } catch (e) {
+      console.error('Load notification preferences error:', e);
+      form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:#E74C3C;">Failed to load preferences.</div>';
+    }
+  }
+
+  async function saveNotificationPreferences() {
+    var saveBtn = document.getElementById('lcoSavePrefBtn');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    try {
+      var form = document.getElementById('lcoPrefForm');
+      var updatedPrefs = [];
+      form.querySelectorAll('.lco-pref-card').forEach(function(card) {
+        var cat = card.dataset.cat;
+        var inApp = card.querySelector('.pref-in-app').checked;
+        var email = card.querySelector('.pref-email').checked;
+        updatedPrefs.push({ category: cat, channel_in_app: inApp, channel_email: email });
+      });
+
+      var { data, error } = await sb.rpc('save_my_notification_preferences', {
+        p_role: 'LCO_ADMIN',
+        p_preferences: updatedPrefs
+      });
+
+      if (error) throw error;
+      showToast('Notification preferences saved!', 'success');
+      document.getElementById('lcoNotifPrefCard').style.display = 'none';
+    } catch (e) {
+      console.error('Save preferences error:', e);
+      showToast('Failed to save preferences', 'error');
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Preferences';
+      }
+    }
+  }
+
+
+  /* ══════════════════════════════════════════════
+     BROADCASTS & URGENT NOTICES (Phase 11 Batch 2)
+     ══════════════════════════════════════════════ */
+
+  var activeNotifSubTab = 'feed';
+
+  function setupNotifSubTabs() {
+    var subTabBtns = document.querySelectorAll('.lco-sub-tab-btn[data-notif-tab]');
+    subTabBtns.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        subTabBtns.forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        activeNotifSubTab = btn.dataset.notifTab;
+
+        var feedWrap = document.getElementById('notifTabFeedContainer');
+        var broadcastsWrap = document.getElementById('notifTabBroadcastsContainer');
+        var urgentWrap = document.getElementById('notifTabUrgentContainer');
+
+        if (feedWrap) feedWrap.style.display = (activeNotifSubTab === 'feed') ? 'block' : 'none';
+        if (broadcastsWrap) broadcastsWrap.style.display = (activeNotifSubTab === 'broadcasts') ? 'block' : 'none';
+        if (urgentWrap) urgentWrap.style.display = (activeNotifSubTab === 'urgent') ? 'block' : 'none';
+
+        if (activeNotifSubTab === 'feed') {
+          loadNotifications();
+        } else if (activeNotifSubTab === 'broadcasts') {
+          loadBroadcastHistory();
+        } else if (activeNotifSubTab === 'urgent') {
+          loadUrgentNoticesHistory();
+        }
+      });
+    });
+  }
+
+  async function loadBroadcastHistory() {
+    var body = document.getElementById('lcoBroadcastHistoryBody');
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--slate);">Loading broadcast history…</td></tr>';
+
+    try {
+      var { data, error } = await sb.rpc('get_lco_broadcast_history');
+      if (error) throw error;
+
+      var broadcasts = data || [];
+      if (broadcasts.length === 0) {
+        body.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:var(--slate);">No broadcasts sent yet.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = broadcasts.map(function(b) {
+        var audLabel = b.audience === 'ALL_CUSTOMERS' ? '👥 All Customers' : '🎯 Selected Customers';
+        var statusBadge = b.status === 'EXPIRED' 
+          ? '<span class="lco-badge" style="background:#64748B; color:white;">EXPIRED</span>'
+          : '<span class="lco-badge active">ACTIVE</span>';
+
+        return '<tr>' +
+          '<td><strong style="color:#0F172A;">' + esc(b.title) + '</strong><div style="font-size:12px; color:#64748B; margin-top:2px;">' + esc(b.message) + '</div></td>' +
+          '<td>' + audLabel + '</td>' +
+          '<td><strong>' + (b.recipient_count || 0) + '</strong> customers</td>' +
+          '<td>' + (b.expires_at ? formatDateFull(b.expires_at) : '— Never') + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + formatDateFull(b.created_at) + '</td>' +
+          '</tr>';
+      }).join('');
+    } catch (e) {
+      console.error('Load broadcast history error:', e);
+      body.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:32px; color:#DC2626;">Failed to load broadcast history.</td></tr>';
+    }
+  }
+
+  async function loadUrgentNoticesHistory() {
+    var body = document.getElementById('lcoUrgentNoticesBody');
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading urgent notices…</td></tr>';
+
+    try {
+      var { data, error } = await sb.rpc('get_lco_urgent_notices_history');
+      if (error) throw error;
+
+      var notices = data || [];
+      if (notices.length === 0) {
+        body.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">No urgent notices published yet.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = notices.map(function(un) {
+        var audLabel = un.audience === 'ALL_CUSTOMERS' ? '👥 All Customers' : '🎯 Selected Customers';
+        var statusBadge = '';
+        if (un.status === 'INACTIVE') {
+          statusBadge = '<span class="lco-badge" style="background:#94A3B8; color:white;">INACTIVE</span>';
+        } else if (un.status === 'EXPIRED') {
+          statusBadge = '<span class="lco-badge" style="background:#64748B; color:white;">EXPIRED</span>';
+        } else {
+          statusBadge = '<span class="lco-badge urgent" style="background:#DC2626; color:white;">🚨 ACTIVE</span>';
+        }
+
+        var toggleAction = un.is_active
+          ? '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="false" style="padding:4px 10px; font-size:12px; color:#DC2626; border-color:#FCA5A5;">Deactivate</button>'
+          : '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="true" style="padding:4px 10px; font-size:12px; color:#166534; border-color:#86EFAC;">Activate</button>';
+
+        return '<tr>' +
+          '<td><strong style="color:#B91C1C;">' + esc(un.title) + '</strong><div style="font-size:12px; color:#64748B; margin-top:2px;">' + esc(un.message) + '</div></td>' +
+          '<td>' + audLabel + '</td>' +
+          '<td><strong>' + (un.recipient_count || 0) + '</strong> customers</td>' +
+          '<td><strong>' + (un.dismissal_count || 0) + '</strong> dismissed</td>' +
+          '<td>' + (un.expires_at ? formatDateFull(un.expires_at) : '— Never') + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + formatDateFull(un.created_at) + '</td>' +
+          '<td>' + toggleAction + '</td>' +
+          '</tr>';
+      }).join('');
+
+      body.querySelectorAll('.btn-toggle-urgent').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var nId = btn.dataset.noticeId;
+          var nextState = (btn.dataset.nextState === 'true');
+          toggleUrgentNoticeStatus(nId, nextState);
+        });
+      });
+
+    } catch (e) {
+      console.error('Load urgent notices history error:', e);
+      body.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#DC2626;">Failed to load urgent notices.</td></tr>';
+    }
+  }
+
+  async function toggleUrgentNoticeStatus(noticeId, isActive) {
+    try {
+      var { error } = await sb.rpc('toggle_urgent_notice_status', {
+        p_notice_id: noticeId,
+        p_is_active: isActive
+      });
+      if (error) throw error;
+      showToast(isActive ? 'Urgent notice activated!' : 'Urgent notice deactivated', 'success');
+      loadUrgentNoticesHistory();
+    } catch (e) {
+      console.error('Toggle urgent notice status error:', e);
+      showToast('Failed to update notice status', 'error');
+    }
+  }
+
+  function setupBroadcastModals() {
+    var broadcastModal = document.getElementById('createBroadcastModal');
+    var openBroadcastBtn = document.getElementById('openCreateBroadcastBtn');
+    var cancelBroadcastBtn = document.getElementById('cancelBroadcastBtn');
+    var broadcastForm = document.getElementById('createBroadcastForm');
+
+    var urgentModal = document.getElementById('createUrgentNoticeModal');
+    var openUrgentBtn = document.getElementById('openCreateUrgentNoticeBtn');
+    var cancelUrgentBtn = document.getElementById('cancelUrgentNoticeBtn');
+    var urgentForm = document.getElementById('createUrgentNoticeForm');
+
+    // Broadcast Audience Radio Toggle
+    var bAudRadios = document.querySelectorAll('input[name="broadcastAudience"]');
+    var bSelectWrap = document.getElementById('broadcastCustSelectWrap');
+    bAudRadios.forEach(function(r) {
+      r.addEventListener('change', function() {
+        if (r.value === 'SELECTED_CUSTOMERS') {
+          if (bSelectWrap) bSelectWrap.style.display = 'block';
+          populateCustomerSelectBox('broadcastCustSelectBox');
+        } else {
+          if (bSelectWrap) bSelectWrap.style.display = 'none';
+        }
+      });
+    });
+
+    if (openBroadcastBtn && broadcastModal) {
+      openBroadcastBtn.addEventListener('click', function() {
+        broadcastModal.classList.add('visible');
+        if (document.querySelector('input[name="broadcastAudience"]:checked').value === 'SELECTED_CUSTOMERS') {
+          populateCustomerSelectBox('broadcastCustSelectBox');
+        }
+      });
+    }
+
+    if (cancelBroadcastBtn && broadcastModal) {
+      cancelBroadcastBtn.addEventListener('click', function() {
+        broadcastModal.classList.remove('visible');
+        if (broadcastForm) broadcastForm.reset();
+        if (bSelectWrap) bSelectWrap.style.display = 'none';
+      });
+    }
+
+    if (broadcastForm) {
+      broadcastForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        await handleBroadcastSubmit();
+      });
+    }
+
+    // Urgent Notice Audience Radio Toggle
+    var uAudRadios = document.querySelectorAll('input[name="urgentAudience"]');
+    var uSelectWrap = document.getElementById('urgentCustSelectWrap');
+    uAudRadios.forEach(function(r) {
+      r.addEventListener('change', function() {
+        if (r.value === 'SELECTED_CUSTOMERS') {
+          if (uSelectWrap) uSelectWrap.style.display = 'block';
+          populateCustomerSelectBox('urgentCustSelectBox');
+        } else {
+          if (uSelectWrap) uSelectWrap.style.display = 'none';
+        }
+      });
+    });
+
+    if (openUrgentBtn && urgentModal) {
+      openUrgentBtn.addEventListener('click', function() {
+        urgentModal.classList.add('visible');
+        if (document.querySelector('input[name="urgentAudience"]:checked').value === 'SELECTED_CUSTOMERS') {
+          populateCustomerSelectBox('urgentCustSelectBox');
+        }
+      });
+    }
+
+    if (cancelUrgentBtn && urgentModal) {
+      cancelUrgentBtn.addEventListener('click', function() {
+        urgentModal.classList.remove('visible');
+        if (urgentForm) urgentForm.reset();
+        if (uSelectWrap) uSelectWrap.style.display = 'none';
+      });
+    }
+
+    if (urgentForm) {
+      urgentForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        await handleUrgentNoticeSubmit();
+      });
+    }
+  }
+
+  async function populateCustomerSelectBox(boxId) {
+    var box = document.getElementById(boxId);
+    if (!box) return;
+    box.innerHTML = '<div style="font-size:13px; color:#64748B;">Loading active customers...</div>';
+
+    try {
+      var { data, error } = await sb.from('customers')
+        .select('id, full_name, customer_id, phone')
+        .eq('lco_id', lcoId)
+        .eq('service_status', 'ACTIVE')
+        .order('full_name', { ascending: true });
+
+      if (error) throw error;
+      var customers = data || [];
+      if (customers.length === 0) {
+        box.innerHTML = '<div style="font-size:13px; color:#DC2626;">No active customers found.</div>';
+        return;
+      }
+
+      box.innerHTML = customers.map(function(c) {
+        return '<label style="display:flex; align-items:center; gap:8px; padding:4px 0; font-size:13px; cursor:pointer; border-bottom:1px solid #F1F5F9;">' +
+          '<input type="checkbox" class="cust-select-chk" value="' + c.id + '">' +
+          '<span><strong>' + esc(c.full_name) + '</strong> (' + esc(c.customer_id) + ') — ' + esc(c.phone || '') + '</span>' +
+          '</label>';
+      }).join('');
+    } catch (e) {
+      console.error('Populate customer select box error:', e);
+      box.innerHTML = '<div style="font-size:13px; color:#DC2626;">Failed to load active customers.</div>';
+    }
+  }
+
+  async function handleBroadcastSubmit() {
+    var title = document.getElementById('broadcastTitle').value.trim();
+    var message = document.getElementById('broadcastMessage').value.trim();
+    var audience = document.querySelector('input[name="broadcastAudience"]:checked').value;
+    var expiresAtInput = document.getElementById('broadcastExpiresAt').value;
+    var expiresAt = expiresAtInput ? new Date(expiresAtInput).toISOString() : null;
+
+    var selectedCustIds = [];
+    if (audience === 'SELECTED_CUSTOMERS') {
+      var chks = document.querySelectorAll('#broadcastCustSelectBox .cust-select-chk:checked');
+      chks.forEach(function(c) { selectedCustIds.push(c.value); });
+      if (selectedCustIds.length === 0) {
+        showToast('Please select at least one customer.', 'error');
+        return;
+      }
+    }
+
+    var submitBtn = document.getElementById('confirmBroadcastBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending...';
+
+    try {
+      var { data, error } = await sb.rpc('create_customer_broadcast', {
+        p_title: title,
+        p_message: message,
+        p_audience: audience,
+        p_customer_ids: selectedCustIds.length > 0 ? selectedCustIds : null,
+        p_expires_at: expiresAt
+      });
+
+      if (error) throw error;
+
+      showToast('Broadcast sent successfully to ' + (data ? data.recipient_count : 0) + ' customer(s)!', 'success');
+      document.getElementById('createBroadcastModal').classList.remove('visible');
+      document.getElementById('createBroadcastForm').reset();
+      document.getElementById('broadcastCustSelectWrap').style.display = 'none';
+
+      // Switch to Broadcast History tab and reload
+      activeNotifSubTab = 'broadcasts';
+      document.querySelectorAll('.lco-sub-tab-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.notifTab === 'broadcasts');
+      });
+      document.getElementById('notifTabFeedContainer').style.display = 'none';
+      document.getElementById('notifTabBroadcastsContainer').style.display = 'block';
+      document.getElementById('notifTabUrgentContainer').style.display = 'none';
+      loadBroadcastHistory();
+
+    } catch (e) {
+      console.error('Create broadcast error:', e);
+      showToast('Failed to create broadcast: ' + (e.message || ''), 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send Broadcast';
+    }
+  }
+
+  async function handleUrgentNoticeSubmit() {
+    var title = document.getElementById('urgentNoticeTitle').value.trim();
+    var message = document.getElementById('urgentNoticeMessage').value.trim();
+    var audience = document.querySelector('input[name="urgentAudience"]:checked').value;
+    var expiresAtInput = document.getElementById('urgentNoticeExpiresAt').value;
+    var expiresAt = expiresAtInput ? new Date(expiresAtInput).toISOString() : null;
+
+    var selectedCustIds = [];
+    if (audience === 'SELECTED_CUSTOMERS') {
+      var chks = document.querySelectorAll('#urgentCustSelectBox .cust-select-chk:checked');
+      chks.forEach(function(c) { selectedCustIds.push(c.value); });
+      if (selectedCustIds.length === 0) {
+        showToast('Please select at least one customer.', 'error');
+        return;
+      }
+    }
+
+    var submitBtn = document.getElementById('confirmUrgentNoticeBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Publishing...';
+
+    try {
+      var { data, error } = await sb.rpc('create_urgent_notice', {
+        p_title: title,
+        p_message: message,
+        p_audience: audience,
+        p_customer_ids: selectedCustIds.length > 0 ? selectedCustIds : null,
+        p_expires_at: expiresAt
+      });
+
+      if (error) throw error;
+
+      showToast('Urgent notice published to ' + (data ? data.recipient_count : 0) + ' customer(s)!', 'success');
+      document.getElementById('createUrgentNoticeModal').classList.remove('visible');
+      document.getElementById('createUrgentNoticeForm').reset();
+      document.getElementById('urgentCustSelectWrap').style.display = 'none';
+
+      // Switch to Urgent Notices tab and reload
+      activeNotifSubTab = 'urgent';
+      document.querySelectorAll('.lco-sub-tab-btn').forEach(function(b) {
+        b.classList.toggle('active', b.dataset.notifTab === 'urgent');
+      });
+      document.getElementById('notifTabFeedContainer').style.display = 'none';
+      document.getElementById('notifTabBroadcastsContainer').style.display = 'none';
+      document.getElementById('notifTabUrgentContainer').style.display = 'block';
+      loadUrgentNoticesHistory();
+
+    } catch (e) {
+      console.error('Create urgent notice error:', e);
+      showToast('Failed to create urgent notice: ' + (e.message || ''), 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Publish Urgent Notice';
     }
   }
 

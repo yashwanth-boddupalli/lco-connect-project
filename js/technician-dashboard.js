@@ -66,6 +66,7 @@
       setupSearchAndFilters();
       setupLogout();
       setupDetailModal();
+      setupNotificationCenterListeners(); // Phase 11 Batch 1
 
       // 5. Load data
       await loadRequests();
@@ -637,54 +638,152 @@
      NOTIFICATIONS
      ══════════════════════════════════════════════ */
 
+  /* ══════════════════════════════════════════════
+     NOTIFICATIONS LOGIC (Phase 11 Batch 1)
+     ══════════════════════════════════════════════ */
+
+  var techNotifCategoryFilter = 'ALL';
+  var techNotifStatusFilter = 'ALL';
+
+  function formatTimeAgo(dateStr) {
+    if (!dateStr) return '—';
+    var d = new Date(dateStr);
+    var now = new Date();
+    var diffMs = now - d;
+    var diffSec = Math.floor(diffMs / 1000);
+    var diffMin = Math.floor(diffSec / 60);
+    var diffHr = Math.floor(diffMin / 60);
+    var diffDay = Math.floor(diffHr / 24);
+
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return diffMin + 'm ago';
+    if (diffHr < 24) return diffHr + 'h ago';
+    if (diffDay === 1) return 'Yesterday';
+    if (diffDay < 7) return diffDay + 'd ago';
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function getTechCategoryMeta(cat) {
+    switch (cat) {
+      case 'SERVICE_REQUEST': return { label: 'Field Ticket', icon: '🛠️' };
+      case 'ACCOUNT': return { label: 'Account', icon: '👤' };
+      case 'SYSTEM': return { label: 'System', icon: '🔧' };
+      case 'ANNOUNCEMENT': return { label: 'Announcement', icon: '📢' };
+      default: return { label: 'General', icon: '💬' };
+    }
+  }
+
+  function setupNotificationCenterListeners() {
+    var catGroup = document.getElementById('techNotifCategoryFilter');
+    if (catGroup) {
+      catGroup.querySelectorAll('.lco-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          catGroup.querySelectorAll('.lco-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          techNotifCategoryFilter = btn.dataset.cat || 'ALL';
+          loadNotifications();
+        });
+      });
+    }
+
+    var statusGroup = document.getElementById('techNotifStatusFilter');
+    if (statusGroup) {
+      statusGroup.querySelectorAll('.lco-filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          statusGroup.querySelectorAll('.lco-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          techNotifStatusFilter = btn.dataset.status || 'ALL';
+          loadNotifications();
+        });
+      });
+    }
+
+    var markAllBtn = document.getElementById('techMarkAllReadBtn');
+    if (markAllBtn) {
+      markAllBtn.addEventListener('click', markAllNotificationsRead);
+    }
+
+    var togglePrefBtn = document.getElementById('techTogglePrefBtn');
+    var closePrefBtn = document.getElementById('techClosePrefBtn');
+    var prefCard = document.getElementById('techNotifPrefCard');
+    if (togglePrefBtn && prefCard) {
+      togglePrefBtn.addEventListener('click', function() {
+        var isHidden = prefCard.style.display === 'none';
+        prefCard.style.display = isHidden ? 'block' : 'none';
+        if (isHidden) loadNotificationPreferences();
+      });
+    }
+    if (closePrefBtn && prefCard) {
+      closePrefBtn.addEventListener('click', function() {
+        prefCard.style.display = 'none';
+      });
+    }
+
+    var savePrefBtn = document.getElementById('techSavePrefBtn');
+    if (savePrefBtn) {
+      savePrefBtn.addEventListener('click', saveNotificationPreferences);
+    }
+  }
+
   async function loadNotifications() {
     var container = document.getElementById('techNotifList');
     if (!container) return;
 
     try {
-      var { data, error } = await sb
-        .from('notifications')
+      var query = sb.from('notifications')
         .select('*')
         .eq('lco_id', techProfile.lco_id)
         .eq('technician_id', techProfile.id)
-        .eq('recipient_role', 'TECHNICIAN')
-        .order('created_at', { ascending: false })
-        .limit(30);
+        .eq('recipient_role', 'TECHNICIAN');
 
+      if (techNotifCategoryFilter !== 'ALL') {
+        query = query.eq('category', techNotifCategoryFilter);
+      }
+      if (techNotifStatusFilter === 'UNREAD') {
+        query = query.eq('is_read', false);
+      } else if (techNotifStatusFilter === 'READ') {
+        query = query.eq('is_read', true);
+      }
+
+      var { data, error } = await query.order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
 
       var notifications = data || [];
 
+      // Update total unread badge
+      var { count: unreadCount } = await sb.from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('lco_id', techProfile.lco_id)
+        .eq('technician_id', techProfile.id)
+        .eq('recipient_role', 'TECHNICIAN')
+        .eq('is_read', false);
+
       var badge = document.getElementById('techNotifCount');
-      var unreadCount = notifications.filter(function (n) { return !n.is_read; }).length;
       if (badge) {
-        badge.textContent = unreadCount;
-        badge.style.display = unreadCount > 0 ? '' : 'none';
+        badge.textContent = unreadCount || 0;
+        badge.style.display = (unreadCount && unreadCount > 0) ? '' : 'none';
       }
 
       if (notifications.length === 0) {
-        container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">🔔</div><h3>No notifications</h3><p>You have no recent system messages.</p></div>';
+        container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">🔔</div><h3>No notifications</h3><p>You have no recent messages.</p></div>';
         return;
       }
 
       container.innerHTML = notifications.map(function (n) {
-        var icon = '💬';
-        if (n.type === 'SUCCESS') icon = '✅';
-        else if (n.type === 'WARNING') icon = '⚠️';
-        else if (n.type === 'INFO') icon = 'ℹ️';
-
+        var catMeta = getTechCategoryMeta(n.category);
         return '<div class="lco-notif-item' + (n.is_read ? '' : ' unread') + '" data-id="' + n.id + '">' +
           '<div class="lco-notif-dot' + (n.is_read ? ' read' : '') + '"></div>' +
-          '<span class="lco-notif-icon">' + icon + '</span>' +
+          '<span class="lco-notif-icon">' + catMeta.icon + '</span>' +
           '<div class="lco-notif-body">' +
-          '<div class="lco-notif-title">' + esc(n.title) + '</div>' +
+          '<div class="lco-notif-title">' + esc(n.title) +
+          '<span class="lco-notif-cat-badge cat-' + (n.category || 'SERVICE_REQUEST') + '">' + esc(catMeta.label) + '</span>' +
+          '</div>' +
           '<div class="lco-notif-message">' + esc(n.message) + '</div>' +
-          '<div class="lco-notif-time">' + formatDateFull(n.created_at) + '</div>' +
+          '<div class="lco-notif-time">' + formatTimeAgo(n.created_at) + ' • ' + formatDateFull(n.created_at) + '</div>' +
           '</div>' +
           '</div>';
       }).join('');
 
-      // Mark as read on click
       container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
         item.addEventListener('click', function () {
           markNotificationRead(item.dataset.id);
@@ -696,7 +795,7 @@
 
     } catch (err) {
       console.error('Load technician notifications error:', err);
-      container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3></div>';
+      container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3><button class="lco-quick-btn secondary" style="margin-top:12px;" onclick="loadNotifications()">Retry</button></div>';
     }
   }
 
@@ -717,6 +816,110 @@
       }
     } catch (e) {
       console.error('Mark technician notification read error:', e);
+    }
+  }
+
+  async function markAllNotificationsRead() {
+    try {
+      var { error } = await sb.from('notifications')
+        .update({ is_read: true })
+        .eq('lco_id', techProfile.lco_id)
+        .eq('technician_id', techProfile.id)
+        .eq('recipient_role', 'TECHNICIAN')
+        .eq('is_read', false);
+
+      if (error) throw error;
+      showToast('All notifications marked as read', 'success');
+      loadNotifications();
+    } catch (e) {
+      console.error('Technician mark all read error:', e);
+      showToast('Failed to mark all as read', 'error');
+    }
+  }
+
+  async function loadNotificationPreferences() {
+    var form = document.getElementById('techPrefForm');
+    if (!form) return;
+    form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">Loading preferences…</div>';
+
+    try {
+      var { data, error } = await sb.rpc('get_my_notification_preferences', { p_role: 'TECHNICIAN' });
+      if (error) throw error;
+
+      var prefs = data || [];
+      var categoryDescriptions = {
+        'SERVICE_REQUEST': 'Job assignment notifications & field ticket status updates.',
+        'ACCOUNT': 'Account credential updates and security alerts.',
+        'SYSTEM': 'System maintenance and network outage notices.',
+        'ANNOUNCEMENT': 'Broadband operator updates and field operational notices.'
+      };
+
+      form.innerHTML = prefs.map(function(pref) {
+        var catMeta = getTechCategoryMeta(pref.category);
+        var desc = categoryDescriptions[pref.category] || 'Channel preferences for this category.';
+        var isMandatory = (pref.category === 'SERVICE_REQUEST' || pref.category === 'ACCOUNT');
+
+        return '<div class="lco-pref-card" data-cat="' + pref.category + '">' +
+          '<div class="lco-pref-card-title">' + catMeta.icon + ' ' + esc(catMeta.label) + '</div>' +
+          '<div class="lco-pref-card-desc">' + esc(desc) + '</div>' +
+          '<div class="lco-pref-channels">' +
+            '<div class="lco-pref-channel-row">' +
+              '<span>In-App Feed</span>' +
+              '<label class="lco-switch">' +
+                '<input type="checkbox" class="pref-in-app" ' + (pref.channel_in_app ? 'checked' : '') + (isMandatory ? ' disabled' : '') + '>' +
+                '<span class="lco-slider"></span>' +
+              '</label>' +
+            '</div>' +
+            '<div class="lco-pref-channel-row">' +
+              '<span>Email Notification</span>' +
+              '<label class="lco-switch">' +
+                '<input type="checkbox" class="pref-email" ' + (pref.channel_email ? 'checked' : '') + '>' +
+                '<span class="lco-slider"></span>' +
+              '</label>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+    } catch (e) {
+      console.error('Load technician preferences error:', e);
+      form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:#E74C3C;">Failed to load preferences.</div>';
+    }
+  }
+
+  async function saveNotificationPreferences() {
+    var saveBtn = document.getElementById('techSavePrefBtn');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+    }
+
+    try {
+      var form = document.getElementById('techPrefForm');
+      var updatedPrefs = [];
+      form.querySelectorAll('.lco-pref-card').forEach(function(card) {
+        var cat = card.dataset.cat;
+        var inApp = card.querySelector('.pref-in-app').checked;
+        var email = card.querySelector('.pref-email').checked;
+        updatedPrefs.push({ category: cat, channel_in_app: inApp, channel_email: email });
+      });
+
+      var { data, error } = await sb.rpc('save_my_notification_preferences', {
+        p_role: 'TECHNICIAN',
+        p_preferences: updatedPrefs
+      });
+
+      if (error) throw error;
+      showToast('Notification preferences saved!', 'success');
+      document.getElementById('techNotifPrefCard').style.display = 'none';
+    } catch (e) {
+      console.error('Save technician preferences error:', e);
+      showToast('Failed to save preferences', 'error');
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Preferences';
+      }
     }
   }
 
