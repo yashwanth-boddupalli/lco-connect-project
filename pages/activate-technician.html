@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activate Technician Account — LCO Connect</title>
+  <meta name="description"
+    content="Activate your LCO Connect field technician account. Set your password and log in to manage field service requests.">
+  <meta name="theme-color" content="#0B7A6E">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/super-admin.css">
+</head>
+
+<body class="sa-login-page">
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+  <!-- ═══════════════════════════════════════════
+     ACTIVATION FORM
+     ═══════════════════════════════════════════ -->
+  <main class="sa-login-main">
+    <div class="sa-login-card" style="max-width: 460px;">
+
+      <!-- Brand -->
+      <div class="sa-login-brand">
+        <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+          <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+        </a>
+      </div>
+
+      <!-- Activation form -->
+      <form id="activateTechForm" novalidate autocomplete="off">
+        <h1 id="activateHeading">Activate Technician Account</h1>
+        <p class="sa-login-desc" id="activateSubtext">Enter your details to create your password and activate your Field Technician portal access.</p>
+
+        <!-- Dynamic status notice banner -->
+        <div id="activateNotice" style="display:none; padding: 12px 16px; background: rgba(11,122,110,0.1); border-left: 4px solid #0B7A6E; border-radius: 6px; font-size: 13px; margin-bottom: 20px; color: #0B7A6E;">
+          <strong>Welcome!</strong> Complete the fields below to set your account password.
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activateTechId">Technician ID *</label>
+          <input type="text" id="activateTechId" name="technicianId" placeholder="e.g. TECH-0001" required style="text-transform: uppercase;">
+          <div class="sa-field-error" id="activateTechId-error">Please enter your Technician ID</div>
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activateEmail">Registered Email *</label>
+          <input type="email" id="activateEmail" name="email" placeholder="technician@email.com" required>
+          <div class="sa-field-error" id="activateEmail-error">Please enter a valid email</div>
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activatePassword">Create Password *</label>
+          <div class="sa-password-wrap">
+            <input type="password" id="activatePassword" name="password" placeholder="Minimum 6 characters" required minlength="6">
+          </div>
+          <div class="sa-field-error" id="activatePassword-error">Password must be at least 6 characters</div>
+        </div>
+
+        <div class="sa-form-group">
+          <label for="activateConfirmPassword">Confirm Password *</label>
+          <div class="sa-password-wrap">
+            <input type="password" id="activateConfirmPassword" name="confirmPassword" placeholder="Re-enter password" required>
+          </div>
+          <div class="sa-field-error" id="activateConfirmPassword-error">Passwords do not match</div>
+        </div>
+
+        <button type="submit" class="sa-login-btn" id="activateBtn">
+          Set Password & Activate Portal
+        </button>
+
+        <div class="sa-login-footer-text">
+          Already activated? <a href="login.html">Sign In →</a>
+        </div>
+      </form>
+
+    </div>
+
+    <!-- Background decoration -->
+    <div class="sa-login-bg" aria-hidden="true">
+      <div class="sa-bg-circle sa-bg-1"></div>
+      <div class="sa-bg-circle sa-bg-2"></div>
+      <div class="sa-bg-circle sa-bg-3"></div>
+    </div>
+  </main>
+
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Shared Auth Module -->
+  <script src="../js/auth.js"></script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var sb = LCOAuth.getClient();
+      var form = document.getElementById('activateTechForm');
+      var techIdInput = document.getElementById('activateTechId');
+      var emailInput = document.getElementById('activateEmail');
+      var passwordInput = document.getElementById('activatePassword');
+      var confirmPwInput = document.getElementById('activateConfirmPassword');
+      var activateBtn = document.getElementById('activateBtn');
+      var noticeEl = document.getElementById('activateNotice');
+
+      var hasInviteSession = false;
+      var subtextEl = document.getElementById('activateSubtext');
+
+      function applyInviteSession(session) {
+        if (!session || !session.user) return;
+        hasInviteSession = true;
+        activateBtn.disabled = false;
+        noticeEl.style.display = 'block';
+        noticeEl.innerHTML = '<strong>Account Verified via Activation Link!</strong> Create your password below to complete setup.';
+
+        if (session.user.email) {
+          emailInput.value = session.user.email.trim().toLowerCase();
+          emailInput.readOnly = true;
+          emailInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+        }
+        if (session.user.user_metadata && session.user.user_metadata.technician_id && !techIdInput.value) {
+          techIdInput.value = String(session.user.user_metadata.technician_id).trim().toUpperCase();
+          techIdInput.readOnly = true;
+          techIdInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+        }
+      }
+
+      // Pre-fill Technician ID from invite redirect
+      var urlParams = new URLSearchParams(window.location.search);
+      var paramTechId = urlParams.get('technician_id');
+      if (paramTechId) {
+        techIdInput.value = paramTechId.trim().toUpperCase();
+        techIdInput.readOnly = true;
+        techIdInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+      }
+
+      if (sb) {
+        sb.auth.getSession().then(function (res) {
+          if (res.data && res.data.session) {
+            applyInviteSession(res.data.session);
+          } else if (!hasInviteSession) {
+            activateBtn.disabled = true;
+            if (subtextEl) {
+              subtextEl.textContent = 'Open the activation link from your invitation email to continue. Manual activation without an invitation is not supported.';
+            }
+          }
+        });
+
+        sb.auth.onAuthStateChange(function (event, session) {
+          if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION')) {
+            applyInviteSession(session);
+          }
+        });
+      } else {
+        activateBtn.disabled = true;
+      }
+
+      // Clear errors on input
+      [techIdInput, emailInput, passwordInput, confirmPwInput].forEach(function (input) {
+        input.addEventListener('input', function () {
+          input.classList.remove('error');
+          var errEl = document.getElementById(input.id + '-error');
+          if (errEl) errEl.classList.remove('visible');
+        });
+      });
+
+      form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var valid = true;
+
+        var techId = techIdInput.value.trim().toUpperCase();
+        var email = emailInput.value.trim().toLowerCase();
+        var password = passwordInput.value;
+        var confirmPw = confirmPwInput.value;
+
+        if (!techId) {
+          techIdInput.classList.add('error');
+          document.getElementById('activateTechId-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          emailInput.classList.add('error');
+          document.getElementById('activateEmail-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (!password || password.length < 6) {
+          passwordInput.classList.add('error');
+          document.getElementById('activatePassword-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (password !== confirmPw) {
+          confirmPwInput.classList.add('error');
+          document.getElementById('activateConfirmPassword-error').classList.add('visible');
+          valid = false;
+        }
+
+        if (!valid) return;
+
+        activateBtn.disabled = true;
+        activateBtn.innerHTML = '<span class="sa-spinner"></span> Activating account…';
+
+        try {
+          if (!sb) throw new Error('Connection unavailable. Please refresh and use your invitation link.');
+
+          var sessionRes = await sb.auth.getSession();
+          var currentSession = sessionRes.data ? sessionRes.data.session : null;
+
+          if (!currentSession || !currentSession.user) {
+            throw new Error('Please open the activation link from your invitation email before setting a password.');
+          }
+
+          var sessionEmail = (currentSession.user.email || '').trim().toLowerCase();
+          if (!sessionEmail || sessionEmail !== email) {
+            throw new Error('Email must match the address that received your activation invitation.');
+          }
+
+          var updateRes = await sb.auth.updateUser({ password: password });
+          if (updateRes.error) throw updateRes.error;
+
+          var linkRes = await sb.rpc('link_technician_account', {
+            p_technician_id: techId,
+            p_email: email
+          });
+
+          if (linkRes.error) throw linkRes.error;
+
+          showToast('Account activated successfully! Redirecting to Technician Dashboard…', 'success');
+
+          setTimeout(function () {
+            window.location.href = 'technician-dashboard.html';
+          }, 1200);
+
+        } catch (err) {
+          console.error('Activation failed:', err);
+          activateBtn.disabled = false;
+          activateBtn.innerHTML = 'Set Password & Activate Portal';
+          showToast(err.message || 'Activation failed. Please check your Technician ID and Email.', 'error');
+        }
+      });
+
+      function showToast(message, type) {
+        var container = document.getElementById('toastContainer');
+        var toast = document.createElement('div');
+        toast.className = 'sa-toast ' + (type || '');
+        var icon = type === 'error' ? '⚠️' : type === 'success' ? '✓' : '💬';
+        toast.innerHTML = '<span class="sa-toast-icon">' + icon + '</span>' + escapeHtml(message);
+        container.appendChild(toast);
+        setTimeout(function () {
+          toast.classList.add('removing');
+          setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+        }, 5000);
+      }
+
+      function escapeHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+      }
+    })();
+  </script>
+
+</body>
+
+</html>

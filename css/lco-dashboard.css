@@ -515,6 +515,90 @@
   box-shadow: 0 3px 10px rgba(11, 122, 110, 0.25);
 }
 
+/* Custom styled select matching LCO CONNECT dashboard design */
+.lco-select {
+  padding: 10px 36px 10px 14px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background-color: var(--card);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  color: var(--ink);
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  height: 42px;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.lco-select:hover {
+  border-color: var(--slate);
+}
+
+.lco-select:focus {
+  border-color: var(--teal);
+  box-shadow: 0 0 0 3px rgba(11, 122, 110, 0.08);
+}
+
+/* Phase 9 Service Request Toolbar Layout */
+.lco-req-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.lco-req-search-select-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.lco-req-search-select-row .lco-search-wrap {
+  flex: 1;
+  min-width: 260px;
+}
+
+.lco-req-select-group {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lco-req-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .lco-req-search-select-row .lco-search-wrap {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .lco-req-select-group {
+    width: 100%;
+  }
+
+  .lco-req-select-group .lco-select {
+    flex: 1;
+    min-width: 140px;
+  }
+}
+
 
 /* ══════════════════════════════════════════════
    SERVICE PLANS GRID & CARDS (Phase 5)
@@ -817,6 +901,16 @@
 .lco-badge.cancelled::before { background: #E74C3C; }
 .lco-badge.pending::before { background: #F1C40F; }
 .lco-badge.disconnected::before { background: #5D6D7E; }
+
+/* Priority Badges (Phase 9) */
+.lco-badge.priority-urgent { background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; }
+.lco-badge.priority-urgent::before { background: #DC2626; }
+.lco-badge.priority-high { background: #FFEDD5; color: #C2410C; border: 1px solid #FDBA74; }
+.lco-badge.priority-high::before { background: #C2410C; }
+.lco-badge.priority-medium { background: #FEF9C3; color: #854D0E; border: 1px solid #FDE047; }
+.lco-badge.priority-medium::before { background: #854D0E; }
+.lco-badge.priority-low { background: #EFF6FF; color: #1D4ED8; border: 1px solid #93C5FD; }
+.lco-badge.priority-low::before { background: #1D4ED8; }
 
 
 /* ══════════════════════════════════════════════
@@ -1266,6 +1360,18 @@
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
+.lco-form-group select {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
 .lco-form-group input:focus,
 .lco-form-group select:focus,
 .lco-form-group textarea:focus {
@@ -1353,10 +1459,11 @@
 
 
 /* ══════════════════════════════════════════════
-   VIEW BUTTON
+   VIEW & ACTION BUTTONS
    ══════════════════════════════════════════════ */
 
-.lco-view-btn {
+.lco-view-btn,
+.lco-action-btn {
   padding: 6px 14px;
   font-family: 'Inter', sans-serif;
   font-weight: 600;
@@ -1366,13 +1473,20 @@
   background: transparent;
   color: var(--teal-dark);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
   white-space: nowrap;
 }
 
-.lco-view-btn:hover {
+.lco-view-btn:hover,
+.lco-action-btn:hover {
   background: var(--teal);
   color: #fff;
+}
+
+.lco-view-btn:focus-visible,
+.lco-action-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(11, 122, 110, 0.25);
 }
 
 

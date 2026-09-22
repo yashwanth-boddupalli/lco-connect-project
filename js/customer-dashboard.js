@@ -30,6 +30,7 @@
   var activeBill = null;
   var billingHistory = [];
   var paymentHistory = [];
+  var customerRequests = [];
   var currentView = 'overview';
 
 
@@ -107,6 +108,8 @@
     setupLogout();
     setupEditProfileModal();
     setupRequestPlanModal();
+    setupCreateRequestModal();
+    setupCustReqDetailModal();
     setupPayNow();
 
     // Render overview
@@ -117,6 +120,7 @@
     loadAvailablePlans();
     loadNotifications();
     loadBillingData();
+    loadCustomerRequests();
   }
 
 
@@ -163,6 +167,8 @@
       loadBillingData();
     } else if (viewName === 'plans') {
       renderAvailablePlans();
+    } else if (viewName === 'requests') {
+      loadCustomerRequests();
     } else if (viewName === 'notifications') {
       loadNotifications();
     }
@@ -812,6 +818,265 @@
     } catch (err) {
       console.error('Load notifications error:', err);
     }
+  }
+
+  /* ══════════════════════════════════════════════
+     SERVICE REQUESTS LOGIC
+     ══════════════════════════════════════════════ */
+
+  async function loadCustomerRequests() {
+    var tbody = document.getElementById('custRequestsTableBody');
+    if (!customerData) return;
+
+    try {
+      var { data, error } = await sb.from('service_requests')
+        .select('*')
+        .eq('customer_id', customerData.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      customerRequests = data || [];
+
+      // Update badge count for open/in_progress requests
+      var activeCount = customerRequests.filter(function (r) {
+        return r.status === 'OPEN' || r.status === 'IN_PROGRESS';
+      }).length;
+
+      var badge = document.getElementById('custRequestsCount');
+      if (badge) {
+        badge.textContent = activeCount;
+        badge.style.display = activeCount > 0 ? '' : 'none';
+      }
+
+      renderCustomerRequestsList();
+
+    } catch (err) {
+      console.error('Load service requests error:', err);
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#EF4444;">Failed to load service requests.</td></tr>';
+      }
+    }
+  }
+
+  function renderCustomerRequestsList() {
+    var tbody = document.getElementById('custRequestsTableBody');
+    if (!tbody) return;
+
+    if (customerRequests.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#64748B;">' +
+        '<div style="font-size:24px; margin-bottom:6px;">🛠️</div>' +
+        '<strong>No service requests raised yet</strong>' +
+        '<p style="font-size:12px; margin-top:4px;">Have an issue with your signal or internet? Click "+ Raise Service Request" above.</p>' +
+        '</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = customerRequests.map(function (req) {
+      return '<tr>' +
+        '<td data-label="Ticket #"><strong>' + esc(req.request_id) + '</strong></td>' +
+        '<td data-label="Category">' + esc(formatReqCategory(req.category)) + '</td>' +
+        '<td data-label="Subject"><div style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + esc(req.subject) + '">' + esc(req.subject) + '</div></td>' +
+        '<td data-label="Priority">' + renderReqPriorityBadge(req.priority) + '</td>' +
+        '<td data-label="Status">' + renderReqStatusBadge(req.status) + '</td>' +
+        '<td data-label="Date Raised">' + formatDate(req.created_at) + '</td>' +
+        '<td data-label="Action"><button class="lco-action-btn view-req-detail-btn" data-id="' + req.id + '">View Details</button></td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('.view-req-detail-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var req = customerRequests.find(function (r) { return r.id === btn.dataset.id; });
+        if (req) openCustReqDetailModal(req);
+      });
+    });
+  }
+
+  function setupCreateRequestModal() {
+    var modal = document.getElementById('createRequestModal');
+    var openBtn = document.getElementById('openCreateRequestBtn');
+    var cancelBtn = document.getElementById('cancelCreateReqBtn');
+    var form = document.getElementById('createRequestForm');
+
+    if (!modal || !form) return;
+
+    if (openBtn) {
+      openBtn.addEventListener('click', function () {
+        form.reset();
+        modal.classList.add('visible');
+      });
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+      });
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      var category = document.getElementById('custReqCategory').value;
+      var subject = document.getElementById('custReqSubject').value.trim();
+      var description = document.getElementById('custReqDescription').value.trim();
+
+      if (!subject || !description) {
+        showToast('Please fill in all required fields.', 'error');
+        return;
+      }
+
+      var confirmBtn = document.getElementById('confirmCreateReqBtn');
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="lco-spinner"></span> Submitting…';
+
+      try {
+        // Insert service request (Note: Customer priority automatically defaults to MEDIUM database-side)
+        var { data, error } = await sb.from('service_requests')
+          .insert({
+            lco_id: customerData.lco_id,
+            customer_id: customerData.id,
+            category: category,
+            subject: subject,
+            description: description
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        showToast('Service request ' + (data ? data.request_id : '') + ' submitted successfully!', 'success');
+        modal.classList.remove('visible');
+        form.reset();
+
+        // Refresh request list and notifications
+        loadCustomerRequests();
+        loadNotifications();
+
+      } catch (err) {
+        console.error('Create service request error:', err);
+        showToast(err.message || 'Failed to submit service request.', 'error');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Submit Request';
+      }
+    });
+  }
+
+  function setupCustReqDetailModal() {
+    var modal = document.getElementById('custReqDetailModal');
+    var closeBtn = document.getElementById('closeCustReqDetailBtn');
+
+    if (closeBtn && modal) {
+      closeBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+      });
+    }
+  }
+
+  function openCustReqDetailModal(req) {
+    var modal = document.getElementById('custReqDetailModal');
+    if (!modal) return;
+
+    document.getElementById('custReqDetailId').textContent = req.request_id;
+    document.getElementById('custReqDetailCategory').textContent = formatReqCategory(req.category);
+    document.getElementById('custReqDetailSubject').textContent = req.subject;
+    document.getElementById('custReqDetailDescription').textContent = req.description;
+    document.getElementById('custReqDetailDate').textContent = 'Raised on: ' + formatDate(req.created_at);
+
+    var badgesEl = document.getElementById('custReqDetailBadges');
+    if (badgesEl) {
+      badgesEl.innerHTML = renderReqPriorityBadge(req.priority) + ' ' + renderReqStatusBadge(req.status);
+    }
+
+    // Operator Resolution Notes
+    var resSection = document.getElementById('custReqDetailResolutionSection');
+    var resNotes = document.getElementById('custReqDetailResolutionNotes');
+    if (resSection && resNotes) {
+      if (req.resolution_notes) {
+        resNotes.textContent = req.resolution_notes;
+        resSection.style.display = 'block';
+      } else {
+        resSection.style.display = 'none';
+      }
+    }
+
+    // Assigned Technician Info
+    var techSection = document.getElementById('custReqDetailTechSection');
+    var techInfo = document.getElementById('custReqDetailTechInfo');
+    if (techSection && techInfo) {
+      if (req.assigned_technician_name) {
+        techInfo.innerHTML = '<strong>Name:</strong> ' + esc(req.assigned_technician_name) +
+          (req.assigned_technician_phone ? ' | <strong>Phone:</strong> ' + esc(req.assigned_technician_phone) : '') +
+          (req.technician_notes ? '<div style="margin-top:4px; font-size:12px; color:#64748B;">Notes: ' + esc(req.technician_notes) + '</div>' : '');
+        techSection.style.display = 'block';
+      } else {
+        techSection.style.display = 'none';
+      }
+    }
+
+    // Cancel Button Action (only visible if status is OPEN)
+    var cancelActionBtn = document.getElementById('custCancelReqActionBtn');
+    if (cancelActionBtn) {
+      if (req.status === 'OPEN') {
+        cancelActionBtn.style.display = 'inline-block';
+        cancelActionBtn.onclick = async function () {
+          if (!confirm('Are you sure you want to cancel this service request?')) return;
+
+          cancelActionBtn.disabled = true;
+          try {
+            var { error } = await sb.from('service_requests')
+              .update({ status: 'CANCELLED' })
+              .eq('id', req.id);
+
+            if (error) throw error;
+
+            showToast('Service request ' + req.request_id + ' cancelled.', 'info');
+            modal.classList.remove('visible');
+            loadCustomerRequests();
+            loadNotifications();
+          } catch (cErr) {
+            console.error('Cancel request error:', cErr);
+            showToast(cErr.message || 'Failed to cancel request.', 'error');
+          } finally {
+            cancelActionBtn.disabled = false;
+          }
+        };
+      } else {
+        cancelActionBtn.style.display = 'none';
+      }
+    }
+
+    modal.classList.add('visible');
+  }
+
+  function formatReqCategory(cat) {
+    var map = {
+      'NO_SIGNAL': 'No Signal / TV Blackout',
+      'SLOW_INTERNET': 'Slow Internet Speed',
+      'NO_INTERNET': 'No Internet Connection',
+      'BILLING_ISSUE': 'Billing / Payment Query',
+      'HARDWARE_FAULT': 'Hardware / Box Fault',
+      'NEW_CONNECTION': 'New Connection',
+      'RELOCATION': 'Relocation',
+      'OTHER': 'Other Complaint'
+    };
+    return map[cat] || cat || 'General Query';
+  }
+
+  function renderReqPriorityBadge(priority) {
+    var p = priority || 'MEDIUM';
+    var cls = p.toLowerCase();
+    return '<span class="lco-badge priority-' + cls + '">' + p + '</span>';
+  }
+
+  function renderReqStatusBadge(status) {
+    var s = status || 'OPEN';
+    var cls = 'pending';
+    if (s === 'OPEN') cls = 'pending';
+    else if (s === 'IN_PROGRESS') cls = 'active';
+    else if (s === 'RESOLVED') cls = 'active';
+    else if (s === 'CLOSED') cls = 'inactive';
+    else if (s === 'CANCELLED') cls = 'expired';
+    return '<span class="lco-badge ' + cls + '">' + s + '</span>';
   }
 
 
