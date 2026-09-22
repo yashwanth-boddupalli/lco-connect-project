@@ -234,15 +234,28 @@ Deno.serve(async (request) => {
       console.error('verify-payment: bill update error:', updateError);
     }
 
-    // ── 12. Create Notification for Customer ──
+    // ── 12. Create Dual Notifications (CUSTOMER + LCO_ADMIN) ──
     try {
-      await admin.from('notifications').insert({
-        lco_id: bill.lco_id,
-        customer_id: customer.id,
-        title: 'Payment Received',
-        message: `Your payment of ₹${paidAmountRupees.toFixed(2)} for bill ${bill.bill_number} has been verified and recorded successfully via Cashfree. Payment #: ${paymentNumber}`,
-        type: 'SUCCESS',
-      });
+      await admin.from('notifications').insert([
+        {
+          lco_id: bill.lco_id,
+          customer_id: customer.id,
+          technician_id: null,
+          recipient_role: 'CUSTOMER',
+          title: 'Payment Received',
+          message: `Your payment of ₹${paidAmountRupees.toFixed(2)} for bill ${bill.bill_number} has been verified and recorded successfully via Cashfree. Payment #: ${paymentNumber}`,
+          type: 'SUCCESS',
+        },
+        {
+          lco_id: bill.lco_id,
+          customer_id: null,
+          technician_id: null,
+          recipient_role: 'LCO_ADMIN',
+          title: 'Payment Received',
+          message: `Payment of ₹${paidAmountRupees.toFixed(2)} received from customer ${customer.full_name || 'Customer'} (${customer.customer_id || 'ID'}) for bill ${bill.bill_number} via Cashfree. Payment #: ${paymentNumber}`,
+          type: 'SUCCESS',
+        },
+      ]);
     } catch (notifErr) {
       console.error('verify-payment: notification insert failed:', notifErr);
     }

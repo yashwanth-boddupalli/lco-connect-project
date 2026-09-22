@@ -198,11 +198,61 @@
         </section>
 
 
-        <!-- ═══════════ VIEW: NOTIFICATIONS ═══════════ -->
+        <!-- ═══════════ VIEW: NOTIFICATIONS (Phase 11 Batch 1) ═══════════ -->
         <section class="tech-view" id="view-notifications">
-          <h1 class="tech-view-title">Notifications</h1>
-          <p class="tech-view-subtitle">Updates and job assignments from your cable / internet operator</p>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h1 class="tech-view-title" style="margin:0;">Notification Center</h1>
+              <p class="tech-view-subtitle" style="margin-top:4px;">Updates and job assignments from your cable / internet operator</p>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="lco-quick-btn secondary" id="techMarkAllReadBtn">✓ Mark All Read</button>
+              <button class="lco-quick-btn primary" id="techTogglePrefBtn">⚙️ Preferences</button>
+            </div>
+          </div>
 
+          <!-- Toolbar -->
+          <div class="lco-toolbar" style="margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+              <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Category:</span>
+              <div class="lco-filter-group" id="techNotifCategoryFilter">
+                <button class="lco-filter-btn active" data-cat="ALL">All</button>
+                <button class="lco-filter-btn" data-cat="SERVICE_REQUEST">Field Tickets</button>
+                <button class="lco-filter-btn" data-cat="ACCOUNT">Account</button>
+                <button class="lco-filter-btn" data-cat="SYSTEM">System</button>
+              </div>
+            </div>
+
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-left:auto;">
+              <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Status:</span>
+              <div class="lco-filter-group" id="techNotifStatusFilter">
+                <button class="lco-filter-btn active" data-status="ALL">All</button>
+                <button class="lco-filter-btn" data-status="UNREAD">Unread</button>
+                <button class="lco-filter-btn" data-status="READ">Read</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Preferences Card -->
+          <div class="lco-detail-section" id="techNotifPrefCard" style="display:none; margin-bottom:20px; background:#F8FAFC; border:1px solid #CBD5E1;">
+            <div class="lco-detail-section-title" style="margin-bottom:12px;">
+              <span>⚙️ Technician Preferences</span>
+              <button class="lco-quick-btn secondary" id="techClosePrefBtn" style="padding:4px 10px; font-size:12px;">Close</button>
+            </div>
+            <p style="font-size:13px; color:var(--slate); margin-bottom:16px;">
+              Configure job assignment & service ticket alert preferences.
+            </p>
+
+            <div id="techPrefForm" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+            </div>
+
+            <div style="margin-top:16px; display:flex; justify-content:flex-end; align-items:center; gap:12px;">
+              <div style="font-size:12px; color:#64748B;">🔐 Mandatory ticket assignment & account alerts are always active.</div>
+              <button class="lco-quick-btn primary" id="techSavePrefBtn">Save Preferences</button>
+            </div>
+          </div>
+
+          <!-- Notification Feed List -->
           <div class="lco-notif-list" id="techNotifList">
             <div class="lco-empty">
               <div class="lco-empty-icon">🔔</div>
