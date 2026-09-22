@@ -1372,6 +1372,9 @@
       var { data, error } = await sb.from('notifications')
         .select('*')
         .eq('lco_id', lcoId)
+        .eq('recipient_role', 'LCO_ADMIN')
+        .is('customer_id', null)
+        .is('technician_id', null)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -1430,7 +1433,8 @@
     try {
       await sb.from('notifications')
         .update({ is_read: true })
-        .eq('id', notifId);
+        .eq('id', notifId)
+        .eq('recipient_role', 'LCO_ADMIN');
 
       // Update badge
       var badge = document.getElementById('lcoNotifCount');

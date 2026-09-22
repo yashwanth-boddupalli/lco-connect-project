@@ -128,7 +128,7 @@ Deno.serve(async (request) => {
     // ── 8. Fetch Bill ──
     const { data: bill, error: billError } = await admin
       .from('customer_bills')
-      .select('id, bill_number, lco_id, customer_id, amount, paid_amount, status')
+      .select('id, bill_number, lco_id, customer_id, amount, paid_amount, status, customers(full_name, customer_id)')
       .eq('id', billId)
       .single();
 
@@ -207,15 +207,32 @@ Deno.serve(async (request) => {
       console.error('razorpay-webhook: bill update error:', updateError);
     }
 
-    // ── 14. Create Notification ──
+    // ── 14. Create Dual Notifications (CUSTOMER + LCO_ADMIN) ──
     try {
-      await admin.from('notifications').insert({
-        lco_id: bill.lco_id,
-        customer_id: bill.customer_id,
-        title: 'Payment Received',
-        message: `Payment of ₹${effectivePayment.toFixed(2)} received for bill ${bill.bill_number}. Payment #: ${paymentNumber}. Bill status: ${newStatus}.`,
-        type: 'SUCCESS',
-      });
+      const custObj = (bill as any).customers || {};
+      const custName = custObj.full_name || 'Customer';
+      const custCode = custObj.customer_id || 'ID';
+
+      await admin.from('notifications').insert([
+        {
+          lco_id: bill.lco_id,
+          customer_id: bill.customer_id,
+          technician_id: null,
+          recipient_role: 'CUSTOMER',
+          title: 'Payment Received',
+          message: `Payment of ₹${effectivePayment.toFixed(2)} received for bill ${bill.bill_number}. Payment #: ${paymentNumber}. Bill status: ${newStatus}.`,
+          type: 'SUCCESS',
+        },
+        {
+          lco_id: bill.lco_id,
+          customer_id: null,
+          technician_id: null,
+          recipient_role: 'LCO_ADMIN',
+          title: 'Payment Received',
+          message: `Payment of ₹${effectivePayment.toFixed(2)} received from customer ${custName} (${custCode}) for bill ${bill.bill_number} via Razorpay Webhook. Payment #: ${paymentNumber}`,
+          type: 'SUCCESS',
+        },
+      ]);
     } catch (notifErr) {
       console.error('razorpay-webhook: notification failed:', notifErr);
     }

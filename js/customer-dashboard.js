@@ -540,6 +540,9 @@
         var { error } = await sb.from('notifications')
           .insert({
             lco_id: customerData.lco_id,
+            customer_id: null,
+            technician_id: null,
+            recipient_role: 'LCO_ADMIN',
             title: 'Plan Request from Customer',
             message: customerData.full_name + ' (' + customerData.customer_id + ') has requested the plan "' + planName + '". Notes: ' + (notes || 'None'),
             type: 'INFO'
@@ -780,7 +783,9 @@
     try {
       var { data, error } = await sb.from('notifications')
         .select('*')
-        .or('customer_id.eq.' + customerData.id + ',and(lco_id.eq.' + customerData.lco_id + ',customer_id.is.null)')
+        .eq('lco_id', customerData.lco_id)
+        .eq('customer_id', customerData.id)
+        .eq('recipient_role', 'CUSTOMER')
         .order('created_at', { ascending: false })
         .limit(30);
 
@@ -815,8 +820,38 @@
           '</div>';
       }).join('');
 
+      // Mark as read on click
+      container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
+        item.addEventListener('click', function () {
+          markNotificationRead(item.dataset.id);
+          item.classList.remove('unread');
+          var dot = item.querySelector('.lco-notif-dot');
+          if (dot) dot.classList.add('read');
+        });
+      });
+
     } catch (err) {
       console.error('Load notifications error:', err);
+    }
+  }
+
+  async function markNotificationRead(notifId) {
+    try {
+      await sb.from('notifications')
+        .update({ is_read: true })
+        .eq('id', notifId)
+        .eq('customer_id', customerData.id)
+        .eq('recipient_role', 'CUSTOMER');
+
+      var badge = document.getElementById('custNotifCount');
+      if (badge) {
+        var current = parseInt(badge.textContent) || 0;
+        var newCount = Math.max(0, current - 1);
+        badge.textContent = newCount;
+        badge.style.display = newCount > 0 ? '' : 'none';
+      }
+    } catch (e) {
+      console.error('Mark customer notification read error:', e);
     }
   }
 

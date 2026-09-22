@@ -646,6 +646,8 @@
         .from('notifications')
         .select('*')
         .eq('lco_id', techProfile.lco_id)
+        .eq('technician_id', techProfile.id)
+        .eq('recipient_role', 'TECHNICIAN')
         .order('created_at', { ascending: false })
         .limit(30);
 
@@ -671,7 +673,7 @@
         else if (n.type === 'WARNING') icon = '⚠️';
         else if (n.type === 'INFO') icon = 'ℹ️';
 
-        return '<div class="lco-notif-item' + (n.is_read ? '' : ' unread') + '">' +
+        return '<div class="lco-notif-item' + (n.is_read ? '' : ' unread') + '" data-id="' + n.id + '">' +
           '<div class="lco-notif-dot' + (n.is_read ? ' read' : '') + '"></div>' +
           '<span class="lco-notif-icon">' + icon + '</span>' +
           '<div class="lco-notif-body">' +
@@ -682,9 +684,39 @@
           '</div>';
       }).join('');
 
+      // Mark as read on click
+      container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
+        item.addEventListener('click', function () {
+          markNotificationRead(item.dataset.id);
+          item.classList.remove('unread');
+          var dot = item.querySelector('.lco-notif-dot');
+          if (dot) dot.classList.add('read');
+        });
+      });
+
     } catch (err) {
       console.error('Load technician notifications error:', err);
       container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3></div>';
+    }
+  }
+
+  async function markNotificationRead(notifId) {
+    try {
+      await sb.from('notifications')
+        .update({ is_read: true })
+        .eq('id', notifId)
+        .eq('technician_id', techProfile.id)
+        .eq('recipient_role', 'TECHNICIAN');
+
+      var badge = document.getElementById('techNotifCount');
+      if (badge) {
+        var current = parseInt(badge.textContent) || 0;
+        var newCount = Math.max(0, current - 1);
+        badge.textContent = newCount;
+        badge.style.display = newCount > 0 ? '' : 'none';
+      }
+    } catch (e) {
+      console.error('Mark technician notification read error:', e);
     }
   }
 
