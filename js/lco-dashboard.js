@@ -46,6 +46,19 @@
   var currentBillFilter = 'all';
   var currentBillSearch = '';
 
+  // Phase 9: Service Requests state
+  var allRequests = [];
+  var currentReqStatusFilter = 'ALL';
+  var currentReqPriorityFilter = 'ALL';
+  var currentReqCategoryFilter = 'ALL';
+  var currentReqSearch = '';
+
+  // Phase 10: Technicians state
+  var allTechnicians = [];
+  var currentTechStatusFilter = 'ALL';
+  var currentTechInviteFilter = 'ALL';
+  var currentTechSearch = '';
+
 
   /* ══════════════════════════════════════════════
      AUTH GUARD
@@ -121,6 +134,10 @@
     setupBillingListeners();    // Phase 8
     setupGenerateBillModal();  // Phase 8
     setupRecordPaymentModal();  // Phase 8
+    setupRequestListeners();    // Phase 9
+    setupManageRequestModal();  // Phase 9
+    setupTechnicianListeners(); // Phase 10
+    setupAddTechModal();        // Phase 10
 
     // Load initial data
     loadStats();
@@ -129,6 +146,8 @@
     loadSubscriptions();
     loadNotifications();
     loadBillingData();         // Phase 8
+    loadRequests();            // Phase 9
+    loadTechnicians();         // Phase 10
   }
 
 
@@ -173,6 +192,10 @@
       renderServicesSummary();
     } else if (viewName === 'billing') {
       loadBillingData();
+    } else if (viewName === 'requests') {
+      loadRequests();
+    } else if (viewName === 'technicians') {
+      loadTechnicians();
     } else if (viewName === 'notifications') {
       loadNotifications();
     } else if (viewName === 'profile') {
@@ -2279,6 +2302,611 @@
     }
 
     modal.classList.add('visible');
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 9: SERVICE REQUESTS & COMPLAINT LOGIC
+     ══════════════════════════════════════════════ */
+
+  async function loadRequests() {
+    var tbody = document.getElementById('lcoRequestsTableBody');
+    try {
+      var { data, error } = await sb.from('service_requests')
+        .select('*, customers(full_name, phone, customer_id)')
+        .eq('lco_id', lcoId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      allRequests = data || [];
+
+      // Update sidebar nav count badge for OPEN/IN_PROGRESS requests
+      var activeReqs = allRequests.filter(function (r) {
+        return r.status === 'OPEN' || r.status === 'IN_PROGRESS';
+      }).length;
+
+      var countEl = document.getElementById('lcoRequestCount');
+      if (countEl) {
+        countEl.textContent = activeReqs;
+        countEl.style.display = activeReqs > 0 ? '' : 'none';
+      }
+
+      renderRequestsTable();
+
+    } catch (err) {
+      console.error('Load service requests error:', err);
+      showToast('Failed to load service requests.', 'error');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:32px; color:var(--red);">Error loading service requests.</td></tr>';
+      }
+    }
+  }
+
+  function renderRequestsTable() {
+    var tbody = document.getElementById('lcoRequestsTableBody');
+    if (!tbody) return;
+
+    var filtered = getFilteredRequests();
+
+    if (filtered.length === 0) {
+      var msg = currentReqSearch ? 'No service requests match your search.' : 'No service requests found.';
+      tbody.innerHTML = '<tr><td colspan="9"><div class="lco-empty"><div class="lco-empty-icon">🛠️</div><h3>' + msg + '</h3><p>Customer service complaints will appear here automatically when submitted.</p></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(function (req) {
+      var custName = req.customers ? req.customers.full_name : '—';
+      var custPhone = req.customers ? req.customers.phone : '—';
+      var techName = req.assigned_technician_name ? esc(req.assigned_technician_name) : '<span style="color:#94A3B8;">Unassigned</span>';
+
+      return '<tr>' +
+        '<td data-label="Ticket #"><strong>' + esc(req.request_id) + '</strong></td>' +
+        '<td data-label="Customer">' + esc(custName) + '</td>' +
+        '<td data-label="Phone">' + esc(custPhone) + '</td>' +
+        '<td data-label="Category">' + esc(formatReqCategory(req.category)) + '</td>' +
+        '<td data-label="Priority">' + renderReqPriorityBadge(req.priority) + '</td>' +
+        '<td data-label="Status">' + renderReqStatusBadge(req.status) + '</td>' +
+        '<td data-label="Technician">' + techName + '</td>' +
+        '<td data-label="Date">' + formatDate(req.created_at) + '</td>' +
+        '<td data-label="Action"><button class="lco-action-btn manage-req-btn" data-id="' + req.id + '">Manage</button></td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('.manage-req-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var req = allRequests.find(function (r) { return r.id === btn.dataset.id; });
+        if (req) openManageRequestModal(req);
+      });
+    });
+  }
+
+  function getFilteredRequests() {
+    return allRequests.filter(function (req) {
+      // Status filter
+      if (currentReqStatusFilter !== 'ALL' && req.status !== currentReqStatusFilter) return false;
+
+      // Priority filter
+      if (currentReqPriorityFilter !== 'ALL' && req.priority !== currentReqPriorityFilter) return false;
+
+      // Category filter
+      if (currentReqCategoryFilter !== 'ALL' && req.category !== currentReqCategoryFilter) return false;
+
+      // Search query filter
+      if (currentReqSearch) {
+        var custName = req.customers ? req.customers.full_name : '';
+        var custPhone = req.customers ? req.customers.phone : '';
+        var custCode = req.customers ? req.customers.customer_id : '';
+        var haystack = [
+          req.request_id,
+          custName,
+          custPhone,
+          custCode,
+          req.subject,
+          req.description,
+          req.assigned_technician_name,
+          req.assigned_technician_phone,
+          req.resolution_notes,
+          req.category
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        return haystack.indexOf(currentReqSearch) !== -1;
+      }
+
+      return true;
+    });
+  }
+
+  function setupRequestListeners() {
+    var searchInput = document.getElementById('lcoReqSearchInput');
+    if (searchInput) {
+      var timer;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          currentReqSearch = searchInput.value.trim().toLowerCase();
+          renderRequestsTable();
+        }, 250);
+      });
+    }
+
+    var statusGroup = document.getElementById('lcoReqStatusFilterGroup');
+    if (statusGroup) {
+      statusGroup.querySelectorAll('.lco-filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentReqStatusFilter = btn.dataset.status;
+          statusGroup.querySelectorAll('.lco-filter-btn').forEach(function (b) { b.classList.remove('active'); });
+          btn.classList.add('active');
+          renderRequestsTable();
+        });
+      });
+    }
+
+    var prioritySelect = document.getElementById('lcoReqPriorityFilter');
+    if (prioritySelect) {
+      prioritySelect.addEventListener('change', function () {
+        currentReqPriorityFilter = prioritySelect.value;
+        renderRequestsTable();
+      });
+    }
+
+    var categorySelect = document.getElementById('lcoReqCategoryFilter');
+    if (categorySelect) {
+      categorySelect.addEventListener('change', function () {
+        currentReqCategoryFilter = categorySelect.value;
+        renderRequestsTable();
+      });
+    }
+  }
+
+  function setupManageRequestModal() {
+    var modal = document.getElementById('manageRequestModal');
+    var form = document.getElementById('manageRequestForm');
+    var cancelBtn = document.getElementById('manageReqCancelBtn');
+    var techSelect = document.getElementById('manageReqTechSelect');
+
+    if (!modal || !form) return;
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () { modal.classList.remove('visible'); });
+    }
+
+    if (techSelect) {
+      techSelect.addEventListener('change', function () {
+        var selectedId = techSelect.value;
+        if (selectedId) {
+          var tech = allTechnicians.find(function (t) { return t.id === selectedId; });
+          if (tech) {
+            document.getElementById('manageReqTechName').value = tech.full_name || '';
+            document.getElementById('manageReqTechPhone').value = tech.phone || '';
+          }
+        }
+      });
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      var reqId = document.getElementById('manageReqDbId').value;
+      var status = document.getElementById('manageReqStatus').value;
+      var priority = document.getElementById('manageReqPriority').value;
+      var selectedTechId = techSelect ? (techSelect.value || null) : null;
+      var techName = document.getElementById('manageReqTechName').value.trim();
+      var techPhone = document.getElementById('manageReqTechPhone').value.trim();
+      var techNotes = document.getElementById('manageReqTechNotes').value.trim();
+      var resNotes = document.getElementById('manageReqResolutionNotes').value.trim();
+      var adminNotes = document.getElementById('manageReqAdminNotes').value.trim();
+
+      var req = allRequests.find(function (r) { return r.id === reqId; });
+      if (!req) {
+        showToast('Invalid request selection.', 'error');
+        return;
+      }
+
+      var confirmBtn = document.getElementById('manageReqConfirmBtn');
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="lco-spinner"></span> Saving…';
+
+      try {
+        var isResolvedOrClosed = (status === 'RESOLVED' || status === 'CLOSED');
+        var resolvedAt = isResolvedOrClosed ? (req.resolved_at || new Date().toISOString()) : null;
+
+        var updatePayload = {
+          status: status,
+          priority: priority,
+          assigned_technician_id: selectedTechId,
+          assigned_technician_name: techName || null,
+          assigned_technician_phone: techPhone || null,
+          technician_notes: techNotes || null,
+          resolution_notes: resNotes || null,
+          admin_notes: adminNotes || null,
+          resolved_at: resolvedAt
+        };
+
+        var { error } = await sb.from('service_requests')
+          .update(updatePayload)
+          .eq('id', reqId)
+          .eq('lco_id', lcoId);
+
+        if (error) throw error;
+
+        showToast('Service Request ' + req.request_id + ' updated successfully!', 'success');
+        modal.classList.remove('visible');
+        form.reset();
+
+        // Reload request list, notifications, and overview stats
+        await loadRequests();
+        await loadNotifications();
+        await loadStats();
+
+      } catch (err) {
+        console.error('Update service request error:', err);
+        showToast(err.message || 'Failed to update service request.', 'error');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Save Updates';
+      }
+    });
+  }
+
+  function openManageRequestModal(req) {
+    var modal = document.getElementById('manageRequestModal');
+    if (!modal) return;
+
+    document.getElementById('manageReqDbId').value = req.id;
+    document.getElementById('manageReqHeaderId').textContent = req.request_id;
+    document.getElementById('manageReqCustName').textContent = req.customers ? req.customers.full_name : 'Customer';
+    document.getElementById('manageReqCustPhone').textContent = req.customers ? req.customers.phone : '—';
+    document.getElementById('manageReqCategory').textContent = formatReqCategory(req.category);
+    document.getElementById('manageReqSubject').textContent = req.subject;
+    document.getElementById('manageReqDescription').textContent = req.description;
+    document.getElementById('manageReqDate').textContent = 'Raised on: ' + formatDateFull(req.created_at);
+
+    document.getElementById('manageReqStatus').value = req.status || 'OPEN';
+    document.getElementById('manageReqPriority').value = req.priority || 'MEDIUM';
+
+    // Populate active technician dropdown
+    var techSelect = document.getElementById('manageReqTechSelect');
+    if (techSelect) {
+      techSelect.innerHTML = '<option value="">-- Unassigned --</option>' +
+        allTechnicians.filter(function (t) { return t.status === 'ACTIVE'; }).map(function (t) {
+          return '<option value="' + t.id + '">' + esc(t.full_name) + ' (' + esc(t.technician_id) + ')</option>';
+        }).join('');
+      techSelect.value = req.assigned_technician_id || '';
+    }
+
+    document.getElementById('manageReqTechName').value = req.assigned_technician_name || '';
+    document.getElementById('manageReqTechPhone').value = req.assigned_technician_phone || '';
+    document.getElementById('manageReqTechNotes').value = req.technician_notes || '';
+    document.getElementById('manageReqResolutionNotes').value = req.resolution_notes || '';
+    document.getElementById('manageReqAdminNotes').value = req.admin_notes || '';
+
+    modal.classList.add('visible');
+  }
+
+  function formatReqCategory(cat) {
+    var map = {
+      'NO_SIGNAL': 'No Signal / TV Blackout',
+      'SLOW_INTERNET': 'Slow Internet Speed',
+      'NO_INTERNET': 'No Internet Connection',
+      'BILLING_ISSUE': 'Billing / Payment Query',
+      'HARDWARE_FAULT': 'Hardware / Box Fault',
+      'NEW_CONNECTION': 'New Connection',
+      'RELOCATION': 'Relocation',
+      'OTHER': 'Other Complaint'
+    };
+    return map[cat] || cat || 'General Query';
+  }
+
+  function renderReqPriorityBadge(priority) {
+    var p = priority || 'MEDIUM';
+    var cls = p.toLowerCase();
+    return '<span class="lco-badge priority-' + cls + '">' + p + '</span>';
+  }
+
+  function renderReqStatusBadge(status) {
+    var s = status || 'OPEN';
+    var cls = 'pending';
+    if (s === 'OPEN') cls = 'pending';
+    else if (s === 'IN_PROGRESS') cls = 'active';
+    else if (s === 'RESOLVED') cls = 'active';
+    else if (s === 'CLOSED') cls = 'inactive';
+    else if (s === 'CANCELLED') cls = 'expired';
+    return '<span class="lco-badge ' + cls + '">' + s + '</span>';
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 10: TECHNICIAN MANAGEMENT LOGIC
+     ══════════════════════════════════════════════ */
+
+  async function loadTechnicians() {
+    var tbody = document.getElementById('lcoTechniciansTableBody');
+    try {
+      var { data, error } = await sb.from('technicians')
+        .select('*')
+        .eq('lco_id', lcoId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      allTechnicians = data || [];
+
+      updateTechnicianStats();
+      renderTechniciansTable();
+
+    } catch (err) {
+      console.error('Load technicians error:', err);
+      showToast('Failed to load field technicians.', 'error');
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--red);">Error loading field technicians.</td></tr>';
+      }
+    }
+  }
+
+  function updateTechnicianStats() {
+    var total = allTechnicians.length;
+    var active = allTechnicians.filter(function (t) { return t.status === 'ACTIVE'; }).length;
+    var activated = allTechnicians.filter(function (t) { return t.invitation_status === 'ACTIVATED' || t.user_id; }).length;
+    var pending = allTechnicians.filter(function (t) { return t.invitation_status === 'INVITED' || t.invitation_status === 'PENDING'; }).length;
+
+    var totalEl = document.getElementById('lcoTechStatTotal');
+    if (totalEl) totalEl.textContent = total;
+
+    var activeEl = document.getElementById('lcoTechStatActive');
+    if (activeEl) activeEl.textContent = active;
+
+    var actEl = document.getElementById('lcoTechStatActivated');
+    if (actEl) actEl.textContent = activated;
+
+    var pendEl = document.getElementById('lcoTechStatPending');
+    if (pendEl) pendEl.textContent = pending;
+
+    var countBadge = document.getElementById('lcoTechCount');
+    if (countBadge) {
+      countBadge.textContent = total;
+      countBadge.style.display = total > 0 ? '' : 'none';
+    }
+  }
+
+  function renderTechniciansTable() {
+    var tbody = document.getElementById('lcoTechniciansTableBody');
+    if (!tbody) return;
+
+    var filtered = getFilteredTechnicians();
+
+    if (filtered.length === 0) {
+      var msg = currentTechSearch ? 'No technicians match your search.' : 'No field technicians added yet.';
+      tbody.innerHTML = '<tr><td colspan="7"><div class="lco-empty"><div class="lco-empty-icon">👷</div><h3>' + msg + '</h3>' +
+        (currentTechSearch ? '' : '<button class="lco-quick-btn primary" id="emptyAddTechBtn">+ Add Technician</button>') +
+        '</div></td></tr>';
+
+      var emptyBtn = document.getElementById('emptyAddTechBtn');
+      if (emptyBtn) {
+        emptyBtn.addEventListener('click', openAddTechModal);
+      }
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(function (tech) {
+      var inviteBadge = renderTechInviteBadge(tech);
+      var statusBadge = renderStatusBadge(tech.status);
+
+      var inviteActionBtn = '';
+      if (tech.invitation_status === 'ACTIVATED' || tech.user_id) {
+        inviteActionBtn = '<span style="font-size:12px; color:#10B981; font-weight:600;">✓ Active</span>';
+      } else {
+        var label = tech.invitation_status === 'INVITED' ? 'Resend Invite' : 'Send Invite';
+        inviteActionBtn = '<button class="lco-action-btn invite-tech-btn" data-id="' + tech.id + '">' + label + '</button>';
+      }
+
+      var statusToggleBtn = tech.status === 'ACTIVE'
+        ? '<button class="lco-action-btn deactivate-tech-btn" data-id="' + tech.id + '" style="background:#FFF1F2; color:#E11D48; border-color:#FECDD3;">Deactivate</button>'
+        : '<button class="lco-action-btn activate-tech-btn" data-id="' + tech.id + '" style="background:#F0FDF4; color:#16A34A; border-color:#BBF7D0;">Activate</button>';
+
+      return '<tr>' +
+        '<td data-label="Tech ID"><strong>' + esc(tech.technician_id) + '</strong></td>' +
+        '<td data-label="Full Name">' + esc(tech.full_name) + '</td>' +
+        '<td data-label="Contact Info"><div>📞 ' + esc(tech.phone) + '</div><div style="font-size:12px; color:var(--slate);">✉️ ' + esc(tech.email) + '</div></td>' +
+        '<td data-label="Status">' + statusBadge + '</td>' +
+        '<td data-label="Invitation">' + inviteBadge + '</td>' +
+        '<td data-label="Date Joined">' + formatDate(tech.created_at) + '</td>' +
+        '<td data-label="Action"><div style="display:flex; gap:6px; flex-wrap:wrap;">' + inviteActionBtn + ' ' + statusToggleBtn + '</div></td>' +
+        '</tr>';
+    }).join('');
+
+    tbody.querySelectorAll('.invite-tech-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        sendTechnicianInvite(btn.dataset.id, btn);
+      });
+    });
+
+    tbody.querySelectorAll('.deactivate-tech-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        toggleTechnicianStatus(btn.dataset.id, 'INACTIVE');
+      });
+    });
+
+    tbody.querySelectorAll('.activate-tech-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        toggleTechnicianStatus(btn.dataset.id, 'ACTIVE');
+      });
+    });
+  }
+
+  function renderTechInviteBadge(tech) {
+    if (tech.user_id || tech.invitation_status === 'ACTIVATED') {
+      return '<span class="lco-badge active">✓ Activated</span>';
+    } else if (tech.invitation_status === 'INVITED') {
+      return '<span class="lco-badge pending">📩 Invited</span>';
+    } else if (tech.invitation_status === 'FAILED') {
+      return '<span class="lco-badge expired">⚠️ Failed</span>';
+    }
+    return '<span class="lco-badge pending">⏳ Pending</span>';
+  }
+
+  function getFilteredTechnicians() {
+    return allTechnicians.filter(function (tech) {
+      if (currentTechStatusFilter !== 'ALL' && tech.status !== currentTechStatusFilter) return false;
+
+      if (currentTechInviteFilter !== 'ALL') {
+        var invStatus = tech.user_id || tech.invitation_status === 'ACTIVATED' ? 'ACTIVATED' : (tech.invitation_status || 'PENDING');
+        if (invStatus !== currentTechInviteFilter) return false;
+      }
+
+      if (currentTechSearch) {
+        var haystack = [
+          tech.technician_id,
+          tech.full_name,
+          tech.phone,
+          tech.email,
+          tech.status
+        ].filter(Boolean).join(' ').toLowerCase();
+        return haystack.indexOf(currentTechSearch) !== -1;
+      }
+
+      return true;
+    });
+  }
+
+  function setupTechnicianListeners() {
+    var searchInput = document.getElementById('lcoTechSearchInput');
+    if (searchInput) {
+      var timer;
+      searchInput.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          currentTechSearch = searchInput.value.trim().toLowerCase();
+          renderTechniciansTable();
+        }, 250);
+      });
+    }
+
+    var statusSelect = document.getElementById('lcoTechStatusFilter');
+    if (statusSelect) {
+      statusSelect.addEventListener('change', function () {
+        currentTechStatusFilter = statusSelect.value;
+        renderTechniciansTable();
+      });
+    }
+
+    var inviteSelect = document.getElementById('lcoTechInviteFilter');
+    if (inviteSelect) {
+      inviteSelect.addEventListener('change', function () {
+        currentTechInviteFilter = inviteSelect.value;
+        renderTechniciansTable();
+      });
+    }
+
+    var openAddBtn = document.getElementById('openAddTechBtn');
+    if (openAddBtn) {
+      openAddBtn.addEventListener('click', openAddTechModal);
+    }
+  }
+
+  function setupAddTechModal() {
+    var modal = document.getElementById('addTechModal');
+    var form = document.getElementById('addTechForm');
+    var cancelBtn = document.getElementById('addTechCancelBtn');
+
+    if (!modal || !form) return;
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () { modal.classList.remove('visible'); });
+    }
+
+    form.addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      var name = document.getElementById('addTechName').value.trim();
+      var phone = document.getElementById('addTechPhone').value.trim();
+      var email = document.getElementById('addTechEmail').value.trim().toLowerCase();
+
+      var confirmBtn = document.getElementById('addTechConfirmBtn');
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="lco-spinner"></span> Saving…';
+
+      try {
+        var { data: newTech, error } = await sb.from('technicians')
+          .insert({
+            lco_id: lcoId,
+            full_name: name,
+            phone: phone,
+            email: email,
+            status: 'ACTIVE'
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        showToast('Technician ' + newTech.technician_id + ' created! Sending activation invite…', 'success');
+        modal.classList.remove('visible');
+        form.reset();
+
+        await loadTechnicians();
+        sendTechnicianInvite(newTech.id, null);
+
+      } catch (err) {
+        console.error('Add technician error:', err);
+        showToast(err.message || 'Failed to add technician.', 'error');
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = 'Save & Send Invite';
+      }
+    });
+  }
+
+  function openAddTechModal() {
+    var modal = document.getElementById('addTechModal');
+    if (modal) modal.classList.add('visible');
+  }
+
+  async function sendTechnicianInvite(techId, btn) {
+    if (!sb) return;
+
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="lco-spinner"></span> Sending…';
+    }
+
+    try {
+      var { data, error } = await sb.functions.invoke('send-technician-invitation', {
+        body: { technician_id: techId }
+      });
+
+      if (error) throw error;
+
+      if (data && data.ok) {
+        showToast('Technician invitation email sent successfully!', 'success');
+        await loadTechnicians();
+      } else {
+        throw new Error(data ? (data.error || 'Invitation delivery failed.') : 'Invitation failed.');
+      }
+    } catch (err) {
+      console.error('Send technician invite error:', err);
+      showToast('Failed to send technician invitation: ' + (err.message || ''), 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Resend Invite';
+      }
+    }
+  }
+
+  async function toggleTechnicianStatus(techId, newStatus) {
+    try {
+      var { error } = await sb.from('technicians')
+        .update({ status: newStatus })
+        .eq('id', techId)
+        .eq('lco_id', lcoId);
+
+      if (error) throw error;
+
+      showToast('Technician status updated to ' + newStatus, 'success');
+      await loadTechnicians();
+    } catch (err) {
+      console.error('Toggle technician status error:', err);
+      showToast(err.message || 'Failed to update technician status.', 'error');
+    }
   }
 
 

@@ -85,6 +85,14 @@
         <button class="lco-nav-item" data-view="billing" id="navBilling">
           <span class="lco-nav-icon">💳</span> Billing & Payments
         </button>
+        <button class="lco-nav-item" data-view="requests" id="navRequests">
+          <span class="lco-nav-icon">🛠️</span> Service Requests
+          <span class="lco-nav-count" id="lcoRequestCount" style="display:none;">0</span>
+        </button>
+        <button class="lco-nav-item" data-view="technicians" id="navTechnicians">
+          <span class="lco-nav-icon">👷</span> Technicians
+          <span class="lco-nav-count" id="lcoTechCount" style="display:none;">0</span>
+        </button>
         <button class="lco-nav-item" data-view="notifications" id="navNotifications">
           <span class="lco-nav-icon">🔔</span> Notifications
           <span class="lco-nav-count" id="lcoNotifCount" style="display:none;">0</span>
@@ -530,6 +538,157 @@
               </thead>
               <tbody id="lcoPaymentsTableBody">
                 <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading payments…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: SERVICE REQUESTS ═══════════ -->
+        <section class="lco-view" id="view-requests">
+          <h1 class="lco-view-title">Service Requests & Complaint Management</h1>
+          <p class="lco-view-subtitle">Review customer complaints, manage priorities, track field resolution, and assign technicians</p>
+
+          <!-- Toolbar & Filters -->
+          <div class="lco-toolbar lco-req-toolbar">
+            <div class="lco-req-search-select-row">
+              <div class="lco-search-wrap">
+                <span class="lco-search-icon">🔍</span>
+                <input type="text" id="lcoReqSearchInput" class="lco-search-input" placeholder="Search by Ticket #, Customer Name, Phone, Subject…">
+              </div>
+
+              <div class="lco-req-select-group">
+                <select id="lcoReqPriorityFilter" class="lco-select">
+                  <option value="ALL">All Priorities</option>
+                  <option value="URGENT">🔴 URGENT</option>
+                  <option value="HIGH">🟠 HIGH</option>
+                  <option value="MEDIUM">🟡 MEDIUM</option>
+                  <option value="LOW">🔵 LOW</option>
+                </select>
+
+                <select id="lcoReqCategoryFilter" class="lco-select">
+                  <option value="ALL">All Categories</option>
+                  <option value="NO_SIGNAL">No Signal</option>
+                  <option value="SLOW_INTERNET">Slow Internet</option>
+                  <option value="NO_INTERNET">No Internet</option>
+                  <option value="BILLING_ISSUE">Billing Query</option>
+                  <option value="HARDWARE_FAULT">Hardware Fault</option>
+                  <option value="NEW_CONNECTION">New Connection</option>
+                  <option value="RELOCATION">Relocation</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="lco-req-status-row">
+              <div class="lco-filter-group" id="lcoReqStatusFilterGroup">
+                <button class="lco-filter-btn active" data-status="ALL">All</button>
+                <button class="lco-filter-btn" data-status="OPEN">Open</button>
+                <button class="lco-filter-btn" data-status="IN_PROGRESS">In Progress</button>
+                <button class="lco-filter-btn" data-status="RESOLVED">Resolved</button>
+                <button class="lco-filter-btn" data-status="CLOSED">Closed</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Service Requests Table -->
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="lcoRequestsTable">
+              <thead>
+                <tr>
+                  <th>Ticket #</th>
+                  <th>Customer</th>
+                  <th>Phone</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Technician</th>
+                  <th>Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="lcoRequestsTableBody">
+                <tr><td colspan="9" style="text-align:center; padding:32px; color:var(--slate);">Loading service requests…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: TECHNICIANS (Phase 10) ═══════════ -->
+        <section class="lco-view" id="view-technicians">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h1 class="lco-view-title" style="margin:0;">Technician Management</h1>
+              <p class="lco-view-subtitle" style="margin-top:4px;">Manage field service technicians, generate account invitations, and assign service requests</p>
+            </div>
+            <button class="lco-quick-btn primary" id="openAddTechBtn">👷 + Add Technician</button>
+          </div>
+
+          <!-- Quick Stats Grid for Technicians -->
+          <div class="lco-stats-grid">
+            <div class="lco-stat-card">
+              <div class="lco-stat-label"><span class="lco-stat-dot total"></span> Total Technicians</div>
+              <div class="lco-stat-value" id="lcoTechStatTotal">0</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label"><span class="lco-stat-dot active"></span> Active</div>
+              <div class="lco-stat-value" id="lcoTechStatActive">0</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label"><span class="lco-stat-dot services"></span> Account Activated</div>
+              <div class="lco-stat-value" id="lcoTechStatActivated">0</div>
+            </div>
+            <div class="lco-stat-card">
+              <div class="lco-stat-label"><span class="lco-stat-dot inactive"></span> Pending Invite</div>
+              <div class="lco-stat-value" id="lcoTechStatPending">0</div>
+            </div>
+          </div>
+
+          <!-- Toolbar -->
+          <div class="lco-toolbar" style="margin-top:16px;">
+            <div class="lco-search-wrap">
+              <span class="lco-search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input type="text" class="lco-search-input" id="lcoTechSearchInput" placeholder="Search technician by ID, name, phone, email…">
+            </div>
+
+            <div style="display:flex; gap:8px; align-items:center;">
+              <select id="lcoTechStatusFilter" style="padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:13px; font-weight:500;">
+                <option value="ALL">All Statuses</option>
+                <option value="ACTIVE">ACTIVE</option>
+                <option value="INACTIVE">INACTIVE</option>
+                <option value="SUSPENDED">SUSPENDED</option>
+              </select>
+
+              <select id="lcoTechInviteFilter" style="padding:8px 12px; border-radius:6px; border:1px solid #CBD5E1; font-size:13px; font-weight:500;">
+                <option value="ALL">All Invitations</option>
+                <option value="ACTIVATED">Activated</option>
+                <option value="INVITED">Invited</option>
+                <option value="PENDING">Pending</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Technicians Table -->
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="lcoTechniciansTable">
+              <thead>
+                <tr>
+                  <th>Tech ID</th>
+                  <th>Full Name</th>
+                  <th>Contact Info</th>
+                  <th>Status</th>
+                  <th>Invitation</th>
+                  <th>Date Joined</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="lcoTechniciansTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading technicians…</td></tr>
               </tbody>
             </table>
           </div>
@@ -1050,6 +1209,139 @@
         <div class="lco-modal-actions">
           <button type="button" class="lco-modal-cancel" id="recPayCancelBtn">Cancel</button>
           <button type="submit" class="lco-modal-confirm" id="recPayConfirmBtn">Record Payment</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     MANAGE SERVICE REQUEST MODAL (Phase 9)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="manageRequestModal">
+    <div class="lco-modal" style="max-width:650px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+        <h3 style="margin:0;">Manage Service Request</h3>
+        <span class="lco-badge" id="manageReqHeaderId" style="font-size:14px; font-weight:700;">REQ-2026-XXXX</span>
+      </div>
+
+      <!-- Customer & Complaint summary header card -->
+      <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-size:13px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+          <div><strong>Customer:</strong> <span id="manageReqCustName">—</span> (<span id="manageReqCustPhone">—</span>)</div>
+          <div><strong>Category:</strong> <span id="manageReqCategory" style="font-weight:600; color:var(--primary);">—</span></div>
+        </div>
+        <div style="margin-bottom:6px;"><strong>Subject:</strong> <span id="manageReqSubject" style="font-weight:600;">—</span></div>
+        <div style="color:#475569; background:#FFF; border:1px dashed #CBD5E1; padding:8px; border-radius:6px; margin-top:4px;">
+          <strong>Description:</strong> <span id="manageReqDescription">—</span>
+        </div>
+        <div style="font-size:11px; color:#94A3B8; margin-top:6px; text-align:right;" id="manageReqDate">Raised on —</div>
+      </div>
+
+      <form id="manageRequestForm" autocomplete="off">
+        <input type="hidden" id="manageReqDbId">
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="manageReqStatus">Request Status *</label>
+            <select id="manageReqStatus" required>
+              <option value="OPEN">OPEN</option>
+              <option value="IN_PROGRESS">IN PROGRESS</option>
+              <option value="RESOLVED">RESOLVED</option>
+              <option value="CLOSED">CLOSED</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+          </div>
+
+          <div class="lco-form-group">
+            <label for="manageReqPriority">Priority Level *</label>
+            <select id="manageReqPriority" required>
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+              <option value="URGENT">URGENT</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Field Technician Assignment Section -->
+        <div style="border-top:1px solid #E2E8F0; padding-top:12px; margin-top:4px; margin-bottom:12px;">
+          <h4 style="margin:0 0 10px 0; font-size:14px; color:#334155;">👷 Field Technician Assignment (Optional)</h4>
+
+          <div class="lco-form-group" style="margin-bottom:10px;">
+            <label for="manageReqTechSelect">Select Active Technician</label>
+            <select id="manageReqTechSelect">
+              <option value="">-- Unassigned --</option>
+            </select>
+          </div>
+
+          <div class="lco-form-row">
+            <div class="lco-form-group">
+              <label for="manageReqTechName">Technician Name (Auto-populated)</label>
+              <input type="text" id="manageReqTechName" placeholder="e.g. Ramesh Kumar">
+            </div>
+            <div class="lco-form-group">
+              <label for="manageReqTechPhone">Technician Contact Phone (Auto-populated)</label>
+              <input type="tel" id="manageReqTechPhone" placeholder="e.g. 9876543210">
+            </div>
+          </div>
+
+          <div class="lco-form-group">
+            <label for="manageReqTechNotes">Technician Instructions / Field Notes</label>
+            <input type="text" id="manageReqTechNotes" placeholder="e.g. Check splitter box near building B elevator shaft">
+          </div>
+        </div>
+
+        <!-- Resolution & Admin Notes -->
+        <div class="lco-form-group">
+          <label for="manageReqResolutionNotes">Resolution Notes (Visible to Customer when Resolved/Closed)</label>
+          <textarea id="manageReqResolutionNotes" placeholder="e.g. Replaced damaged optical fiber patch cable and verified power signal."></textarea>
+        </div>
+
+        <div class="lco-form-group">
+          <label for="manageReqAdminNotes">Internal Admin Notes (Private)</label>
+          <input type="text" id="manageReqAdminNotes" placeholder="Internal operator notes…">
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="manageReqCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="manageReqConfirmBtn">Save Updates</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     ADD TECHNICIAN MODAL (Phase 10)
+     ═══════════════════════════════════════════ -->
+  <div class="lco-modal-overlay" id="addTechModal">
+    <div class="lco-modal">
+      <h3>Add Field Technician</h3>
+      <form id="addTechForm" autocomplete="off">
+        <div class="lco-form-group">
+          <label for="addTechName">Full Name *</label>
+          <input type="text" id="addTechName" placeholder="e.g. Ramesh Kumar" required>
+        </div>
+
+        <div class="lco-form-row">
+          <div class="lco-form-group">
+            <label for="addTechPhone">Phone Number *</label>
+            <input type="tel" id="addTechPhone" placeholder="e.g. 9876543210" required>
+          </div>
+          <div class="lco-form-group">
+            <label for="addTechEmail">Email Address *</label>
+            <input type="email" id="addTechEmail" placeholder="e.g. ramesh.tech@example.com" required>
+          </div>
+        </div>
+
+        <div style="font-size:12px; color:#64748B; background:#F8FAFC; padding:10px; border-radius:6px; border-left:3px solid #0B7A6E; margin-bottom:16px;">
+          ℹ️ An invitation email will be generated automatically to allow the technician to activate their portal account.
+        </div>
+
+        <div class="lco-modal-actions">
+          <button type="button" class="lco-modal-cancel" id="addTechCancelBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="addTechConfirmBtn">Save & Send Invite</button>
         </div>
       </form>
     </div>

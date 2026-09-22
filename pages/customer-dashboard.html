@@ -86,6 +86,10 @@
         <button class="cust-nav-item" data-view="billing" id="navCustBilling">
           <span class="cust-nav-icon">💳</span> Billing & Payments
         </button>
+        <button class="cust-nav-item" data-view="requests" id="navCustRequests">
+          <span class="cust-nav-icon">🛠️</span> Service Requests
+          <span class="cust-nav-badge" id="custRequestsCount" style="display:none;">0</span>
+        </button>
         <button class="cust-nav-item" data-view="notifications" id="navCustNotifications">
           <span class="cust-nav-icon">🔔</span> Notifications
           <span class="cust-nav-badge" id="custNotifCount" style="display:none;">0</span>
@@ -288,6 +292,42 @@
         </section>
 
 
+        <!-- ═══════════ VIEW: SERVICE REQUESTS ═══════════ -->
+        <section class="cust-view" id="view-requests">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+            <div>
+              <h1 class="cust-view-title">Service Requests & Complaints</h1>
+              <p class="cust-view-subtitle">Raise technical issues, track request resolution, and view complaint history</p>
+            </div>
+            <button class="lco-quick-btn primary" id="openCreateRequestBtn">🛠️ + Raise Service Request</button>
+          </div>
+
+          <div class="cust-card">
+            <div class="cust-card-title">
+              <span>📋 My Requests History</span>
+            </div>
+            <div class="lco-table-wrap">
+              <table class="lco-table" id="custRequestsTable">
+                <thead>
+                  <tr>
+                    <th>Ticket #</th>
+                    <th>Category</th>
+                    <th>Subject</th>
+                    <th>Priority</th>
+                    <th>Status</th>
+                    <th>Date Raised</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="custRequestsTableBody">
+                  <tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">Loading service requests…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+
         <!-- ═══════════ VIEW: NOTIFICATIONS ═══════════ -->
         <section class="cust-view" id="view-notifications">
           <h1 class="cust-view-title">Notifications</h1>
@@ -350,27 +390,83 @@
 
 
   <!-- ═══════════════════════════════════════════
-     REQUEST PLAN MODAL
+     CREATE SERVICE REQUEST MODAL
      ═══════════════════════════════════════════ -->
-  <div class="cust-modal-overlay" id="requestPlanModal">
+  <div class="cust-modal-overlay" id="createRequestModal">
     <div class="cust-modal">
-      <h3>Request Plan Change</h3>
-      <form id="requestPlanForm">
-        <input type="hidden" id="reqPlanId" title="Plan ID">
+      <h3>Raise Service Request / Complaint</h3>
+      <form id="createRequestForm" autocomplete="off">
         <div class="lco-form-group">
-          <label>Requested Plan</label>
-          <input type="text" id="reqPlanName" readonly style="background:rgba(0,0,0,0.04);">
+          <label for="custReqCategory">Issue Category *</label>
+          <select id="custReqCategory" required>
+            <option value="NO_SIGNAL">No Signal / TV Blackout</option>
+            <option value="SLOW_INTERNET">Slow Internet Speed</option>
+            <option value="NO_INTERNET">No Internet Connection</option>
+            <option value="BILLING_ISSUE">Billing / Payment Query</option>
+            <option value="HARDWARE_FAULT">Hardware / Router / Box Fault</option>
+            <option value="NEW_CONNECTION">New Connection Request</option>
+            <option value="RELOCATION">Service Relocation</option>
+            <option value="OTHER">Other Query / Complaint</option>
+          </select>
         </div>
+
         <div class="lco-form-group">
-          <label for="reqPlanNotes">Message for Operator (optional)</label>
-          <textarea id="reqPlanNotes" placeholder="e.g. Please upgrade my plan starting next month..."></textarea>
+          <label for="custReqSubject">Subject / Brief Summary *</label>
+          <input type="text" id="custReqSubject" placeholder="e.g. Fiber LOS red light blinking on router" required maxlength="120">
+        </div>
+
+        <div class="lco-form-group">
+          <label for="custReqDescription">Detailed Description *</label>
+          <textarea id="custReqDescription" placeholder="Please describe the issue in detail, including when it started..." required style="min-height:90px;"></textarea>
+        </div>
+
+        <div style="font-size:12px; color:#64748B; margin-bottom:16px; background:#F8FAFC; padding:10px; border-radius:6px; border-left:3px solid #0B7A6E;">
+          📌 <strong>Note:</strong> Your request will be logged with <strong>MEDIUM</strong> priority and sent directly to your LCO Admin.
         </div>
 
         <div class="lco-modal-actions">
-          <button type="button" class="lco-modal-cancel" id="cancelReqPlanBtn">Cancel</button>
-          <button type="submit" class="lco-modal-confirm" id="confirmReqPlanBtn">Send Request</button>
+          <button type="button" class="lco-modal-cancel" id="cancelCreateReqBtn">Cancel</button>
+          <button type="submit" class="lco-modal-confirm" id="confirmCreateReqBtn">Submit Request</button>
         </div>
       </form>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     VIEW REQUEST DETAIL MODAL
+     ═══════════════════════════════════════════ -->
+  <div class="cust-modal-overlay" id="custReqDetailModal">
+    <div class="cust-modal" style="max-width:540px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+        <div>
+          <h3 id="custReqDetailId" style="margin:0;">REQ-2026-0000</h3>
+          <div id="custReqDetailCategory" style="font-size:13px; color:#64748B; margin-top:2px;">—</div>
+        </div>
+        <div id="custReqDetailBadges" style="display:flex; gap:6px;"></div>
+      </div>
+
+      <div class="cust-card" style="background:#F8FAFC; padding:16px; margin-bottom:16px;">
+        <div style="font-weight:600; font-size:15px; margin-bottom:6px;" id="custReqDetailSubject">—</div>
+        <div style="font-size:14px; color:#334155; white-space:pre-wrap;" id="custReqDetailDescription">—</div>
+        <div style="font-size:11px; color:#94A3B8; margin-top:10px;" id="custReqDetailDate">—</div>
+      </div>
+
+      <!-- Resolution & Technician Info -->
+      <div id="custReqDetailResolutionSection" style="display:none; margin-bottom:16px; background:#F0FDF4; border:1px solid #BBF7D0; padding:14px; border-radius:8px;">
+        <div style="font-weight:600; color:#166534; font-size:13px; margin-bottom:4px;">✅ Operator Resolution Notes</div>
+        <div style="font-size:13px; color:#15803D;" id="custReqDetailResolutionNotes">—</div>
+      </div>
+
+      <div id="custReqDetailTechSection" style="display:none; margin-bottom:16px; background:#F1F5F9; padding:12px; border-radius:8px; font-size:13px;">
+        <div style="font-weight:600; color:#475569; margin-bottom:4px;">👷 Assigned Technician</div>
+        <div id="custReqDetailTechInfo" style="color:#334155;">—</div>
+      </div>
+
+      <div class="lco-modal-actions" style="justify-content:space-between; align-items:center;">
+        <button type="button" class="lco-quick-btn secondary" id="custCancelReqActionBtn" style="display:none; color:#DC2626; border-color:#FCA5A5;">Cancel Request</button>
+        <button type="button" class="lco-modal-cancel" id="closeCustReqDetailBtn" style="margin-left:auto;">Close</button>
+      </div>
     </div>
   </div>
 

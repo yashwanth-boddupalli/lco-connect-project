@@ -326,6 +326,12 @@ body.cust-dashboard-page {
 .cust-badge.expired { background: rgba(225, 29, 72, 0.12); color: #E11D48; }
 .cust-badge.pending { background: rgba(59, 130, 246, 0.12); color: #2563EB; }
 
+/* Priority Badges (Phase 9) */
+.cust-badge.priority-urgent { background: #FEF2F2; color: #DC2626; border: 1px solid #FCA5A5; }
+.cust-badge.priority-high { background: #FFEDD5; color: #C2410C; border: 1px solid #FDBA74; }
+.cust-badge.priority-medium { background: #FEF9C3; color: #854D0E; border: 1px solid #FDE047; }
+.cust-badge.priority-low { background: #EFF6FF; color: #1D4ED8; border: 1px solid #93C5FD; }
+
 /* ── Detail Grid ── */
 .cust-grid {
   display: grid;
@@ -502,4 +508,30 @@ body.cust-dashboard-page {
   }
   .cust-sidebar.open { display: flex; }
   .cust-content { padding: 20px 16px; }
+}
+
+/* Action button styling for View Details button */
+.lco-action-btn {
+  padding: 6px 14px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  border: 1.5px solid var(--primary, #0B7A6E);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--primary, #0B7A6E);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.lco-action-btn:hover {
+  background: var(--primary, #0B7A6E);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(11, 122, 110, 0.2);
+}
+
+.lco-action-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(11, 122, 110, 0.25);
 }

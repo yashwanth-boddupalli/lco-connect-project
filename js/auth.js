@@ -33,7 +33,7 @@ var LCOAuth = (function () {
     SUPER_ADMIN: 'super-admin.html',
     LCO_ADMIN:   'lco-dashboard.html',
     CUSTOMER:    'customer-dashboard.html',
-    TECHNICIAN:  null
+    TECHNICIAN:  'technician-dashboard.html'
   };
 
   /* Common login page (relative to /pages/) */

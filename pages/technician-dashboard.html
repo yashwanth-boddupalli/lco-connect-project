@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Technician Portal — LCO Connect</title>
+  <meta name="description" content="Field Technician Portal for viewing assigned service requests, updating progress, and resolving customer tickets.">
+  <meta name="theme-color" content="#0B7A6E">
+  <meta name="robots" content="noindex, nofollow">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="../css/style.css">
+  <link rel="stylesheet" href="../css/lco-dashboard.css">
+  <link rel="stylesheet" href="../css/technician-dashboard.css">
+</head>
+
+<body class="tech-dashboard-page">
+
+  <!-- Toast container -->
+  <div class="lco-toast-container" id="techToastContainer" aria-live="polite"></div>
+
+  <!-- Loading screen -->
+  <div class="lco-loading-screen" id="techLoadingScreen">
+    <div class="lco-loading-content">
+      <div class="lco-loading-spinner"></div>
+      <div class="lco-loading-text">Loading Technician Portal…</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+     MAIN DASHBOARD (Hidden until authenticated)
+     ═══════════════════════════════════════════ -->
+  <div id="techDashboardContainer" style="display: none;">
+
+    <!-- Header -->
+    <header class="tech-header">
+      <div class="tech-header-inner">
+        <div class="tech-header-left">
+          <button class="tech-mobile-nav-toggle" id="techMobileNavToggle" aria-label="Toggle navigation">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <a href="../index.html" class="brand" aria-label="LCO Connect — Home">
+            <span class="brand-mark" aria-hidden="true"></span>LCO Connect
+          </a>
+          <span class="tech-header-badge">Technician Portal</span>
+        </div>
+        <div class="tech-header-right">
+          <div class="tech-header-user">
+            <span class="tech-header-user-name" id="techHeaderName">—</span>
+            <span class="tech-header-user-id" id="techHeaderId">—</span>
+          </div>
+          <button class="tech-logout-btn" id="techLogoutBtn">Logout</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Body Layout -->
+    <div class="tech-body">
+
+      <!-- Mobile Sidebar Overlay -->
+      <div class="tech-sidebar-overlay" id="techSidebarOverlay"></div>
+
+      <!-- Sidebar Navigation -->
+      <aside class="tech-sidebar" id="techSidebar">
+        <div class="tech-sidebar-title">Menu</div>
+
+        <button class="tech-nav-item active" data-view="overview" id="navTechOverview">
+          <span class="tech-nav-icon">◎</span> Dashboard
+        </button>
+        <button class="tech-nav-item" data-view="requests" id="navTechRequests">
+          <span class="tech-nav-icon">🛠️</span> Assigned Requests
+          <span class="tech-nav-badge" id="techRequestsCount" style="display:none;">0</span>
+        </button>
+        <button class="tech-nav-item" data-view="notifications" id="navTechNotifications">
+          <span class="tech-nav-icon">🔔</span> Notifications
+          <span class="tech-nav-badge" id="techNotifCount" style="display:none;">0</span>
+        </button>
+        <button class="tech-nav-item" data-view="profile" id="navTechProfile">
+          <span class="tech-nav-icon">👷</span> My Profile
+        </button>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="tech-content">
+
+        <!-- ═══════════ VIEW: OVERVIEW ═══════════ -->
+        <section class="tech-view active" id="view-overview">
+          <h1 class="tech-view-title">Field Dashboard</h1>
+          <p class="tech-view-subtitle" id="techOverviewSub">Welcome back! Manage your assigned field service tickets.</p>
+
+          <!-- Overview Statistics Cards -->
+          <div class="tech-stats-grid">
+            <div class="tech-stat-card" data-status-filter="ALL" onclick="document.getElementById('navTechRequests').click()">
+              <div class="tech-stat-label">
+                <span class="tech-stat-dot total"></span> Total Assigned
+              </div>
+              <div class="tech-stat-val" id="statTotalAssigned">0</div>
+            </div>
+            <div class="tech-stat-card" data-status-filter="OPEN" onclick="switchReqFilter('OPEN')">
+              <div class="tech-stat-label">
+                <span class="tech-stat-dot open"></span> Open
+              </div>
+              <div class="tech-stat-val" id="statOpen">0</div>
+            </div>
+            <div class="tech-stat-card" data-status-filter="IN_PROGRESS" onclick="switchReqFilter('IN_PROGRESS')">
+              <div class="tech-stat-label">
+                <span class="tech-stat-dot in-progress"></span> In Progress
+              </div>
+              <div class="tech-stat-val" id="statInProgress">0</div>
+            </div>
+            <div class="tech-stat-card" data-status-filter="RESOLVED" onclick="switchReqFilter('RESOLVED')">
+              <div class="tech-stat-label">
+                <span class="tech-stat-dot resolved"></span> Resolved Today
+              </div>
+              <div class="tech-stat-val" id="statResolvedToday">0</div>
+            </div>
+          </div>
+
+          <!-- Quick Service Request Preview -->
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+            <h2 class="tech-section-heading" style="margin:0;">Assigned Service Requests</h2>
+            <button class="lco-quick-btn secondary" onclick="document.getElementById('navTechRequests').click()" style="font-size:13px; padding:6px 14px;">
+              View All Requests →
+            </button>
+          </div>
+
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="techOverviewTable">
+              <thead>
+                <tr>
+                  <th>Ticket #</th>
+                  <th>Customer</th>
+                  <th>Contact / Address</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="techOverviewTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading assigned requests…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: ASSIGNED SERVICE REQUESTS ═══════════ -->
+        <section class="tech-view" id="view-requests">
+          <h1 class="tech-view-title">Service Requests & Complaint Tickets</h1>
+          <p class="tech-view-subtitle">Review, update, and resolve field service requests assigned to you by your LCO operator</p>
+
+          <!-- Toolbar & Filters -->
+          <div class="lco-toolbar tech-toolbar">
+            <div class="lco-search-wrap" style="flex:1; min-width:240px;">
+              <span class="lco-search-icon">🔍</span>
+              <input type="text" id="techReqSearchInput" class="lco-search-input" placeholder="Search by Ticket #, Customer Name, Phone, Category, Subject…">
+            </div>
+
+            <div class="lco-filter-group" id="techReqStatusFilterGroup">
+              <button class="lco-filter-btn active" data-status="ALL">ALL</button>
+              <button class="lco-filter-btn" data-status="OPEN">OPEN</button>
+              <button class="lco-filter-btn" data-status="IN_PROGRESS">IN_PROGRESS</button>
+              <button class="lco-filter-btn" data-status="RESOLVED">RESOLVED</button>
+            </div>
+          </div>
+
+          <!-- Service Requests Table -->
+          <div class="lco-table-wrap">
+            <table class="lco-table" id="techRequestsTable">
+              <thead>
+                <tr>
+                  <th>Ticket #</th>
+                  <th>Customer</th>
+                  <th>Contact / Address</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Date Assigned</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="techRequestsTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading assigned service requests…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: NOTIFICATIONS ═══════════ -->
+        <section class="tech-view" id="view-notifications">
+          <h1 class="tech-view-title">Notifications</h1>
+          <p class="tech-view-subtitle">Updates and job assignments from your cable / internet operator</p>
+
+          <div class="lco-notif-list" id="techNotifList">
+            <div class="lco-empty">
+              <div class="lco-empty-icon">🔔</div>
+              <h3>Loading notifications…</h3>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: MY PROFILE ═══════════ -->
+        <section class="tech-view" id="view-profile">
+          <h1 class="tech-view-title">Technician Profile</h1>
+          <p class="tech-view-subtitle">Your field technician account details and associated operator info</p>
+
+          <!-- Profile Card Header -->
+          <div class="lco-profile-header">
+            <div class="lco-profile-avatar" id="techProfileAvatar">TC</div>
+            <div class="lco-profile-info">
+              <h2 id="techProfileName">—</h2>
+              <p id="techProfileBadge"><span class="lco-badge active">ACTIVE</span></p>
+            </div>
+          </div>
+
+          <!-- Personal Information -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">👷</span> Technician Details
+            </div>
+            <div class="lco-detail-grid" id="techProfileDetailsGrid">
+              <div style="font-size:14px; color:var(--slate);">Loading technician details…</div>
+            </div>
+          </div>
+
+          <!-- LCO Operator Info -->
+          <div class="lco-detail-section">
+            <div class="lco-detail-section-title">
+              <span class="lco-detail-section-icon">🏢</span> Associated LCO Operator
+            </div>
+            <div class="lco-detail-grid" id="techProfileLcoGrid">
+              <div style="font-size:14px; color:var(--slate);">Loading LCO operator information…</div>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════
+     REQUEST DETAIL & WORK MODAL
+     ═══════════════════════════════════════════ -->
+  <div class="tech-modal-overlay" id="requestDetailModal">
+    <div class="tech-modal">
+      
+      <!-- Modal Header -->
+      <div class="tech-modal-header">
+        <div>
+          <div class="tech-modal-ticket-id" id="modalReqId">REQ-2026-0000</div>
+          <div class="tech-modal-category" id="modalServiceCategory">No Signal</div>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;" id="modalHeaderBadges">
+          <span class="lco-badge priority-medium" id="modalPriorityBadge">MEDIUM</span>
+          <span class="lco-badge pending" id="modalStatusBadge">OPEN</span>
+        </div>
+      </div>
+
+      <!-- Customer Details Box -->
+      <div class="tech-modal-card">
+        <div class="tech-modal-card-title">👤 Customer & Location Info</div>
+        <div class="tech-detail-grid">
+          <div class="tech-detail-field">
+            <span class="tech-detail-label">Customer Name</span>
+            <span class="tech-detail-val" id="modalCustName">—</span>
+          </div>
+          <div class="tech-detail-field">
+            <span class="tech-detail-label">Customer Phone</span>
+            <span class="tech-detail-val" id="modalCustPhone">—</span>
+          </div>
+          <div class="tech-detail-field full">
+            <span class="tech-detail-label">Service Address</span>
+            <span class="tech-detail-val" id="modalCustAddress">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Problem Details Box -->
+      <div class="tech-modal-card">
+        <div class="tech-modal-card-title">🛠️ Ticket Details</div>
+        <div style="font-weight:600; font-size:14px; color:var(--ink); margin-bottom:6px;" id="modalSubject">—</div>
+        <div style="font-size:13px; color:var(--slate); line-height:1.5; white-space:pre-wrap;" id="modalCustomerDescription">—</div>
+        <div style="font-size:11px; color:var(--slate); margin-top:10px; font-family:'IBM Plex Mono',monospace;" id="modalCreatedDate">Raised on: —</div>
+      </div>
+
+      <!-- Technician Notes Form -->
+      <form id="techWorkForm" autocomplete="off">
+        <input type="hidden" id="modalReqDbId">
+        
+        <div class="lco-form-group">
+          <label for="modalTechNotes">Technician Field Notes (Internal / Work Progress)</label>
+          <textarea id="modalTechNotes" placeholder="Enter inspection notes, replaced components, optical power readings, etc..." rows="3"></textarea>
+          <div class="tech-field-hint">Notes added here are recorded in the service request log.</div>
+        </div>
+
+        <div class="lco-form-group" id="modalResolutionNotesGroup">
+          <label for="modalResolutionNotes">Resolution Notes * (Required to Mark Resolved)</label>
+          <textarea id="modalResolutionNotes" placeholder="Describe the resolution provided to the customer (e.g., Reconnected fiber cable at pole junction, signal strength restored to -19dBm)..." rows="3"></textarea>
+          <div class="lco-form-error" id="modalResolutionNotes-error">Resolution notes are required before marking ticket as resolved.</div>
+        </div>
+
+        <!-- Dynamic Actions Area -->
+        <div class="tech-modal-actions" id="modalActions">
+          <!-- Rendered dynamically depending on request status -->
+        </div>
+      </form>
+
+    </div>
+  </div>
+
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Shared Auth Module -->
+  <script src="../js/auth.js"></script>
+
+  <!-- Technician Dashboard Logic -->
+  <script src="../js/technician-dashboard.js"></script>
+
+</body>
+
+</html>
