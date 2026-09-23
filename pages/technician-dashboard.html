@@ -211,52 +211,98 @@
             </div>
           </div>
 
-          <!-- Toolbar -->
-          <div class="lco-toolbar" style="margin-bottom:16px; flex-wrap:wrap; gap:12px;">
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
-              <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Category:</span>
-              <div class="lco-filter-group" id="techNotifCategoryFilter">
-                <button class="lco-filter-btn active" data-cat="ALL">All</button>
-                <button class="lco-filter-btn" data-cat="SERVICE_REQUEST">Field Tickets</button>
-                <button class="lco-filter-btn" data-cat="ACCOUNT">Account</button>
-                <button class="lco-filter-btn" data-cat="SYSTEM">System</button>
+          <!-- Notification Sub-Tabs Bar -->
+          <div class="lco-sub-tabs" id="techNotifSubTabs" style="display:flex; gap:8px; margin-bottom:20px; border-bottom:1px solid #E2E8F0; padding-bottom:8px;">
+            <button class="lco-sub-tab-btn active" data-tech-notif-tab="feed">🔔 Activity Feed</button>
+            <button class="lco-sub-tab-btn" data-tech-notif-tab="history">📜 Communication History</button>
+          </div>
+
+          <!-- SUB-TAB 1: ACTIVITY FEED -->
+          <div id="techNotifTabFeedContainer" class="notif-sub-tab-content">
+            <!-- Toolbar -->
+            <div class="lco-toolbar" style="margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Category:</span>
+                <div class="lco-filter-group" id="techNotifCategoryFilter">
+                  <button class="lco-filter-btn active" data-cat="ALL">All</button>
+                  <button class="lco-filter-btn" data-cat="SERVICE_REQUEST">Field Tickets</button>
+                  <button class="lco-filter-btn" data-cat="ACCOUNT">Account</button>
+                  <button class="lco-filter-btn" data-cat="SYSTEM">System</button>
+                </div>
+              </div>
+
+              <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-left:auto;">
+                <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Status:</span>
+                <div class="lco-filter-group" id="techNotifStatusFilter">
+                  <button class="lco-filter-btn active" data-status="ALL">All</button>
+                  <button class="lco-filter-btn" data-status="UNREAD">Unread</button>
+                  <button class="lco-filter-btn" data-status="READ">Read</button>
+                </div>
               </div>
             </div>
 
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-left:auto;">
-              <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Status:</span>
-              <div class="lco-filter-group" id="techNotifStatusFilter">
-                <button class="lco-filter-btn active" data-status="ALL">All</button>
-                <button class="lco-filter-btn" data-status="UNREAD">Unread</button>
-                <button class="lco-filter-btn" data-status="READ">Read</button>
+            <!-- Preferences Card -->
+            <div class="lco-detail-section" id="techNotifPrefCard" style="display:none; margin-bottom:20px; background:#F8FAFC; border:1px solid #CBD5E1;">
+              <div class="lco-detail-section-title" style="margin-bottom:12px;">
+                <span>⚙️ Technician Preferences</span>
+                <button class="lco-quick-btn secondary" id="techClosePrefBtn" style="padding:4px 10px; font-size:12px;">Close</button>
+              </div>
+              <p style="font-size:13px; color:var(--slate); margin-bottom:16px;">
+                Configure job assignment & service ticket alert preferences.
+              </p>
+
+              <div id="techPrefForm" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
+              </div>
+
+              <div style="margin-top:16px; display:flex; justify-content:flex-end; align-items:center; gap:12px;">
+                <div style="font-size:12px; color:#64748B;">🔐 Mandatory ticket assignment & account alerts are always active.</div>
+                <button class="lco-quick-btn primary" id="techSavePrefBtn">Save Preferences</button>
+              </div>
+            </div>
+
+            <!-- Notification Feed List -->
+            <div class="lco-notif-list" id="techNotifList">
+              <div class="lco-empty">
+                <div class="lco-empty-icon">🔔</div>
+                <h3>Loading notifications…</h3>
               </div>
             </div>
           </div>
 
-          <!-- Preferences Card -->
-          <div class="lco-detail-section" id="techNotifPrefCard" style="display:none; margin-bottom:20px; background:#F8FAFC; border:1px solid #CBD5E1;">
-            <div class="lco-detail-section-title" style="margin-bottom:12px;">
-              <span>⚙️ Technician Preferences</span>
-              <button class="lco-quick-btn secondary" id="techClosePrefBtn" style="padding:4px 10px; font-size:12px;">Close</button>
+          <!-- SUB-TAB 2: COMMUNICATION HISTORY (Phase 11 Batch 3) -->
+          <div id="techNotifTabHistoryContainer" class="notif-sub-tab-content" style="display:none;">
+            <div class="lco-toolbar" style="margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+              <div class="lco-search-wrap" style="flex:1; min-width:240px;">
+                <span class="lco-search-icon">🔍</span>
+                <input type="text" id="techCommSearchInput" class="lco-search-input" placeholder="Search ticket & account history…">
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Category:</span>
+                <select id="techCommCategorySelect" class="lco-select-input" style="padding:8px 12px; font-size:13px; border-radius:8px; border:1.5px solid var(--line); background:#FFF;">
+                  <option value="ALL">All Categories</option>
+                  <option value="SERVICE_REQUEST">Field Tickets</option>
+                  <option value="ACCOUNT">Account</option>
+                  <option value="SYSTEM">System</option>
+                </select>
+              </div>
             </div>
-            <p style="font-size:13px; color:var(--slate); margin-bottom:16px;">
-              Configure job assignment & service ticket alert preferences.
-            </p>
 
-            <div id="techPrefForm" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:16px;">
-            </div>
-
-            <div style="margin-top:16px; display:flex; justify-content:flex-end; align-items:center; gap:12px;">
-              <div style="font-size:12px; color:#64748B;">🔐 Mandatory ticket assignment & account alerts are always active.</div>
-              <button class="lco-quick-btn primary" id="techSavePrefBtn">Save Preferences</button>
-            </div>
-          </div>
-
-          <!-- Notification Feed List -->
-          <div class="lco-notif-list" id="techNotifList">
-            <div class="lco-empty">
-              <div class="lco-empty-icon">🔔</div>
-              <h3>Loading notifications…</h3>
+            <div class="lco-table-wrap">
+              <table class="lco-table" id="techCommHistoryTable">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th>Summary</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Date & Time</th>
+                  </tr>
+                </thead>
+                <tbody id="techCommHistoryBody">
+                  <tr><td colspan="6" style="text-align:center; padding:32px; color:var(--slate);">Loading communication history…</td></tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </section>

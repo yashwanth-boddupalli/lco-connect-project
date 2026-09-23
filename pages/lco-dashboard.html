@@ -715,6 +715,7 @@
             <button class="lco-sub-tab-btn active" data-notif-tab="feed">🔔 Activity Feed</button>
             <button class="lco-sub-tab-btn" data-notif-tab="broadcasts">📢 Broadcast History</button>
             <button class="lco-sub-tab-btn" data-notif-tab="urgent">🚨 Urgent Notices</button>
+            <button class="lco-sub-tab-btn" data-notif-tab="history">📜 Communication History</button>
           </div>
 
           <!-- SUB-TAB 1: ACTIVITY FEED -->
@@ -811,6 +812,48 @@
                 </thead>
                 <tbody id="lcoUrgentNoticesBody">
                   <tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading urgent notices…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- SUB-TAB 4: COMMUNICATION HISTORY (Phase 11 Batch 3) -->
+          <div id="notifTabHistoryContainer" class="notif-sub-tab-content" style="display:none;">
+            <div class="lco-toolbar" style="margin-bottom:16px; flex-wrap:wrap; gap:12px;">
+              <div class="lco-search-wrap" style="flex:1; min-width:240px;">
+                <span class="lco-search-icon">🔍</span>
+                <input type="text" id="lcoCommSearchInput" class="lco-search-input" placeholder="Search history by title, summary, recipient name…">
+              </div>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--slate); font-family:'IBM Plex Mono',monospace;">Category:</span>
+                <select id="lcoCommCategorySelect" class="lco-select-input" style="padding:8px 12px; font-size:13px; border-radius:8px; border:1.5px solid var(--line); background:#FFF;">
+                  <option value="ALL">All Categories</option>
+                  <option value="ACCOUNT">Account</option>
+                  <option value="SERVICE_REQUEST">Service Request</option>
+                  <option value="PAYMENT">Payment</option>
+                  <option value="ANNOUNCEMENT">Announcement</option>
+                  <option value="SYSTEM">System</option>
+                  <option value="CUSTOMER_ACTIVITY">Customer Activity</option>
+                  <option value="TECHNICIAN_ACTIVITY">Technician Activity</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="lco-table-wrap">
+              <table class="lco-table" id="lcoCommHistoryTable">
+                <thead>
+                  <tr>
+                    <th>Event / Title</th>
+                    <th>Category</th>
+                    <th>Summary</th>
+                    <th>Recipient</th>
+                    <th>Channel</th>
+                    <th>Status</th>
+                    <th>Date & Time</th>
+                  </tr>
+                </thead>
+                <tbody id="lcoCommHistoryBody">
+                  <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading communication history…</td></tr>
                 </tbody>
               </table>
             </div>

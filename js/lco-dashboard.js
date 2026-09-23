@@ -1681,10 +1681,12 @@
         var feedWrap = document.getElementById('notifTabFeedContainer');
         var broadcastsWrap = document.getElementById('notifTabBroadcastsContainer');
         var urgentWrap = document.getElementById('notifTabUrgentContainer');
+        var historyWrap = document.getElementById('notifTabHistoryContainer');
 
         if (feedWrap) feedWrap.style.display = (activeNotifSubTab === 'feed') ? 'block' : 'none';
         if (broadcastsWrap) broadcastsWrap.style.display = (activeNotifSubTab === 'broadcasts') ? 'block' : 'none';
         if (urgentWrap) urgentWrap.style.display = (activeNotifSubTab === 'urgent') ? 'block' : 'none';
+        if (historyWrap) historyWrap.style.display = (activeNotifSubTab === 'history') ? 'block' : 'none';
 
         if (activeNotifSubTab === 'feed') {
           loadNotifications();
@@ -1692,9 +1694,99 @@
           loadBroadcastHistory();
         } else if (activeNotifSubTab === 'urgent') {
           loadUrgentNoticesHistory();
+        } else if (activeNotifSubTab === 'history') {
+          loadCommunicationHistory();
         }
       });
     });
+
+    var catSel = document.getElementById('lcoCommCategorySelect');
+    if (catSel) {
+      catSel.addEventListener('change', function() {
+        if (activeNotifSubTab === 'history') loadCommunicationHistory();
+      });
+    }
+
+    var searchInput = document.getElementById('lcoCommSearchInput');
+    if (searchInput) {
+      var debounceTimer;
+      searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function() {
+          if (activeNotifSubTab === 'history') loadCommunicationHistory();
+        }, 300);
+      });
+    }
+  }
+
+  async function loadCommunicationHistory() {
+    var body = document.getElementById('lcoCommHistoryBody');
+    if (!body) return;
+    body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading communication history…</td></tr>';
+
+    var category = document.getElementById('lcoCommCategorySelect') ? document.getElementById('lcoCommCategorySelect').value : 'ALL';
+    var search = document.getElementById('lcoCommSearchInput') ? document.getElementById('lcoCommSearchInput').value.trim() : '';
+
+    try {
+      var { data, error } = await sb.rpc('get_lco_communication_history', {
+        p_category: category,
+        p_search: search || null
+      });
+      if (error) throw error;
+
+      var events = data || [];
+      if (events.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">No communication history records found.</td></tr>';
+        return;
+      }
+
+      body.innerHTML = events.map(function(ev) {
+        var catBadge = renderCategoryBadge(ev.category);
+        var channelBadge = renderChannelBadge(ev.channel);
+        var statusBadge = renderCommStatusBadge(ev.status_label);
+
+        return '<tr>' +
+          '<td><strong style="color:var(--ink);">' + esc(ev.title) + '</strong></td>' +
+          '<td>' + catBadge + '</td>' +
+          '<td><div style="font-size:13px; color:#475569; max-width:320px;">' + esc(ev.summary) + '</div></td>' +
+          '<td><strong>' + esc(ev.recipient_name || '—') + '</strong> <span style="font-size:11px; color:#64748B;">(' + esc(ev.recipient_role || '') + ')</span></td>' +
+          '<td>' + channelBadge + '</td>' +
+          '<td>' + statusBadge + '</td>' +
+          '<td>' + formatDateFull(ev.created_at) + '</td>' +
+          '</tr>';
+      }).join('');
+    } catch (e) {
+      console.error('Load communication history error:', e);
+      body.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#DC2626;">Failed to load communication history.</td></tr>';
+    }
+  }
+
+  function renderCategoryBadge(cat) {
+    var cls = 'default';
+    if (cat === 'ACCOUNT') cls = 'account';
+    else if (cat === 'SERVICE_REQUEST') cls = 'service';
+    else if (cat === 'PAYMENT') cls = 'payment';
+    else if (cat === 'ANNOUNCEMENT') cls = 'announcement';
+    else if (cat === 'TECHNICIAN_ACTIVITY') cls = 'technician';
+    return '<span class="lco-notif-cat-badge ' + cls + '">' + esc(cat) + '</span>';
+  }
+
+  function renderChannelBadge(ch) {
+    var bg = '#E2E8F0', color = '#334155';
+    if (ch === 'In-App Feed') { bg = '#E0F2FE'; color = '#0369A1'; }
+    else if (ch === 'Email Invite (Sent/Attempted)') { bg = '#FEF3C7'; color = '#92400E'; }
+    else if (ch === 'Urgent Notice Banner') { bg = '#FEE2E2'; color = '#991B1B'; }
+    else if (ch === 'Broadcast Feed') { bg = '#F3E8FF'; color = '#6B21A8'; }
+    return '<span style="display:inline-block; padding:3px 8px; border-radius:12px; font-size:11px; font-weight:600; background:' + bg + '; color:' + color + ';">' + esc(ch) + '</span>';
+  }
+
+  function renderCommStatusBadge(status) {
+    var bg = '#F1F5F9', color = '#475569';
+    var st = (status || '').toUpperCase();
+    if (st === 'READ' || st === 'ACTIVATED' || st === 'ACTIVE') { bg = '#DCFCE7'; color = '#166534'; }
+    else if (st === 'UNREAD' || st === 'INVITED' || st === 'PENDING') { bg = '#FEF9C3'; color = '#854D0E'; }
+    else if (st === 'FAILED' || st === 'EXPIRED' || st === 'INACTIVE') { bg = '#FEE2E2'; color = '#991B1B'; }
+    return '<span style="display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; background:' + bg + '; color:' + color + ';">' + esc(status || '—') + '</span>';
   }
 
   async function loadBroadcastHistory() {
