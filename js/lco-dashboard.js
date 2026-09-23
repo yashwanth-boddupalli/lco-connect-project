@@ -139,6 +139,7 @@
     setupTechnicianListeners(); // Phase 10
     setupAddTechModal();        // Phase 10
     setupNotificationCenterListeners(); // Phase 11 Batch 1
+    setupAnalyticsListeners();  // Phase 12 Batch 2
 
     // Load initial data
     loadStats();
@@ -185,6 +186,8 @@
     if (viewName === 'overview') {
       loadStats();
       loadRecentCustomers();
+    } else if (viewName === 'analytics') {
+      loadAnalyticsDashboard();
     } else if (viewName === 'customers') {
       renderCustomersTable();
     } else if (viewName === 'plans') {
@@ -3643,6 +3646,421 @@
     } catch (e) {
       return dateStr;
     }
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 12 BATCH 2: LCO ANALYTICS DASHBOARD LOGIC
+     ══════════════════════════════════════════════ */
+
+  var currentAnalyticsDatePreset = 'all_time';
+  var analyticsDateFrom = null;
+  var analyticsDateTo = null;
+  var analyticsData = {
+    overview: null,
+    payment: null,
+    serviceRequest: null,
+    technician: null
+  };
+
+  function setupAnalyticsListeners() {
+    var presetSelect = document.getElementById('lcoAnalyticsDatePreset');
+    var customWrap = document.getElementById('lcoAnalyticsCustomDatesWrap');
+    var applyBtn = document.getElementById('lcoAnalyticsApplyCustomBtn');
+    var refreshBtn = document.getElementById('lcoAnalyticsRefreshBtn');
+
+    if (presetSelect) {
+      presetSelect.addEventListener('change', function () {
+        currentAnalyticsDatePreset = presetSelect.value;
+        if (currentAnalyticsDatePreset === 'custom') {
+          if (customWrap) customWrap.style.display = 'flex';
+        } else {
+          if (customWrap) customWrap.style.display = 'none';
+          updateAnalyticsDateBounds(currentAnalyticsDatePreset);
+          loadAnalyticsDashboard();
+        }
+      });
+    }
+
+    if (applyBtn) {
+      applyBtn.addEventListener('click', function () {
+        var fromVal = document.getElementById('lcoAnalyticsDateFrom').value;
+        var toVal = document.getElementById('lcoAnalyticsDateTo').value;
+
+        if (!fromVal || !toVal) {
+          showToast('Please select both From and To dates.', 'error');
+          return;
+        }
+
+        analyticsDateFrom = new Date(fromVal + 'T00:00:00').toISOString();
+        analyticsDateTo = new Date(toVal + 'T23:59:59.999').toISOString();
+
+        loadAnalyticsDashboard();
+      });
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function () {
+        loadAnalyticsDashboard();
+      });
+    }
+  }
+
+  function updateAnalyticsDateBounds(preset) {
+    var now = new Date();
+
+    if (preset === 'all_time') {
+      analyticsDateFrom = null;
+      analyticsDateTo = null;
+    } else if (preset === 'this_month') {
+      var firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      analyticsDateFrom = firstDay.toISOString();
+      analyticsDateTo = now.toISOString();
+    } else if (preset === 'last_month') {
+      var prevMonthFirst = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      var prevMonthLast = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      analyticsDateFrom = prevMonthFirst.toISOString();
+      analyticsDateTo = prevMonthLast.toISOString();
+    } else if (preset === 'last_3_months') {
+      var threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      analyticsDateFrom = threeMonthsAgo.toISOString();
+      analyticsDateTo = now.toISOString();
+    } else if (preset === 'this_year') {
+      var yearFirst = new Date(now.getFullYear(), 0, 1);
+      analyticsDateFrom = yearFirst.toISOString();
+      analyticsDateTo = now.toISOString();
+    }
+  }
+
+  async function loadAnalyticsDashboard() {
+    var loadingEl = document.getElementById('lcoAnalyticsLoading');
+    var contentEl = document.getElementById('lcoAnalyticsContent');
+    var errorEl = document.getElementById('lcoAnalyticsError');
+
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (contentEl) contentEl.style.opacity = '0.4';
+    if (errorEl) errorEl.style.display = 'none';
+
+    try {
+      var params = {};
+      if (analyticsDateFrom) params.p_date_from = analyticsDateFrom;
+      if (analyticsDateTo) params.p_date_to = analyticsDateTo;
+
+      var [overviewRes, paymentRes, srRes, techRes] = await Promise.all([
+        sb.rpc('get_lco_analytics_overview', params),
+        sb.rpc('get_lco_payment_analytics', params),
+        sb.rpc('get_lco_service_request_analytics', params),
+        sb.rpc('get_lco_technician_analytics')
+      ]);
+
+      if (overviewRes.error) throw overviewRes.error;
+      if (paymentRes.error) throw paymentRes.error;
+      if (srRes.error) throw srRes.error;
+      if (techRes.error) throw techRes.error;
+
+      analyticsData.overview = overviewRes.data || {};
+      analyticsData.payment = paymentRes.data || {};
+      analyticsData.serviceRequest = srRes.data || {};
+      analyticsData.technician = techRes.data || {};
+
+      renderAnalyticsOverview(analyticsData.overview);
+      renderPaymentAnalytics(analyticsData.payment);
+      renderServiceRequestAnalytics(analyticsData.serviceRequest);
+      renderTechnicianAnalytics(analyticsData.technician);
+
+    } catch (err) {
+      console.error('Load analytics error:', err);
+      if (errorEl) {
+        var msgEl = document.getElementById('lcoAnalyticsErrorMessage');
+        if (msgEl) msgEl.textContent = err.message || 'Failed to fetch analytics data from server.';
+        errorEl.style.display = 'block';
+      }
+      showToast('Failed to load analytics data: ' + (err.message || ''), 'error');
+    } finally {
+      if (loadingEl) loadingEl.style.display = 'none';
+      if (contentEl) contentEl.style.opacity = '1';
+    }
+  }
+
+  /* 1. OVERVIEW RENDERER */
+  function renderAnalyticsOverview(overview) {
+    if (!overview) return;
+
+    // Customer metrics
+    var cust = overview.customers || {};
+    var totalCust = cust.total || 0;
+    var activeCust = cust.active || 0;
+    var newCust = cust.new_in_range || 0;
+    var inactiveCust = Math.max(0, totalCust - activeCust);
+
+    var elTotal = document.getElementById('anCustTotal');
+    if (elTotal) elTotal.textContent = totalCust;
+
+    var elActive = document.getElementById('anCustActive');
+    if (elActive) elActive.textContent = activeCust;
+
+    var elNew = document.getElementById('anCustNew');
+    if (elNew) elNew.textContent = newCust;
+
+    var elInactive = document.getElementById('anCustInactive');
+    if (elInactive) elInactive.textContent = inactiveCust;
+
+    // Billing & Revenue metrics
+    var bill = overview.billing || {};
+    var elBillTotal = document.getElementById('anBillTotal');
+    if (elBillTotal) elBillTotal.textContent = formatCurrency(bill.total_billed_amount);
+
+    var elBillPaid = document.getElementById('anBillPaid');
+    if (elBillPaid) elBillPaid.textContent = formatCurrency(bill.total_paid_amount);
+
+    var elBillPending = document.getElementById('anBillPending');
+    if (elBillPending) elBillPending.textContent = formatCurrency(bill.total_pending_amount);
+
+    var elBillOverdue = document.getElementById('anBillOverdue');
+    if (elBillOverdue) elBillOverdue.textContent = formatCurrency(bill.total_overdue_amount);
+  }
+
+  /* 2. PAYMENT ANALYTICS RENDERER */
+  function renderPaymentAnalytics(payData) {
+    if (!payData) return;
+
+    var methodContainer = document.getElementById('anPaymentMethodList');
+    var trendContainer = document.getElementById('anPaymentTrendChart');
+
+    // Methods breakdown
+    var methods = payData.methods || [];
+    var totalAmount = payData.total_amount || 0;
+
+    if (!methodContainer) return;
+
+    if (methods.length === 0 || totalAmount === 0) {
+      methodContainer.innerHTML = '<div class="lco-empty-inline">No payment data recorded for this period.</div>';
+    } else {
+      var methodLabels = {
+        'CASH': '💵 Cash',
+        'UPI': '📱 UPI / QR Code',
+        'ONLINE': '💳 Online Gateway',
+        'BANK_TRANSFER': '🏛️ Bank Transfer',
+        'CHEQUE': '📝 Cheque',
+        'OTHER': '📑 Other'
+      };
+
+      methodContainer.innerHTML = methods.map(function (m) {
+        var pct = totalAmount > 0 ? Math.round((m.amount / totalAmount) * 100) : 0;
+        var label = methodLabels[m.method] || ('📑 ' + m.method);
+        return '<div class="lco-analytics-method-item">' +
+          '<div class="lco-analytics-method-info">' +
+          '<span>' + esc(label) + ' <span style="color:var(--slate); font-size:12px;">(' + m.count + ')</span></span>' +
+          '<span><strong>' + formatCurrency(m.amount) + '</strong> <span style="color:var(--slate); font-size:11px;">(' + pct + '%)</span></span>' +
+          '</div>' +
+          '<div class="lco-analytics-bar-track">' +
+          '<div class="lco-analytics-bar-fill" style="width:' + pct + '%;"></div>' +
+          '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    // Monthly Trend
+    if (!trendContainer) return;
+
+    var monthly = payData.monthly_trend || [];
+    if (monthly.length === 0) {
+      trendContainer.innerHTML = '<div class="lco-empty-inline">No monthly revenue trend data available.</div>';
+    } else {
+      var maxAmount = Math.max.apply(Math, monthly.map(function (m) { return m.amount; })) || 1;
+
+      trendContainer.innerHTML = monthly.map(function (m) {
+        var heightPct = Math.max(10, Math.round((m.amount / maxAmount) * 100));
+        var monthStr = m.month || '';
+        var shortMonth = monthStr;
+        try {
+          var parts = monthStr.split('-');
+          if (parts.length === 2) {
+            var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+            shortMonth = d.toLocaleDateString('en-IN', { month: 'short' });
+          }
+        } catch (e) {}
+
+        return '<div class="lco-analytics-trend-bar-group" title="' + monthStr + ': ' + formatCurrency(m.amount) + ' (' + m.count + ' payments)">' +
+          '<div class="lco-analytics-trend-bar-track">' +
+          '<div class="lco-analytics-trend-bar-fill" style="height:' + heightPct + '%;"></div>' +
+          '</div>' +
+          '<span class="lco-analytics-trend-bar-label">' + shortMonth + '</span>' +
+          '</div>';
+      }).join('');
+    }
+  }
+
+  /* 3. SERVICE REQUEST ANALYTICS RENDERER */
+  function renderServiceRequestAnalytics(srData) {
+    if (!srData) return;
+
+    var statusContainer = document.getElementById('anSrStatusMeters');
+    var priorityContainer = document.getElementById('anSrPriorityMeters');
+    var catContainer = document.getElementById('anSrCategoryList');
+    var trendContainer = document.getElementById('anSrTrendChart');
+
+    var byStatus = srData.by_status || {};
+    var byPriority = srData.by_priority || {};
+    var byCategory = srData.by_category || {};
+    var totalRequests = srData.total || 0;
+
+    // Status Meters
+    if (statusContainer) {
+      var statusBadges = [
+        { key: 'OPEN', label: 'Open', color: 'var(--amber)' },
+        { key: 'IN_PROGRESS', label: 'In Progress', color: 'var(--teal)' },
+        { key: 'RESOLVED', label: 'Resolved', color: '#10B981' },
+        { key: 'CLOSED', label: 'Closed', color: 'var(--slate)' },
+        { key: 'CANCELLED', label: 'Cancelled', color: '#EF4444' }
+      ];
+
+      statusContainer.innerHTML = statusBadges.map(function (b) {
+        var cnt = byStatus[b.key] || 0;
+        var pct = totalRequests > 0 ? Math.round((cnt / totalRequests) * 100) : 0;
+        return '<div class="lco-analytics-method-item" style="margin-bottom:8px;">' +
+          '<div class="lco-analytics-method-info">' +
+          '<span>' + b.label + '</span>' +
+          '<span><strong>' + cnt + '</strong> (' + pct + '%)</span>' +
+          '</div>' +
+          '<div class="lco-analytics-bar-track">' +
+          '<div class="lco-analytics-bar-fill" style="width:' + pct + '%; background:' + b.color + ';"></div>' +
+          '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    // Priority Meters
+    if (priorityContainer) {
+      var priorityBadges = [
+        { key: 'URGENT', label: 'Urgent', color: '#DC2626' },
+        { key: 'HIGH', label: 'High', color: '#F59E0B' },
+        { key: 'MEDIUM', label: 'Medium', color: '#3B82F6' },
+        { key: 'LOW', label: 'Low', color: '#6B7280' }
+      ];
+
+      priorityContainer.innerHTML = priorityBadges.map(function (b) {
+        var cnt = byPriority[b.key] || 0;
+        var pct = totalRequests > 0 ? Math.round((cnt / totalRequests) * 100) : 0;
+        return '<div class="lco-analytics-method-item" style="margin-bottom:8px;">' +
+          '<div class="lco-analytics-method-info">' +
+          '<span>' + b.label + '</span>' +
+          '<span><strong>' + cnt + '</strong> (' + pct + '%)</span>' +
+          '</div>' +
+          '<div class="lco-analytics-bar-track">' +
+          '<div class="lco-analytics-bar-fill" style="width:' + pct + '%; background:' + b.color + ';"></div>' +
+          '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    // Category Breakdown
+    if (catContainer) {
+      var catKeys = Object.keys(byCategory);
+      if (catKeys.length === 0 || totalRequests === 0) {
+        catContainer.innerHTML = '<div class="lco-empty-inline">No complaint categories recorded.</div>';
+      } else {
+        var catLabels = {
+          'NO_SIGNAL': '📺 No Signal / Black Screen',
+          'SLOW_INTERNET': '⚡ Slow Internet Speed',
+          'NO_INTERNET': '🌐 No Internet Connection',
+          'BILLING_ISSUE': '🧾 Billing & Payment Query',
+          'HARDWARE_FAULT': '🔌 STB / Router Fault',
+          'NEW_CONNECTION': '➕ New Connection Request',
+          'RELOCATION': '🏠 Address Relocation',
+          'OTHER': '💬 General Support'
+        };
+
+        catContainer.innerHTML = catKeys.map(function (k) {
+          var cnt = byCategory[k] || 0;
+          var pct = totalRequests > 0 ? Math.round((cnt / totalRequests) * 100) : 0;
+          var label = catLabels[k] || ('💬 ' + k);
+          return '<div class="lco-analytics-category-item">' +
+            '<div class="lco-analytics-category-info">' +
+            '<span>' + esc(label) + '</span>' +
+            '<span><strong>' + cnt + '</strong> (' + pct + '%)</span>' +
+            '</div>' +
+            '<div class="lco-analytics-bar-track">' +
+            '<div class="lco-analytics-bar-fill" style="width:' + pct + '%;"></div>' +
+            '</div>' +
+            '</div>';
+        }).join('');
+      }
+    }
+
+    // Monthly Request Volume Trend
+    if (trendContainer) {
+      var monthly = srData.monthly_trend || [];
+      if (monthly.length === 0) {
+        trendContainer.innerHTML = '<div class="lco-empty-inline">No monthly request volume data.</div>';
+      } else {
+        var maxCount = Math.max.apply(Math, monthly.map(function (m) { return m.count; })) || 1;
+
+        trendContainer.innerHTML = monthly.map(function (m) {
+          var heightPct = Math.max(10, Math.round((m.count / maxCount) * 100));
+          var monthStr = m.month || '';
+          var shortMonth = monthStr;
+          try {
+            var parts = monthStr.split('-');
+            if (parts.length === 2) {
+              var d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, 1);
+              shortMonth = d.toLocaleDateString('en-IN', { month: 'short' });
+            }
+          } catch (e) {}
+
+          return '<div class="lco-analytics-trend-bar-group" title="' + monthStr + ': ' + m.count + ' service requests">' +
+            '<div class="lco-analytics-trend-bar-track">' +
+            '<div class="lco-analytics-trend-bar-fill" style="height:' + heightPct + '%; background:linear-gradient(180deg, var(--indigo), var(--ink));"></div>' +
+            '</div>' +
+            '<span class="lco-analytics-trend-bar-label">' + shortMonth + '</span>' +
+            '</div>';
+        }).join('');
+      }
+    }
+  }
+
+  /* 4. TECHNICIAN ANALYTICS RENDERER */
+  function renderTechnicianAnalytics(techData) {
+    if (!techData) return;
+
+    var summary = techData.summary || {};
+    var workload = techData.workload || [];
+
+    var elTotal = document.getElementById('anTechTotal');
+    if (elTotal) elTotal.textContent = summary.total || 0;
+
+    var elActive = document.getElementById('anTechActive');
+    if (elActive) elActive.textContent = summary.active || 0;
+
+    var elInactive = document.getElementById('anTechInactive');
+    if (elInactive) elInactive.textContent = summary.inactive || 0;
+
+    var elSuspended = document.getElementById('anTechSuspended');
+    if (elSuspended) elSuspended.textContent = summary.suspended || 0;
+
+    var tbody = document.getElementById('lcoTechWorkloadTableBody');
+    if (!tbody) return;
+
+    if (workload.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--slate);">No technicians registered yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = workload.map(function (t) {
+      return '<tr>' +
+        '<td><span class="lco-cust-id">' + esc(t.technician_id || '—') + '</span></td>' +
+        '<td><strong>' + esc(t.full_name) + '</strong></td>' +
+        '<td>' + renderStatusBadge(t.status) + '</td>' +
+        '<td><span class="lco-badge pending">' + (t.assigned_requests || 0) + ' assigned</span></td>' +
+        '<td><span class="lco-badge active">' + (t.in_progress_requests || 0) + ' active</span></td>' +
+        '<td><span class="lco-badge active" style="background:#ECFDF5; color:#047857;">' + (t.resolved_requests || 0) + ' resolved</span></td>' +
+        '</tr>';
+    }).join('');
+  }
+
+  function formatCurrency(amount) {
+    var val = parseFloat(amount) || 0;
+    return '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
 

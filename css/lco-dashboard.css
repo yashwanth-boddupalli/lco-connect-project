@@ -1780,3 +1780,242 @@ input:disabled + .lco-slider {
   70% { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
   100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
 }
+
+
+/* ══════════════════════════════════════════════
+   PHASE 12 BATCH 2: LCO ANALYTICS DASHBOARD STYLES
+   ══════════════════════════════════════════════ */
+
+.lco-analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.lco-analytics-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: var(--card);
+  padding: 14px 20px;
+  border-radius: 14px;
+  border: 1.5px solid var(--line);
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.lco-analytics-date-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lco-analytics-date-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--slate);
+}
+
+.lco-analytics-custom-dates {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lco-analytics-date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--slate);
+  font-weight: 500;
+}
+
+.lco-analytics-date-input {
+  padding: 8px 12px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  border: 1.5px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--ink);
+  outline: none;
+}
+
+.lco-analytics-date-input:focus {
+  border-color: var(--teal);
+}
+
+.lco-analytics-subtext {
+  font-size: 11px;
+  color: var(--slate);
+  margin-top: 6px;
+  font-weight: 400;
+}
+
+.lco-analytics-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 20px;
+}
+
+.lco-analytics-section-card {
+  background: var(--card);
+  border-radius: 18px;
+  border: 1.5px solid var(--line);
+  padding: 24px;
+  margin-bottom: 24px;
+  box-shadow: 0 4px 16px rgba(15, 28, 46, 0.03);
+}
+
+.lco-analytics-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lco-analytics-card-header h3 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.lco-analytics-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--teal-light);
+  color: var(--teal-dark);
+  padding: 4px 10px;
+  border-radius: 100px;
+}
+
+.lco-analytics-payment-grid,
+.lco-analytics-sr-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 900px) {
+  .lco-analytics-payment-grid,
+  .lco-analytics-sr-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lco-analytics-box {
+  background: rgba(246, 242, 234, 0.4);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+
+.lco-analytics-box-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 14px 0;
+}
+
+.lco-analytics-method-list,
+.lco-analytics-category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.lco-analytics-method-item,
+.lco-analytics-category-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lco-analytics-method-info,
+.lco-analytics-category-info {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.lco-analytics-bar-track {
+  height: 8px;
+  background: var(--line);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.lco-analytics-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--teal), var(--teal-dark));
+  border-radius: 100px;
+  transition: width 0.4s cubic-bezier(0.1, 0.7, 0.3, 1);
+}
+
+.lco-analytics-chart-container {
+  min-height: 180px;
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  overflow-x: auto;
+}
+
+.lco-analytics-trend-bar-group {
+  flex: 1;
+  min-width: 38px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+}
+
+.lco-analytics-trend-bar-track {
+  width: 100%;
+  max-width: 32px;
+  height: 130px;
+  background: var(--line);
+  border-radius: 8px 8px 0 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+  position: relative;
+}
+
+.lco-analytics-trend-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, var(--teal), var(--teal-dark));
+  border-radius: 6px 6px 0 0;
+  transition: height 0.4s cubic-bezier(0.1, 0.7, 0.3, 1);
+}
+
+.lco-analytics-trend-bar-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  color: var(--slate);
+  white-space: nowrap;
+}
+
+.lco-empty-inline {
+  padding: 32px;
+  text-align: center;
+  color: var(--slate);
+  font-size: 13px;
+}
+

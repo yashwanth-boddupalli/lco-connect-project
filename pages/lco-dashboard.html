@@ -73,6 +73,9 @@
         <button class="lco-nav-item active" data-view="overview" id="navOverview">
           <span class="lco-nav-icon">◎</span> Dashboard
         </button>
+        <button class="lco-nav-item" data-view="analytics" id="navAnalytics">
+          <span class="lco-nav-icon">📊</span> Analytics & Reports
+        </button>
         <button class="lco-nav-item" data-view="customers" id="navCustomers">
           <span class="lco-nav-icon">👤</span> Customers
         </button>
@@ -173,6 +176,234 @@
                 <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading…</td></tr>
               </tbody>
             </table>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: ANALYTICS & REPORTS (Phase 12 Batch 2) ═══════════ -->
+        <section class="lco-view" id="view-analytics">
+          <div class="lco-analytics-header">
+            <div>
+              <h1 class="lco-view-title">Analytics & Reports</h1>
+              <p class="lco-view-subtitle">Business intelligence, financial tracking, and operational performance insights</p>
+            </div>
+            <div class="lco-analytics-actions">
+              <button class="lco-quick-btn secondary" id="lcoAnalyticsRefreshBtn" title="Refresh Analytics Data">
+                🔄 Refresh
+              </button>
+            </div>
+          </div>
+
+          <!-- Date Range Control Toolbar -->
+          <div class="lco-analytics-toolbar">
+            <div class="lco-analytics-date-wrap">
+              <span class="lco-analytics-date-label">📅 Date Range:</span>
+              <select id="lcoAnalyticsDatePreset" class="lco-select">
+                <option value="all_time" selected>All Time</option>
+                <option value="this_month">This Month</option>
+                <option value="last_month">Last Month</option>
+                <option value="last_3_months">Last 3 Months</option>
+                <option value="this_year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+
+            <div class="lco-analytics-custom-dates" id="lcoAnalyticsCustomDatesWrap" style="display:none;">
+              <div class="lco-analytics-date-input-group">
+                <label for="lcoAnalyticsDateFrom">From:</label>
+                <input type="date" id="lcoAnalyticsDateFrom" class="lco-analytics-date-input">
+              </div>
+              <div class="lco-analytics-date-input-group">
+                <label for="lcoAnalyticsDateTo">To:</label>
+                <input type="date" id="lcoAnalyticsDateTo" class="lco-analytics-date-input">
+              </div>
+              <button class="lco-quick-btn primary" id="lcoAnalyticsApplyCustomBtn" style="padding:6px 14px; font-size:13px;">Apply</button>
+            </div>
+          </div>
+
+          <!-- Loading Indicator for Analytics -->
+          <div class="lco-analytics-loading" id="lcoAnalyticsLoading" style="display:none;">
+            <div class="lco-loading-spinner" style="margin:24px auto;"></div>
+            <div style="text-align:center; color:var(--slate); font-size:14px;">Fetching live analytics data…</div>
+          </div>
+
+          <!-- Error Alert Banner -->
+          <div class="lco-analytics-error" id="lcoAnalyticsError" style="display:none; margin-bottom:20px; padding:16px; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:12px; color:#991B1B;">
+            <div style="display:flex; align-items:center; gap:10px; font-weight:600;">
+              <span>⚠️</span> <span id="lcoAnalyticsErrorMessage">Failed to load analytics data. Please try again.</span>
+            </div>
+          </div>
+
+          <!-- Main Analytics Grid & Content -->
+          <div id="lcoAnalyticsContent">
+
+            <!-- 1. OVERVIEW KPI CARDS -->
+            <h2 class="lco-section-heading" style="margin-top:8px;">Executive Summary</h2>
+
+            <!-- Customer Overview Cards -->
+            <div class="lco-stats-grid lco-analytics-grid-4">
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot total"></span> Total Customers</div>
+                <div class="lco-stat-value" id="anCustTotal"><div class="lco-stat-loading"></div></div>
+                <div class="lco-analytics-subtext" id="anCustSubtext">All registered accounts</div>
+              </div>
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot active"></span> Active Customers</div>
+                <div class="lco-stat-value" id="anCustActive"><div class="lco-stat-loading"></div></div>
+                <div class="lco-analytics-subtext" id="anCustActiveSubtext">Currently connected</div>
+              </div>
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot services"></span> New Registrations</div>
+                <div class="lco-stat-value" id="anCustNew"><div class="lco-stat-loading"></div></div>
+                <div class="lco-analytics-subtext">Registered in period</div>
+              </div>
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot inactive"></span> Inactive / Suspended</div>
+                <div class="lco-stat-value" id="anCustInactive"><div class="lco-stat-loading"></div></div>
+                <div class="lco-analytics-subtext" id="anCustInactiveSubtext">Disconnected / Paused</div>
+              </div>
+            </div>
+
+            <!-- Billing & Revenue Overview Cards -->
+            <div class="lco-stats-grid lco-analytics-grid-4">
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot total"></span> Total Billed</div>
+                <div class="lco-stat-value" id="anBillTotal">₹0.00</div>
+                <div class="lco-analytics-subtext" id="anBillTotalSubtext">Generated invoice total</div>
+              </div>
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot active"></span> Total Collected</div>
+                <div class="lco-stat-value" id="anBillPaid">₹0.00</div>
+                <div class="lco-analytics-subtext">Received revenue</div>
+              </div>
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot inactive"></span> Pending Amount</div>
+                <div class="lco-stat-value" id="anBillPending">₹0.00</div>
+                <div class="lco-analytics-subtext">Awaiting payment</div>
+              </div>
+              <div class="lco-stat-card">
+                <div class="lco-stat-label"><span class="lco-stat-dot services" style="background:#DC2626;"></span> Overdue Amount</div>
+                <div class="lco-stat-value" id="anBillOverdue" style="color:#B91C1C;">₹0.00</div>
+                <div class="lco-analytics-subtext">Past due date</div>
+              </div>
+            </div>
+
+
+            <!-- 2. PAYMENT ANALYTICS -->
+            <div class="lco-analytics-section-card">
+              <div class="lco-analytics-card-header">
+                <h3>💳 Payment & Collection Analytics</h3>
+                <span class="lco-analytics-badge">Collections</span>
+              </div>
+
+              <div class="lco-analytics-payment-grid">
+                <!-- Payment Methods Breakdown -->
+                <div class="lco-analytics-box">
+                  <h4 class="lco-analytics-box-title">Payment Method Breakdown</h4>
+                  <div id="anPaymentMethodList" class="lco-analytics-method-list">
+                    <div class="lco-empty-inline">Loading payment methods…</div>
+                  </div>
+                </div>
+
+                <!-- Monthly Payment Trend -->
+                <div class="lco-analytics-box">
+                  <h4 class="lco-analytics-box-title">Monthly Revenue Collection Trend</h4>
+                  <div id="anPaymentTrendChart" class="lco-analytics-chart-container">
+                    <div class="lco-empty-inline">Loading revenue trends…</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+
+            <!-- 3. SERVICE REQUEST ANALYTICS -->
+            <div class="lco-analytics-section-card">
+              <div class="lco-analytics-card-header">
+                <h3>🛠️ Service Request & Complaint Analytics</h3>
+                <span class="lco-analytics-badge">Operations</span>
+              </div>
+
+              <div class="lco-analytics-sr-grid">
+                <!-- SR Status & Priority Cards -->
+                <div class="lco-analytics-box">
+                  <h4 class="lco-analytics-box-title">Status & Priority Distribution</h4>
+                  <div style="margin-bottom:16px;">
+                    <div style="font-size:12px; font-weight:600; color:var(--slate); margin-bottom:8px;">STATUS BREAKDOWN</div>
+                    <div id="anSrStatusMeters" class="lco-analytics-meters"></div>
+                  </div>
+                  <div>
+                    <div style="font-size:12px; font-weight:600; color:var(--slate); margin-bottom:8px;">PRIORITY BREAKDOWN</div>
+                    <div id="anSrPriorityMeters" class="lco-analytics-meters"></div>
+                  </div>
+                </div>
+
+                <!-- SR Category Breakdown -->
+                <div class="lco-analytics-box">
+                  <h4 class="lco-analytics-box-title">Complaint Categories</h4>
+                  <div id="anSrCategoryList" class="lco-analytics-category-list">
+                    <div class="lco-empty-inline">Loading complaint categories…</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Monthly SR Trend -->
+              <div class="lco-analytics-box" style="margin-top:16px;">
+                <h4 class="lco-analytics-box-title">Monthly Service Request Volume</h4>
+                <div id="anSrTrendChart" class="lco-analytics-chart-container">
+                  <div class="lco-empty-inline">Loading request trends…</div>
+                </div>
+              </div>
+            </div>
+
+
+            <!-- 4. TECHNICIAN ANALYTICS & WORKLOAD -->
+            <div class="lco-analytics-section-card">
+              <div class="lco-analytics-card-header">
+                <h3>👷 Field Technician Performance & Workload</h3>
+                <span class="lco-analytics-badge">Workforce</span>
+              </div>
+
+              <!-- Tech Summary Stat Row -->
+              <div class="lco-stats-grid lco-analytics-grid-4" style="margin-bottom:20px;">
+                <div class="lco-stat-card" style="padding:16px;">
+                  <div class="lco-stat-label"><span class="lco-stat-dot total"></span> Total Technicians</div>
+                  <div class="lco-stat-value" id="anTechTotal" style="font-size:26px;">0</div>
+                </div>
+                <div class="lco-stat-card" style="padding:16px;">
+                  <div class="lco-stat-label"><span class="lco-stat-dot active"></span> Active Techs</div>
+                  <div class="lco-stat-value" id="anTechActive" style="font-size:26px;">0</div>
+                </div>
+                <div class="lco-stat-card" style="padding:16px;">
+                  <div class="lco-stat-label"><span class="lco-stat-dot inactive"></span> Inactive Techs</div>
+                  <div class="lco-stat-value" id="anTechInactive" style="font-size:26px;">0</div>
+                </div>
+                <div class="lco-stat-card" style="padding:16px;">
+                  <div class="lco-stat-label"><span class="lco-stat-dot services"></span> Suspended</div>
+                  <div class="lco-stat-value" id="anTechSuspended" style="font-size:26px;">0</div>
+                </div>
+              </div>
+
+              <!-- Tech Workload Table -->
+              <h4 class="lco-analytics-box-title" style="margin-bottom:12px;">Technician Workload & Resolution Metrics</h4>
+              <div class="lco-table-wrap">
+                <table class="lco-table" id="lcoTechWorkloadTable">
+                  <thead>
+                    <tr>
+                      <th>Tech ID</th>
+                      <th>Technician Name</th>
+                      <th>Status</th>
+                      <th>Assigned</th>
+                      <th>In Progress</th>
+                      <th>Resolved</th>
+                    </tr>
+                  </thead>
+                  <tbody id="lcoTechWorkloadTableBody">
+                    <tr><td colspan="6" style="text-align:center; padding:24px; color:var(--slate);">Loading technician workload…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </section>
 
