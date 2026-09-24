@@ -71,10 +71,13 @@
         <div class="sa-sidebar-title">Navigation</div>
 
         <button class="sa-nav-item active" data-view="overview" id="navOverview">
-          <span class="sa-nav-icon">◎</span> Dashboard
+          <span class="sa-nav-icon">◎</span> Platform Overview
+        </button>
+        <button class="sa-nav-item" data-view="lco-directory" id="navLcoDirectory">
+          <span class="sa-nav-icon">🏢</span> LCO Directory
         </button>
         <button class="sa-nav-item" data-view="applications" id="navApplications">
-          <span class="sa-nav-icon">▤</span> LCO Applications
+          <span class="sa-nav-icon">▤</span> Verification Requests
           <span class="sa-nav-count" id="navPendingCount">0</span>
         </button>
         <button class="sa-nav-item" data-view="approved" id="navApproved">
@@ -90,9 +93,10 @@
 
         <!-- ═══════════ VIEW: OVERVIEW ═══════════ -->
         <section class="sa-view active" id="view-overview">
-          <h1 class="sa-view-title">Dashboard Overview</h1>
-          <p class="sa-view-subtitle">Platform-level summary of LCO registrations</p>
+          <h1 class="sa-view-title">Platform Overview</h1>
+          <p class="sa-view-subtitle">Real-time platform metrics and LCO governance analytics</p>
 
+          <!-- Row 1: LCO Application & Account Metrics -->
           <div class="sa-stats-grid" id="statsGrid">
             <div class="sa-stat-card" data-stat="total" id="statTotal">
               <div class="sa-stat-label">
@@ -100,28 +104,81 @@
               </div>
               <div class="sa-stat-value" id="statTotalValue"><div class="sa-stat-loading"></div></div>
             </div>
-            <div class="sa-stat-card" data-stat="pending" id="statPending">
-              <div class="sa-stat-label">
-                <span class="sa-stat-dot pending"></span> Pending Verification
-              </div>
-              <div class="sa-stat-value" id="statPendingValue"><div class="sa-stat-loading"></div></div>
-            </div>
             <div class="sa-stat-card" data-stat="approved" id="statApproved">
               <div class="sa-stat-label">
                 <span class="sa-stat-dot approved"></span> Approved LCOs
               </div>
               <div class="sa-stat-value" id="statApprovedValue"><div class="sa-stat-loading"></div></div>
             </div>
+            <div class="sa-stat-card" id="statActiveLcos">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot approved"></span> Active Accounts
+              </div>
+              <div class="sa-stat-value" id="statActiveLcosValue"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statSuspendedLcos">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot rejected"></span> Suspended Accounts
+              </div>
+              <div class="sa-stat-value" id="statSuspendedLcosValue"><div class="sa-stat-loading"></div></div>
+            </div>
+          </div>
+
+          <!-- Row 2: Secondary Application & Operation Metrics -->
+          <div class="sa-stats-grid" style="margin-bottom: 32px;">
+            <div class="sa-stat-card" data-stat="pending" id="statPending">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot pending"></span> Pending Applications
+              </div>
+              <div class="sa-stat-value" id="statPendingValue"><div class="sa-stat-loading"></div></div>
+            </div>
             <div class="sa-stat-card" data-stat="rejected" id="statRejected">
               <div class="sa-stat-label">
-                <span class="sa-stat-dot rejected"></span> Rejected
+                <span class="sa-stat-dot rejected"></span> Rejected Applications
               </div>
               <div class="sa-stat-value" id="statRejectedValue"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statCustomersCard">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot total"></span> Total Customers
+              </div>
+              <div class="sa-stat-value" id="statCustomersValue"><div class="sa-stat-loading"></div></div>
+              <div style="font-size: 12px; color: var(--slate); margin-top: 4px;" id="statCustomersSub">Active: —</div>
+            </div>
+            <div class="sa-stat-card" id="statTechniciansCard">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot total"></span> Total Technicians
+              </div>
+              <div class="sa-stat-value" id="statTechniciansValue"><div class="sa-stat-loading"></div></div>
+              <div style="font-size: 12px; color: var(--slate); margin-top: 4px;" id="statTechniciansSub">Active: —</div>
+            </div>
+          </div>
+
+          <!-- Row 3: Service & Financial Overview -->
+          <div class="sa-stats-grid" style="margin-bottom: 32px;">
+            <div class="sa-stat-card" id="statRequestsCard">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot pending"></span> Service Requests
+              </div>
+              <div class="sa-stat-value" id="statRequestsValue"><div class="sa-stat-loading"></div></div>
+              <div style="font-size: 12px; color: var(--slate); margin-top: 4px;" id="statRequestsSub">Open: —</div>
+            </div>
+            <div class="sa-stat-card" id="statBilledCard">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot total"></span> Total Billed Amount
+              </div>
+              <div class="sa-stat-value" id="statBilledValue" style="font-size: 26px;"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statCollectedCard">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot approved"></span> Total Collected Amount
+              </div>
+              <div class="sa-stat-value" id="statCollectedValue" style="font-size: 26px; color: var(--teal-dark);"><div class="sa-stat-loading"></div></div>
             </div>
           </div>
 
           <!-- Recent applications table in overview -->
-          <h2 style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; margin-bottom: 14px;">Recent Applications</h2>
+          <h2 style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; margin-bottom: 14px;">Recent Verification Submissions</h2>
           <div class="sa-table-wrap">
             <table class="sa-table" id="recentTable">
               <thead>
@@ -142,9 +199,65 @@
         </section>
 
 
+        <!-- ═══════════ VIEW: LCO DIRECTORY ═══════════ -->
+        <section class="sa-view" id="view-lco-directory">
+          <h1 class="sa-view-title">LCO Directory</h1>
+          <p class="sa-view-subtitle">Approved LCO operators & account status governance</p>
+
+          <!-- Toolbar -->
+          <div class="sa-toolbar">
+            <div class="sa-search-wrap">
+              <span class="sa-search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input type="text" class="sa-search-input" id="lcoDirSearchInput" placeholder="Search by business name, owner, phone, email, city, pincode, app ID…">
+            </div>
+            <div class="sa-filter-group" style="align-items: center;">
+              <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Account Status:</label>
+              <select id="lcoDirStatusSelect" class="sa-select-input" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--line); font-size: 13px; font-weight: 500; background: var(--card); color: var(--ink);">
+                <option value="ALL">All Accounts</option>
+                <option value="ACTIVE">ACTIVE Only</option>
+                <option value="SUSPENDED">SUSPENDED Only</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="sa-table-wrap">
+            <table class="sa-table" id="lcoDirTable">
+              <thead>
+                <tr>
+                  <th>App ID</th>
+                  <th>Business & Owner</th>
+                  <th>Contact</th>
+                  <th>Location</th>
+                  <th>Account Status</th>
+                  <th>Customers</th>
+                  <th>Technicians</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="lcoDirTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading directory…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Bar -->
+          <div class="sa-pagination" id="lcoDirPagination" style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding: 12px 16px; background: var(--card); border-radius: 12px; border: 1px solid var(--line);">
+            <div class="sa-pagination-info" id="lcoDirPaginationInfo" style="font-size: 13px; color: var(--slate); font-weight: 500;">Showing 0–0 of 0</div>
+            <div class="sa-pagination-controls" style="display: flex; gap: 8px;">
+              <button class="sa-filter-btn" id="lcoDirPrevBtn" disabled>← Previous</button>
+              <button class="sa-filter-btn" id="lcoDirNextBtn" disabled>Next →</button>
+            </div>
+          </div>
+        </section>
+
+
         <!-- ═══════════ VIEW: ALL APPLICATIONS ═══════════ -->
         <section class="sa-view" id="view-applications">
-          <h1 class="sa-view-title">LCO Applications</h1>
+          <h1 class="sa-view-title">Verification Requests</h1>
           <p class="sa-view-subtitle">Review and manage all registration applications</p>
 
           <!-- Toolbar -->
@@ -313,6 +426,54 @@
   <!-- ═══════════════════════════════════════════
      MODALS
      ═══════════════════════════════════════════ -->
+
+  <!-- LCO Detail Inspector Modal -->
+  <div class="sa-modal-overlay" id="lcoDetailModal">
+    <div class="sa-modal large" style="max-width: 820px; width: 92%; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <h2 id="lcoInspectBizName" style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; margin: 0;">—</h2>
+            <span id="lcoInspectAccountBadge"></span>
+          </div>
+          <div style="font-size: 13px; color: var(--slate);">
+            App ID: <span class="mono" id="lcoInspectAppId" style="font-weight: 600; color: var(--teal-dark);">—</span> | Application Status: <span class="sa-badge approved">APPROVED</span>
+          </div>
+        </div>
+        <button class="sa-modal-cancel" id="lcoInspectCloseTopBtn" style="padding: 6px 12px; min-width: auto;">✕</button>
+      </div>
+
+      <!-- Inspection Content Container -->
+      <div id="lcoInspectContent">
+        <div style="text-align: center; padding: 40px; color: var(--slate);">Loading LCO detail inspection…</div>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div id="lcoInspectActionWrap"></div>
+        <button class="sa-modal-cancel" id="lcoInspectCloseBtn">Close Inspector</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage LCO Status Governance Modal -->
+  <div class="sa-modal-overlay" id="manageLcoStatusModal">
+    <div class="sa-modal">
+      <h3 id="manageLcoStatusModalTitle">Manage Account Access</h3>
+      <div id="manageLcoStatusAlert" style="padding: 12px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5; margin: 14px 0;"></div>
+      <p id="manageLcoTargetInfo" style="font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 14px;"></p>
+      
+      <div class="sa-form-group" style="margin-bottom: 14px;">
+        <label for="manageLcoReasonInput" style="display: block; font-weight: 600; font-size: 13px; color: var(--ink); margin-bottom: 6px;">Reason for Status Change (Mandatory)</label>
+        <textarea id="manageLcoReasonInput" placeholder="Provide a detailed reason for this account status change..." style="width: 100%; min-height: 90px; padding: 10px 12px; font-family: inherit; font-size: 14px; border: 1.5px solid var(--line); border-radius: 8px; outline: none; background: var(--card); color: var(--ink);"></textarea>
+        <div class="sa-field-error" id="manageLcoReasonError" style="margin-top: 4px;">Please provide a valid reason for this status change</div>
+      </div>
+
+      <div class="sa-modal-actions">
+        <button class="sa-modal-cancel" id="manageLcoCancelBtn">Cancel</button>
+        <button class="sa-modal-confirm" id="manageLcoConfirmBtn">Confirm Status Change</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Approve modal -->
   <div class="sa-modal-overlay" id="approveModal">
