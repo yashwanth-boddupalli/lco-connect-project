@@ -1505,13 +1505,22 @@
   background: transparent;
   color: var(--teal-dark);
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
   white-space: nowrap;
 }
 
 .sa-view-btn:hover {
   background: var(--teal);
   color: #fff;
+}
+
+.sa-view-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(11, 122, 110, 0.2);
+}
+
+.sa-view-btn:active {
+  transform: translateY(1px);
 }
 
 
@@ -1744,3 +1753,62 @@
     max-height: 85vh;
   }
 }
+
+
+/* ══════════════════════════════════════════════
+   PHASE 13B: ROLE & CATEGORY BADGES
+   ══════════════════════════════════════════════ */
+
+.sa-badge.role-super-admin {
+  background: #F3E8FF;
+  color: #6B21A8;
+}
+.sa-badge.role-super-admin::before {
+  background: #9333EA;
+}
+
+.sa-badge.role-lco-admin {
+  background: #E0F2FE;
+  color: #0369A1;
+}
+.sa-badge.role-lco-admin::before {
+  background: #0284C7;
+}
+
+.sa-badge.role-customer {
+  background: #CCFBF1;
+  color: #0F766E;
+}
+.sa-badge.role-customer::before {
+  background: #0D9488;
+}
+
+.sa-badge.role-technician {
+  background: #FEF3C7;
+  color: #B45309;
+}
+.sa-badge.role-technician::before {
+  background: #D97706;
+}
+
+/* Communication Category Badges */
+.sa-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 100px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.sa-cat-badge.account { background: #E0F2FE; color: #0369A1; }
+.sa-cat-badge.service_request { background: #FEF3C7; color: #B45309; }
+.sa-cat-badge.payment { background: #DCFCE7; color: #15803D; }
+.sa-cat-badge.announcement { background: #FFEDD5; color: #C2410C; }
+.sa-cat-badge.system { background: #F3E8FF; color: #6B21A8; }
+.sa-cat-badge.customer_activity { background: #CCFBF1; color: #0F766E; }
+.sa-cat-badge.technician_activity { background: #FEE2E2; color: #B91C1C; }
+

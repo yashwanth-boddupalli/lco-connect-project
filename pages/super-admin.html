@@ -76,6 +76,12 @@
         <button class="sa-nav-item" data-view="lco-directory" id="navLcoDirectory">
           <span class="sa-nav-icon">🏢</span> LCO Directory
         </button>
+        <button class="sa-nav-item" data-view="user-directory" id="navUserDirectory">
+          <span class="sa-nav-icon">👤</span> User Directory
+        </button>
+        <button class="sa-nav-item" data-view="communication-oversight" id="navCommunicationOversight">
+          <span class="sa-nav-icon">📡</span> Communication Oversight
+        </button>
         <button class="sa-nav-item" data-view="applications" id="navApplications">
           <span class="sa-nav-icon">▤</span> Verification Requests
           <span class="sa-nav-count" id="navPendingCount">0</span>
@@ -250,6 +256,158 @@
             <div class="sa-pagination-controls" style="display: flex; gap: 8px;">
               <button class="sa-filter-btn" id="lcoDirPrevBtn" disabled>← Previous</button>
               <button class="sa-filter-btn" id="lcoDirNextBtn" disabled>Next →</button>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: USER DIRECTORY ═══════════ -->
+        <section class="sa-view" id="view-user-directory">
+          <h1 class="sa-view-title">User Directory</h1>
+          <p class="sa-view-subtitle">Platform-wide account directory & role management across all entities</p>
+
+          <!-- Toolbar -->
+          <div class="sa-toolbar" style="flex-wrap: wrap; gap: 12px;">
+            <div class="sa-search-wrap" style="flex: 1; min-width: 240px;">
+              <span class="sa-search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input type="text" class="sa-search-input" id="userDirSearchInput" placeholder="Search by name, email, phone, entity ID, or LCO...">
+            </div>
+            
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+              <div class="sa-filter-group" style="align-items: center;">
+                <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Role:</label>
+                <select id="userDirRoleSelect" class="sa-select-input" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--line); font-size: 13px; font-weight: 500; background: var(--card); color: var(--ink);">
+                  <option value="ALL">All Roles</option>
+                  <option value="LCO_ADMIN">LCO_ADMIN</option>
+                  <option value="CUSTOMER">CUSTOMER</option>
+                  <option value="TECHNICIAN">TECHNICIAN</option>
+                </select>
+              </div>
+
+              <div class="sa-filter-group" style="align-items: center;">
+                <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Status:</label>
+                <select id="userDirStatusSelect" class="sa-select-input" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--line); font-size: 13px; font-weight: 500; background: var(--card); color: var(--ink);">
+                  <option value="ALL">All Statuses</option>
+                  <option value="ACTIVE">ACTIVE</option>
+                  <option value="PENDING">PENDING</option>
+                  <option value="REJECTED">REJECTED</option>
+                  <option value="SUSPENDED">SUSPENDED</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="sa-table-wrap">
+            <table class="sa-table" id="userDirTable">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>LCO / Organization</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="userDirTableBody">
+                <tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);">Loading user directory…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Bar -->
+          <div class="sa-pagination" id="userDirPagination" style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding: 12px 16px; background: var(--card); border-radius: 12px; border: 1px solid var(--line);">
+            <div class="sa-pagination-info" id="userDirPaginationInfo" style="font-size: 13px; color: var(--slate); font-weight: 500;">Showing 0–0 of 0</div>
+            <div class="sa-pagination-controls" style="display: flex; gap: 8px;">
+              <button class="sa-filter-btn" id="userDirPrevBtn" disabled>← Previous</button>
+              <button class="sa-filter-btn" id="userDirNextBtn" disabled>Next →</button>
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: COMMUNICATION OVERSIGHT ═══════════ -->
+        <section class="sa-view" id="view-communication-oversight">
+          <h1 class="sa-view-title">Communication Oversight</h1>
+          <p class="sa-view-subtitle">Read-only audit feed of notifications, broadcasts, and urgent announcements platform-wide</p>
+
+          <!-- Toolbar -->
+          <div class="sa-toolbar" style="flex-wrap: wrap; gap: 12px;">
+            <div class="sa-search-wrap" style="flex: 1; min-width: 240px;">
+              <span class="sa-search-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
+              <input type="text" class="sa-search-input" id="commSearchInput" placeholder="Search title, summary, recipient, or LCO...">
+            </div>
+
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+              <div class="sa-filter-group" style="align-items: center;">
+                <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Category:</label>
+                <select id="commCategorySelect" class="sa-select-input" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--line); font-size: 13px; font-weight: 500; background: var(--card); color: var(--ink);">
+                  <option value="ALL">All Categories</option>
+                  <option value="ACCOUNT">ACCOUNT</option>
+                  <option value="SERVICE_REQUEST">SERVICE_REQUEST</option>
+                  <option value="PAYMENT">PAYMENT</option>
+                  <option value="ANNOUNCEMENT">ANNOUNCEMENT</option>
+                  <option value="SYSTEM">SYSTEM</option>
+                  <option value="CUSTOMER_ACTIVITY">CUSTOMER_ACTIVITY</option>
+                  <option value="TECHNICIAN_ACTIVITY">TECHNICIAN_ACTIVITY</option>
+                </select>
+              </div>
+
+              <div class="sa-filter-group" style="align-items: center;">
+                <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Recipient Role:</label>
+                <select id="commRecipientRoleSelect" class="sa-select-input" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--line); font-size: 13px; font-weight: 500; background: var(--card); color: var(--ink);">
+                  <option value="ALL">All Roles</option>
+                  <option value="LCO_ADMIN">LCO_ADMIN</option>
+                  <option value="CUSTOMER">CUSTOMER</option>
+                  <option value="TECHNICIAN">TECHNICIAN</option>
+                  <option value="SYSTEM_ADMIN">SYSTEM_ADMIN</option>
+                </select>
+              </div>
+
+              <div class="sa-filter-group" style="align-items: center;">
+                <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">LCO:</label>
+                <select id="commLcoSelect" class="sa-select-input" style="padding: 8px 12px; border-radius: 8px; border: 1.5px solid var(--line); font-size: 13px; font-weight: 500; background: var(--card); color: var(--ink); max-width: 180px;">
+                  <option value="ALL">All LCOs</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="sa-table-wrap">
+            <table class="sa-table" id="commTable">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>LCO</th>
+                  <th>Category</th>
+                  <th>Title / Event</th>
+                  <th>Recipient</th>
+                  <th>Recipient Role</th>
+                  <th>Status</th>
+                  <th>Summary</th>
+                </tr>
+              </thead>
+              <tbody id="commTableBody">
+                <tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading communication oversight feed…</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Bar -->
+          <div class="sa-pagination" id="commPagination" style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px; padding: 12px 16px; background: var(--card); border-radius: 12px; border: 1px solid var(--line);">
+            <div class="sa-pagination-info" id="commPaginationInfo" style="font-size: 13px; color: var(--slate); font-weight: 500;">Showing 0–0 of 0</div>
+            <div class="sa-pagination-controls" style="display: flex; gap: 8px;">
+              <button class="sa-filter-btn" id="commPrevBtn" disabled>← Previous</button>
+              <button class="sa-filter-btn" id="commNextBtn" disabled>Next →</button>
             </div>
           </div>
         </section>
@@ -451,6 +609,34 @@
       <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
         <div id="lcoInspectActionWrap"></div>
         <button class="sa-modal-cancel" id="lcoInspectCloseBtn">Close Inspector</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Detail Inspector Modal -->
+  <div class="sa-modal-overlay" id="userDetailModal">
+    <div class="sa-modal large" style="max-width: 820px; width: 92%; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <h2 id="userInspectTitle" style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; margin: 0;">—</h2>
+            <span id="userInspectStatusBadge"></span>
+            <span id="userInspectRoleBadge"></span>
+          </div>
+          <div style="font-size: 13px; color: var(--slate);">
+            <span id="userInspectIdLabel">ID:</span> <span class="mono" id="userInspectUserId" style="font-weight: 600; color: var(--teal-dark);">—</span>
+          </div>
+        </div>
+        <button class="sa-modal-cancel" id="userInspectCloseTopBtn" style="padding: 6px 12px; min-width: auto;">✕</button>
+      </div>
+
+      <!-- User Inspection Content Container -->
+      <div id="userInspectContent">
+        <div style="text-align: center; padding: 40px; color: var(--slate);">Loading user detail inspection…</div>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; align-items: center;">
+        <button class="sa-modal-cancel" id="userInspectCloseBtn">Close Inspector</button>
       </div>
     </div>
   </div>
