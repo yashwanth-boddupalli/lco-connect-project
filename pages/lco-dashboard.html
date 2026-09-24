@@ -74,7 +74,10 @@
           <span class="lco-nav-icon">◎</span> Dashboard
         </button>
         <button class="lco-nav-item" data-view="analytics" id="navAnalytics">
-          <span class="lco-nav-icon">📊</span> Analytics & Reports
+          <span class="lco-nav-icon">📊</span> Analytics
+        </button>
+        <button class="lco-nav-item" data-view="reports" id="navReports">
+          <span class="lco-nav-icon">📋</span> Detailed Reports
         </button>
         <button class="lco-nav-item" data-view="customers" id="navCustomers">
           <span class="lco-nav-icon">👤</span> Customers
@@ -404,6 +407,234 @@
               </div>
             </div>
 
+          </div>
+        </section>
+
+
+        <!-- ═══════════ VIEW: DETAILED REPORTS & EXPORTS (Phase 12 Batch 3B) ═══════════ -->
+        <section class="lco-view" id="view-reports">
+          <div class="lco-analytics-header">
+            <div>
+              <h1 class="lco-view-title">Detailed Reports & Data Export</h1>
+              <p class="lco-view-subtitle">Filter, view, and export tenant-isolated customer, billing, payment, service request, and technician records</p>
+            </div>
+            <div class="lco-analytics-actions">
+              <button class="lco-quick-btn primary" id="lcoReportExportCsvBtn" title="Export Current Filtered Report to CSV">
+                📥 Export CSV
+              </button>
+              <button class="lco-quick-btn secondary" id="lcoReportRefreshBtn" title="Refresh Report Data">
+                🔄 Refresh
+              </button>
+            </div>
+          </div>
+
+          <!-- Report Navigation Sub-Tabs -->
+          <div class="lco-report-tabs">
+            <button class="lco-report-tab active" data-report-tab="customers" id="tabReportCustomers">
+              👤 Customer Report
+            </button>
+            <button class="lco-report-tab" data-report-tab="billing" id="tabReportBilling">
+              📄 Billing Report
+            </button>
+            <button class="lco-report-tab" data-report-tab="payments" id="tabReportPayments">
+              💳 Payment Report
+            </button>
+            <button class="lco-report-tab" data-report-tab="service_requests" id="tabReportRequests">
+              🛠️ Service Request Report
+            </button>
+            <button class="lco-report-tab" data-report-tab="technicians" id="tabReportTechnicians">
+              👷 Technician Report
+            </button>
+          </div>
+
+          <!-- Reports Controls & Filters Toolbar -->
+          <div class="lco-report-toolbar" id="lcoReportToolbar">
+            <!-- Universal Search -->
+            <div class="lco-report-filter-group" style="flex:1; min-width:200px;">
+              <input type="text" id="lcoReportSearchInput" class="lco-input" placeholder="Search by name, ID, phone, email, etc...">
+            </div>
+
+            <!-- Customer Status Filter -->
+            <div class="lco-report-filter-group" id="groupReportStatus" style="display:none;">
+              <select id="lcoReportStatusSelect" class="lco-select">
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="SUSPENDED">Suspended</option>
+                <option value="DISCONNECTED">Disconnected</option>
+              </select>
+            </div>
+
+            <!-- Billing Status Filter -->
+            <div class="lco-report-filter-group" id="groupReportBillStatus" style="display:none;">
+              <select id="lcoReportBillStatusSelect" class="lco-select">
+                <option value="">All Bill Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="PAID">Paid</option>
+                <option value="OVERDUE">Overdue</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </div>
+
+            <!-- Customer Service Type Filter -->
+            <div class="lco-report-filter-group" id="groupReportServiceType" style="display:none;">
+              <select id="lcoReportServiceTypeSelect" class="lco-select">
+                <option value="">All Service Types</option>
+                <option value="Broadband">Broadband</option>
+                <option value="Cable TV">Cable TV</option>
+                <option value="Both">Both</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <!-- Payment Method Filter -->
+            <div class="lco-report-filter-group" id="groupReportPaymentMethod" style="display:none;">
+              <select id="lcoReportPaymentMethodSelect" class="lco-select">
+                <option value="">All Payment Methods</option>
+                <option value="CASH">Cash</option>
+                <option value="UPI">UPI</option>
+                <option value="ONLINE">Online</option>
+                <option value="BANK_TRANSFER">Bank Transfer</option>
+                <option value="CHEQUE">Cheque</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+
+            <!-- Service Request Category Filter -->
+            <div class="lco-report-filter-group" id="groupReportCategory" style="display:none;">
+              <select id="lcoReportCategorySelect" class="lco-select">
+                <option value="">All Categories</option>
+                <option value="NO_SIGNAL">No Signal</option>
+                <option value="SLOW_INTERNET">Slow Internet</option>
+                <option value="NO_INTERNET">No Internet</option>
+                <option value="BILLING_ISSUE">Billing Issue</option>
+                <option value="NEW_CONNECTION">New Connection</option>
+                <option value="HARDWARE_FAULT">Hardware Fault</option>
+                <option value="RELOCATION">Relocation</option>
+                <option value="OTHER">Other</option>
+              </select>
+            </div>
+
+            <!-- Service Request Priority Filter -->
+            <div class="lco-report-filter-group" id="groupReportPriority" style="display:none;">
+              <select id="lcoReportPrioritySelect" class="lco-select">
+                <option value="">All Priorities</option>
+                <option value="LOW">Low</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="HIGH">High</option>
+                <option value="URGENT">Urgent</option>
+              </select>
+            </div>
+
+            <!-- Service Request Status Filter -->
+            <div class="lco-report-filter-group" id="groupReportRequestStatus" style="display:none;">
+              <select id="lcoReportRequestStatusSelect" class="lco-select">
+                <option value="">All Request Statuses</option>
+                <option value="OPEN">Open</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="RESOLVED">Resolved</option>
+                <option value="CLOSED">Closed</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </div>
+
+            <!-- Service Request Assigned Technician Filter -->
+            <div class="lco-report-filter-group" id="groupReportTechnician" style="display:none;">
+              <select id="lcoReportTechnicianSelect" class="lco-select">
+                <option value="">All Technicians</option>
+              </select>
+            </div>
+
+            <!-- Technician Status Filter -->
+            <div class="lco-report-filter-group" id="groupReportTechStatus" style="display:none;">
+              <select id="lcoReportTechStatusSelect" class="lco-select">
+                <option value="">All Statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="SUSPENDED">Suspended</option>
+              </select>
+            </div>
+
+            <!-- Technician Invitation Status Filter -->
+            <div class="lco-report-filter-group" id="groupReportInvitationStatus" style="display:none;">
+              <select id="lcoReportInvitationStatusSelect" class="lco-select">
+                <option value="">All Invitation Statuses</option>
+                <option value="PENDING">Pending</option>
+                <option value="INVITED">Invited</option>
+                <option value="ACTIVATED">Activated</option>
+                <option value="FAILED">Failed</option>
+                <option value="DISABLED">Disabled</option>
+              </select>
+            </div>
+
+            <!-- Date Range Controls (hidden for Technicians report) -->
+            <div class="lco-report-date-wrap" id="lcoReportDatePresetWrap">
+              <span class="lco-analytics-date-label">📅 Date Range:</span>
+              <select id="lcoReportDatePresetSelect" class="lco-select">
+                <option value="all_time" selected>All Time</option>
+                <option value="this_month">This Month</option>
+                <option value="last_month">Last Month</option>
+                <option value="last_3_months">Last 3 Months</option>
+                <option value="this_year">This Year</option>
+                <option value="custom">Custom Range</option>
+              </select>
+            </div>
+
+            <div class="lco-analytics-custom-dates" id="lcoReportCustomDatesWrap" style="display:none;">
+              <div class="lco-analytics-date-input-group">
+                <label for="lcoReportDateFrom">From:</label>
+                <input type="date" id="lcoReportDateFrom" class="lco-analytics-date-input">
+              </div>
+              <div class="lco-analytics-date-input-group">
+                <label for="lcoReportDateTo">To:</label>
+                <input type="date" id="lcoReportDateTo" class="lco-analytics-date-input">
+              </div>
+              <button class="lco-quick-btn primary" id="lcoReportApplyCustomDateBtn" style="padding:6px 14px; font-size:13px;">Apply</button>
+            </div>
+          </div>
+
+          <!-- Loading Indicator -->
+          <div class="lco-analytics-loading" id="lcoReportLoading" style="display:none;">
+            <div class="lco-loading-spinner" style="margin:32px auto;"></div>
+            <div style="text-align:center; color:var(--slate); font-size:14px;">Loading report data…</div>
+          </div>
+
+          <!-- Error Alert Banner -->
+          <div class="lco-analytics-error" id="lcoReportError" style="display:none; margin-bottom:20px; padding:16px; background:#FEF2F2; border:1px solid #FCA5A5; border-radius:12px; color:#991B1B;">
+            <div style="display:flex; align-items:center; gap:10px; font-weight:600;">
+              <span>⚠️</span> <span id="lcoReportErrorMessage">Failed to load report. Please try again.</span>
+            </div>
+          </div>
+
+          <!-- Empty State Container -->
+          <div class="lco-empty-state" id="lcoReportEmptyState" style="display:none; padding:48px 24px; text-align:center;">
+            <div style="font-size:40px; margin-bottom:12px;">🔍</div>
+            <h3 style="margin:0 0 8px 0; font-family:'Space Grotesk', sans-serif;">No Report Records Found</h3>
+            <p style="color:var(--slate); margin:0; font-size:14px;">No records match your selected filters and search query.</p>
+          </div>
+
+          <!-- Report Data Table -->
+          <div class="lco-table-wrap" id="lcoReportTableWrap">
+            <table class="lco-table" id="lcoReportTable">
+              <thead id="lcoReportTableHeader">
+                <!-- Dynamic Header Cells -->
+              </thead>
+              <tbody id="lcoReportTableBody">
+                <!-- Dynamic Row Data -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Footer -->
+          <div class="lco-report-pagination" id="lcoReportPagination">
+            <div class="lco-report-pagination-info" id="lcoReportPaginationInfo">
+              Showing 0 - 0 of 0 records
+            </div>
+            <div class="lco-report-pagination-controls">
+              <button class="lco-quick-btn secondary" id="lcoReportPrevBtn" disabled>← Previous</button>
+              <span class="lco-report-page-num" id="lcoReportPageNum">Page 1</span>
+              <button class="lco-quick-btn secondary" id="lcoReportNextBtn" disabled>Next →</button>
+            </div>
           </div>
         </section>
 

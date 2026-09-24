@@ -140,6 +140,7 @@
     setupAddTechModal();        // Phase 10
     setupNotificationCenterListeners(); // Phase 11 Batch 1
     setupAnalyticsListeners();  // Phase 12 Batch 2
+    setupReportListeners();     // Phase 12 Batch 3B
 
     // Load initial data
     loadStats();
@@ -188,6 +189,8 @@
       loadRecentCustomers();
     } else if (viewName === 'analytics') {
       loadAnalyticsDashboard();
+    } else if (viewName === 'reports') {
+      loadCurrentReport();
     } else if (viewName === 'customers') {
       renderCustomersTable();
     } else if (viewName === 'plans') {
@@ -4061,6 +4064,933 @@
   function formatCurrency(amount) {
     var val = parseFloat(amount) || 0;
     return '₹' + val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 12 BATCH 3B: LCO DETAILED REPORTS LOGIC
+     ══════════════════════════════════════════════ */
+
+  var currentReportTab = 'customers';
+  var reportFilters = {
+    search: '',
+    status: '',
+    serviceType: '',
+    billStatus: '',
+    paymentMethod: '',
+    category: '',
+    priority: '',
+    requestStatus: '',
+    technicianId: '',
+    techStatus: '',
+    invitationStatus: '',
+    datePreset: 'all_time',
+    dateFrom: null,
+    dateTo: null,
+    limit: 50,
+    offset: 0
+  };
+  var reportState = {
+    data: [],
+    pagination: { total_records: 0, limit: 50, offset: 0, has_more: false },
+    loading: false,
+    error: null
+  };
+  var reportTechniciansList = [];
+  var reportSearchDebounceTimeout = null;
+
+  function setupReportListeners() {
+    // Sub-tab buttons
+    var tabs = document.querySelectorAll('.lco-report-tab');
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        var selectedTab = tab.dataset.reportTab;
+        if (selectedTab === currentReportTab) return;
+
+        currentReportTab = selectedTab;
+
+        // Reset pagination on tab switch
+        reportFilters.offset = 0;
+
+        // Toggle active class
+        tabs.forEach(function (t) { t.classList.toggle('active', t.dataset.reportTab === selectedTab); });
+
+        // Update toolbar controls visibility
+        updateReportToolbarVisibility();
+
+        // Load data
+        loadCurrentReport();
+      });
+    });
+
+    // Search input (debounced)
+    var searchInput = document.getElementById('lcoReportSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        if (reportSearchDebounceTimeout) clearTimeout(reportSearchDebounceTimeout);
+        reportSearchDebounceTimeout = setTimeout(function () {
+          reportFilters.search = searchInput.value.trim();
+          reportFilters.offset = 0;
+          loadCurrentReport();
+        }, 350);
+      });
+    }
+
+    // Customer Status Filter
+    var statusSel = document.getElementById('lcoReportStatusSelect');
+    if (statusSel) {
+      statusSel.addEventListener('change', function () {
+        reportFilters.status = statusSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Bill Status Filter
+    var billStatusSel = document.getElementById('lcoReportBillStatusSelect');
+    if (billStatusSel) {
+      billStatusSel.addEventListener('change', function () {
+        reportFilters.billStatus = billStatusSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Service Type Filter
+    var typeSel = document.getElementById('lcoReportServiceTypeSelect');
+    if (typeSel) {
+      typeSel.addEventListener('change', function () {
+        reportFilters.serviceType = typeSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Payment Method Filter
+    var payMethodSel = document.getElementById('lcoReportPaymentMethodSelect');
+    if (payMethodSel) {
+      payMethodSel.addEventListener('change', function () {
+        reportFilters.paymentMethod = payMethodSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Service Request Category Filter
+    var catSel = document.getElementById('lcoReportCategorySelect');
+    if (catSel) {
+      catSel.addEventListener('change', function () {
+        reportFilters.category = catSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Service Request Priority Filter
+    var prioSel = document.getElementById('lcoReportPrioritySelect');
+    if (prioSel) {
+      prioSel.addEventListener('change', function () {
+        reportFilters.priority = prioSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Service Request Status Filter
+    var reqStatusSel = document.getElementById('lcoReportRequestStatusSelect');
+    if (reqStatusSel) {
+      reqStatusSel.addEventListener('change', function () {
+        reportFilters.requestStatus = reqStatusSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Service Request Assigned Technician Filter
+    var techSel = document.getElementById('lcoReportTechnicianSelect');
+    if (techSel) {
+      techSel.addEventListener('change', function () {
+        reportFilters.technicianId = techSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Technician Status Filter
+    var techStatusSel = document.getElementById('lcoReportTechStatusSelect');
+    if (techStatusSel) {
+      techStatusSel.addEventListener('change', function () {
+        reportFilters.techStatus = techStatusSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Technician Invitation Status Filter
+    var invStatusSel = document.getElementById('lcoReportInvitationStatusSelect');
+    if (invStatusSel) {
+      invStatusSel.addEventListener('change', function () {
+        reportFilters.invitationStatus = invStatusSel.value;
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Date Preset Filter
+    var datePresetSel = document.getElementById('lcoReportDatePresetSelect');
+    var customDatesWrap = document.getElementById('lcoReportCustomDatesWrap');
+    var applyCustomBtn = document.getElementById('lcoReportApplyCustomDateBtn');
+
+    if (datePresetSel) {
+      datePresetSel.addEventListener('change', function () {
+        reportFilters.datePreset = datePresetSel.value;
+        if (reportFilters.datePreset === 'custom') {
+          if (customDatesWrap) customDatesWrap.style.display = 'flex';
+        } else {
+          if (customDatesWrap) customDatesWrap.style.display = 'none';
+          updateReportDateBounds(reportFilters.datePreset);
+          reportFilters.offset = 0;
+          loadCurrentReport();
+        }
+      });
+    }
+
+    if (applyCustomBtn) {
+      applyCustomBtn.addEventListener('click', function () {
+        var fromVal = document.getElementById('lcoReportDateFrom').value;
+        var toVal = document.getElementById('lcoReportDateTo').value;
+        if (!fromVal || !toVal) {
+          showToast('Please select both From and To dates.', 'error');
+          return;
+        }
+        reportFilters.dateFrom = new Date(fromVal + 'T00:00:00').toISOString();
+        reportFilters.dateTo = new Date(toVal + 'T23:59:59.999').toISOString();
+        reportFilters.offset = 0;
+        loadCurrentReport();
+      });
+    }
+
+    // Refresh button
+    var refreshBtn = document.getElementById('lcoReportRefreshBtn');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', function () {
+        loadCurrentReport();
+      });
+    }
+
+    // Export CSV button
+    var exportBtn = document.getElementById('lcoReportExportCsvBtn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', function () {
+        exportReportCsv();
+      });
+    }
+
+    // Pagination Controls
+    var prevBtn = document.getElementById('lcoReportPrevBtn');
+    var nextBtn = document.getElementById('lcoReportNextBtn');
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        if (reportFilters.offset >= reportFilters.limit) {
+          reportFilters.offset -= reportFilters.limit;
+          loadCurrentReport();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        if (reportState.pagination.has_more) {
+          reportFilters.offset += reportFilters.limit;
+          loadCurrentReport();
+        }
+      });
+    }
+
+    // Populate technician filter dropdown
+    populateReportTechnicianDropdown();
+
+    // Initial toolbar state setup
+    updateReportToolbarVisibility();
+  }
+
+  function updateReportDateBounds(preset) {
+    var now = new Date();
+    if (preset === 'all_time') {
+      reportFilters.dateFrom = null;
+      reportFilters.dateTo = null;
+    } else if (preset === 'this_month') {
+      var firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      reportFilters.dateFrom = firstDay.toISOString();
+      reportFilters.dateTo = now.toISOString();
+    } else if (preset === 'last_month') {
+      var prevMonthFirst = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      var prevMonthLast = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+      reportFilters.dateFrom = prevMonthFirst.toISOString();
+      reportFilters.dateTo = prevMonthLast.toISOString();
+    } else if (preset === 'last_3_months') {
+      var threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+      reportFilters.dateFrom = threeMonthsAgo.toISOString();
+      reportFilters.dateTo = now.toISOString();
+    } else if (preset === 'this_year') {
+      var yearFirst = new Date(now.getFullYear(), 0, 1);
+      reportFilters.dateFrom = yearFirst.toISOString();
+      reportFilters.dateTo = now.toISOString();
+    }
+  }
+
+  function updateReportToolbarVisibility() {
+    var gStatus = document.getElementById('groupReportStatus');
+    var gBillStatus = document.getElementById('groupReportBillStatus');
+    var gServiceType = document.getElementById('groupReportServiceType');
+    var gPaymentMethod = document.getElementById('groupReportPaymentMethod');
+    var gCategory = document.getElementById('groupReportCategory');
+    var gPriority = document.getElementById('groupReportPriority');
+    var gRequestStatus = document.getElementById('groupReportRequestStatus');
+    var gTechnician = document.getElementById('groupReportTechnician');
+    var gTechStatus = document.getElementById('groupReportTechStatus');
+    var gInvitationStatus = document.getElementById('groupReportInvitationStatus');
+    var gDatePreset = document.getElementById('lcoReportDatePresetWrap');
+    var gCustomDates = document.getElementById('lcoReportCustomDatesWrap');
+
+    // Hide all tab-specific filter groups by default
+    if (gStatus) gStatus.style.display = 'none';
+    if (gBillStatus) gBillStatus.style.display = 'none';
+    if (gServiceType) gServiceType.style.display = 'none';
+    if (gPaymentMethod) gPaymentMethod.style.display = 'none';
+    if (gCategory) gCategory.style.display = 'none';
+    if (gPriority) gPriority.style.display = 'none';
+    if (gRequestStatus) gRequestStatus.style.display = 'none';
+    if (gTechnician) gTechnician.style.display = 'none';
+    if (gTechStatus) gTechStatus.style.display = 'none';
+    if (gInvitationStatus) gInvitationStatus.style.display = 'none';
+
+    // Enable date preset for date-supporting reports
+    if (currentReportTab === 'technicians') {
+      if (gDatePreset) gDatePreset.style.display = 'none';
+      if (gCustomDates) gCustomDates.style.display = 'none';
+      if (gTechStatus) gTechStatus.style.display = 'flex';
+      if (gInvitationStatus) gInvitationStatus.style.display = 'flex';
+    } else {
+      if (gDatePreset) gDatePreset.style.display = 'flex';
+      if (reportFilters.datePreset === 'custom' && gCustomDates) {
+        gCustomDates.style.display = 'flex';
+      }
+
+      if (currentReportTab === 'customers') {
+        if (gStatus) gStatus.style.display = 'flex';
+        if (gServiceType) gServiceType.style.display = 'flex';
+      } else if (currentReportTab === 'billing') {
+        if (gBillStatus) gBillStatus.style.display = 'flex';
+      } else if (currentReportTab === 'payments') {
+        if (gPaymentMethod) gPaymentMethod.style.display = 'flex';
+      } else if (currentReportTab === 'service_requests') {
+        if (gCategory) gCategory.style.display = 'flex';
+        if (gPriority) gPriority.style.display = 'flex';
+        if (gRequestStatus) gRequestStatus.style.display = 'flex';
+        if (gTechnician) gTechnician.style.display = 'flex';
+      }
+    }
+  }
+
+  async function populateReportTechnicianDropdown() {
+    var techSel = document.getElementById('lcoReportTechnicianSelect');
+    if (!techSel) return;
+
+    try {
+      var res = await sb.rpc('get_lco_technician_report', { p_limit: 100 });
+      if (!res.error && res.data && res.data.data) {
+        reportTechniciansList = res.data.data;
+        var html = '<option value="">All Technicians</option>';
+        reportTechniciansList.forEach(function (tech) {
+          html += '<option value="' + tech.id + '">' + esc(tech.full_name || 'Tech ' + tech.technician_id) + '</option>';
+        });
+        techSel.innerHTML = html;
+      }
+    } catch (e) {
+      console.warn('Could not populate technician filter dropdown:', e);
+    }
+  }
+
+  async function loadCurrentReport() {
+    showReportLoading(true);
+    hideReportError();
+
+    try {
+      if (currentReportTab === 'customers') {
+        await loadCustomerReport();
+      } else if (currentReportTab === 'billing') {
+        await loadBillingReport();
+      } else if (currentReportTab === 'payments') {
+        await loadPaymentReport();
+      } else if (currentReportTab === 'service_requests') {
+        await loadServiceRequestReport();
+      } else if (currentReportTab === 'technicians') {
+        await loadTechnicianReport();
+      }
+    } catch (err) {
+      console.error('Error loading report (' + currentReportTab + '):', err);
+      showReportError(err.message || 'Failed to load report data. Please try again.');
+    } finally {
+      showReportLoading(false);
+    }
+  }
+
+  // Loader 1: Customer Report
+  async function loadCustomerReport() {
+    var res = await sb.rpc('get_lco_customer_report', {
+      p_date_from: reportFilters.dateFrom || null,
+      p_date_to: reportFilters.dateTo || null,
+      p_search: reportFilters.search || null,
+      p_service_status: reportFilters.status || null,
+      p_service_type: reportFilters.serviceType || null,
+      p_limit: reportFilters.limit,
+      p_offset: reportFilters.offset
+    });
+
+    if (res.error) throw res.error;
+
+    var resultData = res.data || {};
+    reportState.data = resultData.data || [];
+    reportState.pagination = resultData.pagination || { total_records: 0, limit: 50, offset: 0, has_more: false };
+
+    renderReportTable();
+    renderReportPagination();
+  }
+
+  // Loader 2: Billing Report
+  async function loadBillingReport() {
+    var res = await sb.rpc('get_lco_billing_report', {
+      p_date_from: reportFilters.dateFrom || null,
+      p_date_to: reportFilters.dateTo || null,
+      p_search: reportFilters.search || null,
+      p_status: reportFilters.billStatus || null,
+      p_limit: reportFilters.limit,
+      p_offset: reportFilters.offset
+    });
+
+    if (res.error) throw res.error;
+
+    var resultData = res.data || {};
+    reportState.data = resultData.data || [];
+    reportState.pagination = resultData.pagination || { total_records: 0, limit: 50, offset: 0, has_more: false };
+
+    renderReportTable();
+    renderReportPagination();
+  }
+
+  // Loader 3: Payment Report
+  async function loadPaymentReport() {
+    var res = await sb.rpc('get_lco_payment_report', {
+      p_date_from: reportFilters.dateFrom || null,
+      p_date_to: reportFilters.dateTo || null,
+      p_search: reportFilters.search || null,
+      p_payment_method: reportFilters.paymentMethod || null,
+      p_limit: reportFilters.limit,
+      p_offset: reportFilters.offset
+    });
+
+    if (res.error) throw res.error;
+
+    var resultData = res.data || {};
+    reportState.data = resultData.data || [];
+    reportState.pagination = resultData.pagination || { total_records: 0, limit: 50, offset: 0, has_more: false };
+
+    renderReportTable();
+    renderReportPagination();
+  }
+
+  // Loader 4: Service Request Report
+  async function loadServiceRequestReport() {
+    var res = await sb.rpc('get_lco_service_request_report', {
+      p_date_from: reportFilters.dateFrom || null,
+      p_date_to: reportFilters.dateTo || null,
+      p_search: reportFilters.search || null,
+      p_status: reportFilters.requestStatus || null,
+      p_category: reportFilters.category || null,
+      p_priority: reportFilters.priority || null,
+      p_technician_id: reportFilters.technicianId || null,
+      p_limit: reportFilters.limit,
+      p_offset: reportFilters.offset
+    });
+
+    if (res.error) throw res.error;
+
+    var resultData = res.data || {};
+    reportState.data = resultData.data || [];
+    reportState.pagination = resultData.pagination || { total_records: 0, limit: 50, offset: 0, has_more: false };
+
+    renderReportTable();
+    renderReportPagination();
+  }
+
+  // Loader 5: Technician Report
+  async function loadTechnicianReport() {
+    var res = await sb.rpc('get_lco_technician_report', {
+      p_search: reportFilters.search || null,
+      p_status: reportFilters.techStatus || null,
+      p_invitation_status: reportFilters.invitationStatus || null,
+      p_limit: reportFilters.limit,
+      p_offset: reportFilters.offset
+    });
+
+    if (res.error) throw res.error;
+
+    var resultData = res.data || {};
+    reportState.data = resultData.data || [];
+    reportState.pagination = resultData.pagination || { total_records: 0, limit: 50, offset: 0, has_more: false };
+
+    renderReportTable();
+    renderReportPagination();
+  }
+
+  // Render Table Headers & Data Rows
+  function renderReportTable() {
+    var headerEl = document.getElementById('lcoReportTableHeader');
+    var bodyEl = document.getElementById('lcoReportTableBody');
+    var tableWrapEl = document.getElementById('lcoReportTableWrap');
+    var emptyEl = document.getElementById('lcoReportEmptyState');
+
+    if (!headerEl || !bodyEl) return;
+
+    if (!reportState.data || reportState.data.length === 0) {
+      if (tableWrapEl) tableWrapEl.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'block';
+      return;
+    }
+
+    if (tableWrapEl) tableWrapEl.style.display = 'block';
+    if (emptyEl) emptyEl.style.display = 'none';
+
+    var headerHtml = '';
+    var bodyHtml = '';
+
+    if (currentReportTab === 'customers') {
+      headerHtml = '<tr>' +
+        '<th>Customer ID</th>' +
+        '<th>Customer Name</th>' +
+        '<th>Phone</th>' +
+        '<th>Email</th>' +
+        '<th>Service Type</th>' +
+        '<th>Service Status</th>' +
+        '<th>Active Plan</th>' +
+        '<th>Connection Date</th>' +
+        '<th>Sub Status</th>' +
+        '</tr>';
+
+      reportState.data.forEach(function (c) {
+        var subStatus = c.active_subscription ? c.active_subscription.status : 'NO_SUBSCRIPTION';
+        var planName = c.plan_name || (c.active_subscription && c.active_subscription.plan_details ? c.active_subscription.plan_details.name : '—');
+        
+        bodyHtml += '<tr>' +
+          '<td><strong style="font-family:\'IBM Plex Mono\', monospace;">' + esc(c.customer_id || '—') + '</strong></td>' +
+          '<td>' + esc(c.full_name || '—') + '</td>' +
+          '<td>' + esc(c.phone || '—') + '</td>' +
+          '<td>' + esc(c.email || '—') + '</td>' +
+          '<td>' + esc(c.service_type || '—') + '</td>' +
+          '<td>' + renderStatusBadge(c.service_status) + '</td>' +
+          '<td>' + esc(planName) + '</td>' +
+          '<td>' + formatDate(c.connection_date) + '</td>' +
+          '<td>' + renderStatusBadge(subStatus) + '</td>' +
+          '</tr>';
+      });
+
+    } else if (currentReportTab === 'billing') {
+      headerHtml = '<tr>' +
+        '<th>Bill Number</th>' +
+        '<th>Customer</th>' +
+        '<th>Plan</th>' +
+        '<th>Amount</th>' +
+        '<th>Paid Amount</th>' +
+        '<th>Outstanding</th>' +
+        '<th>Due Date</th>' +
+        '<th>Status</th>' +
+        '<th>Billing Period</th>' +
+        '</tr>';
+
+      reportState.data.forEach(function (b) {
+        var custText = esc(b.customer_name || '—') + '<br><small style="color:var(--slate); font-family:\'IBM Plex Mono\', monospace;">' + esc(b.customer_custom_id || '') + '</small>';
+        var periodText = formatDate(b.billing_period_start) + ' to ' + formatDate(b.billing_period_end);
+
+        bodyHtml += '<tr>' +
+          '<td><strong style="font-family:\'IBM Plex Mono\', monospace;">' + esc(b.bill_number || '—') + '</strong></td>' +
+          '<td>' + custText + '</td>' +
+          '<td>' + esc(b.plan_name || '—') + '</td>' +
+          '<td><strong>₹' + (b.amount || 0).toLocaleString('en-IN') + '</strong></td>' +
+          '<td style="color:#059669;">₹' + (b.paid_amount || 0).toLocaleString('en-IN') + '</td>' +
+          '<td style="color:' + (b.outstanding_balance > 0 ? '#DC2626' : 'var(--slate)') + ';">₹' + (b.outstanding_balance || 0).toLocaleString('en-IN') + '</td>' +
+          '<td>' + formatDate(b.due_date) + '</td>' +
+          '<td>' + renderStatusBadge(b.status) + '</td>' +
+          '<td><small style="color:var(--slate);">' + periodText + '</small></td>' +
+          '</tr>';
+      });
+
+    } else if (currentReportTab === 'payments') {
+      headerHtml = '<tr>' +
+        '<th>Payment Number</th>' +
+        '<th>Customer</th>' +
+        '<th>Bill Number</th>' +
+        '<th>Amount</th>' +
+        '<th>Method</th>' +
+        '<th>Payment Date</th>' +
+        '<th>Transaction Ref</th>' +
+        '</tr>';
+
+      reportState.data.forEach(function (p) {
+        var custText = esc(p.customer_name || '—') + '<br><small style="color:var(--slate); font-family:\'IBM Plex Mono\', monospace;">' + esc(p.customer_custom_id || '') + '</small>';
+
+        bodyHtml += '<tr>' +
+          '<td><strong style="font-family:\'IBM Plex Mono\', monospace;">' + esc(p.payment_number || '—') + '</strong></td>' +
+          '<td>' + custText + '</td>' +
+          '<td><span style="font-family:\'IBM Plex Mono\', monospace;">' + esc(p.bill_number || '—') + '</span></td>' +
+          '<td><strong style="color:#059669;">₹' + (p.amount || 0).toLocaleString('en-IN') + '</strong></td>' +
+          '<td>' + renderStatusBadge(p.payment_method) + '</td>' +
+          '<td>' + formatDate(p.payment_date) + '</td>' +
+          '<td><small style="font-family:\'IBM Plex Mono\', monospace; color:var(--slate);">' + esc(p.transaction_reference || '—') + '</small></td>' +
+          '</tr>';
+      });
+
+    } else if (currentReportTab === 'service_requests') {
+      headerHtml = '<tr>' +
+        '<th>Request ID</th>' +
+        '<th>Customer</th>' +
+        '<th>Category</th>' +
+        '<th>Subject</th>' +
+        '<th>Priority</th>' +
+        '<th>Status</th>' +
+        '<th>Assigned Tech</th>' +
+        '<th>Created At</th>' +
+        '<th>Resolved At</th>' +
+        '</tr>';
+
+      reportState.data.forEach(function (sr) {
+        var custText = esc(sr.customer_name || '—') + '<br><small style="color:var(--slate); font-family:\'IBM Plex Mono\', monospace;">' + esc(sr.customer_custom_id || '') + '</small>';
+        var techText = sr.assigned_technician_name ? esc(sr.assigned_technician_name) : '<span style="color:var(--slate); font-style:italic;">Unassigned</span>';
+
+        bodyHtml += '<tr>' +
+          '<td><strong style="font-family:\'IBM Plex Mono\', monospace;">' + esc(sr.request_id || '—') + '</strong></td>' +
+          '<td>' + custText + '</td>' +
+          '<td>' + esc(formatCategoryName(sr.category)) + '</td>' +
+          '<td><strong>' + esc(sr.subject || '—') + '</strong></td>' +
+          '<td>' + renderStatusBadge(sr.priority) + '</td>' +
+          '<td>' + renderStatusBadge(sr.status) + '</td>' +
+          '<td>' + techText + '</td>' +
+          '<td><small>' + formatDate(sr.created_at) + '</small></td>' +
+          '<td><small>' + (sr.resolved_at ? formatDate(sr.resolved_at) : '—') + '</small></td>' +
+          '</tr>';
+      });
+
+    } else if (currentReportTab === 'technicians') {
+      headerHtml = '<tr>' +
+        '<th>Tech ID</th>' +
+        '<th>Technician Name</th>' +
+        '<th>Phone</th>' +
+        '<th>Email</th>' +
+        '<th>Status</th>' +
+        '<th>Invitation</th>' +
+        '<th>Assigned</th>' +
+        '<th>In Progress</th>' +
+        '<th>Resolved</th>' +
+        '</tr>';
+
+      reportState.data.forEach(function (t) {
+        bodyHtml += '<tr>' +
+          '<td><strong style="font-family:\'IBM Plex Mono\', monospace;">' + esc(t.technician_id || '—') + '</strong></td>' +
+          '<td><strong>' + esc(t.full_name || '—') + '</strong></td>' +
+          '<td>' + esc(t.phone || '—') + '</td>' +
+          '<td>' + esc(t.email || '—') + '</td>' +
+          '<td>' + renderStatusBadge(t.status) + '</td>' +
+          '<td>' + renderStatusBadge(t.invitation_status) + '</td>' +
+          '<td><span class="lco-badge secondary">' + (t.assigned_request_count || 0) + '</span></td>' +
+          '<td><span class="lco-badge warning">' + (t.in_progress_request_count || 0) + '</span></td>' +
+          '<td><span class="lco-badge success">' + (t.resolved_request_count || 0) + '</span></td>' +
+          '</tr>';
+      });
+    }
+
+    headerEl.innerHTML = headerHtml;
+    bodyEl.innerHTML = bodyHtml;
+  }
+
+  function formatCategoryName(cat) {
+    if (!cat) return '—';
+    return cat.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, function (l) { return l.toUpperCase(); });
+  }
+
+  function renderReportPagination() {
+    var infoEl = document.getElementById('lcoReportPaginationInfo');
+    var prevBtn = document.getElementById('lcoReportPrevBtn');
+    var nextBtn = document.getElementById('lcoReportNextBtn');
+    var pageNumEl = document.getElementById('lcoReportPageNum');
+
+    var pag = reportState.pagination;
+    var total = pag.total_records || 0;
+    var offset = pag.offset || 0;
+    var limit = pag.limit || 50;
+
+    var startNum = total === 0 ? 0 : offset + 1;
+    var endNum = Math.min(offset + limit, total);
+    var currentPage = Math.floor(offset / limit) + 1;
+
+    if (infoEl) infoEl.textContent = 'Showing ' + startNum + ' - ' + endNum + ' of ' + total + ' records';
+    if (pageNumEl) pageNumEl.textContent = 'Page ' + currentPage;
+
+    if (prevBtn) prevBtn.disabled = offset === 0;
+    if (nextBtn) nextBtn.disabled = !pag.has_more;
+  }
+
+  function showReportLoading(show) {
+    var loadingEl = document.getElementById('lcoReportLoading');
+    var tableWrapEl = document.getElementById('lcoReportTableWrap');
+    var emptyEl = document.getElementById('lcoReportEmptyState');
+
+    if (loadingEl) loadingEl.style.display = show ? 'block' : 'none';
+    if (show) {
+      if (tableWrapEl) tableWrapEl.style.display = 'none';
+      if (emptyEl) emptyEl.style.display = 'none';
+    }
+  }
+
+  function showReportError(msg) {
+    var errorEl = document.getElementById('lcoReportError');
+    var errorMsgEl = document.getElementById('lcoReportErrorMessage');
+    if (errorMsgEl) errorMsgEl.textContent = msg;
+    if (errorEl) errorEl.style.display = 'block';
+  }
+
+  function hideReportError() {
+    var errorEl = document.getElementById('lcoReportError');
+    if (errorEl) errorEl.style.display = 'none';
+  }
+
+  // Client-Side CSV Export Function
+  async function exportReportCsv() {
+    var exportBtn = document.getElementById('lcoReportExportCsvBtn');
+    var originalBtnText = exportBtn ? exportBtn.innerHTML : '📥 Export CSV';
+
+    try {
+      if (exportBtn) {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '⏳ Exporting CSV...';
+      }
+
+      // Fetch all matching records for the current filtered dataset
+      var allRecords = [];
+      var fetchOffset = 0;
+      var fetchLimit = 500;
+      var hasMoreToFetch = true;
+
+      while (hasMoreToFetch) {
+        var rpcName = '';
+        var rpcParams = {};
+
+        if (currentReportTab === 'customers') {
+          rpcName = 'get_lco_customer_report';
+          rpcParams = {
+            p_date_from: reportFilters.dateFrom || null,
+            p_date_to: reportFilters.dateTo || null,
+            p_search: reportFilters.search || null,
+            p_service_status: reportFilters.status || null,
+            p_service_type: reportFilters.serviceType || null,
+            p_limit: fetchLimit,
+            p_offset: fetchOffset
+          };
+        } else if (currentReportTab === 'billing') {
+          rpcName = 'get_lco_billing_report';
+          rpcParams = {
+            p_date_from: reportFilters.dateFrom || null,
+            p_date_to: reportFilters.dateTo || null,
+            p_search: reportFilters.search || null,
+            p_status: reportFilters.billStatus || null,
+            p_limit: fetchLimit,
+            p_offset: fetchOffset
+          };
+        } else if (currentReportTab === 'payments') {
+          rpcName = 'get_lco_payment_report';
+          rpcParams = {
+            p_date_from: reportFilters.dateFrom || null,
+            p_date_to: reportFilters.dateTo || null,
+            p_search: reportFilters.search || null,
+            p_payment_method: reportFilters.paymentMethod || null,
+            p_limit: fetchLimit,
+            p_offset: fetchOffset
+          };
+        } else if (currentReportTab === 'service_requests') {
+          rpcName = 'get_lco_service_request_report';
+          rpcParams = {
+            p_date_from: reportFilters.dateFrom || null,
+            p_date_to: reportFilters.dateTo || null,
+            p_search: reportFilters.search || null,
+            p_status: reportFilters.requestStatus || null,
+            p_category: reportFilters.category || null,
+            p_priority: reportFilters.priority || null,
+            p_technician_id: reportFilters.technicianId || null,
+            p_limit: fetchLimit,
+            p_offset: fetchOffset
+          };
+        } else if (currentReportTab === 'technicians') {
+          rpcName = 'get_lco_technician_report';
+          rpcParams = {
+            p_search: reportFilters.search || null,
+            p_status: reportFilters.techStatus || null,
+            p_invitation_status: reportFilters.invitationStatus || null,
+            p_limit: fetchLimit,
+            p_offset: fetchOffset
+          };
+        }
+
+        var res = await sb.rpc(rpcName, rpcParams);
+        if (res.error) throw res.error;
+
+        var batchData = (res.data && res.data.data) ? res.data.data : [];
+        var batchPag = (res.data && res.data.pagination) ? res.data.pagination : { has_more: false };
+
+        allRecords = allRecords.concat(batchData);
+
+        if (!batchPag.has_more || batchData.length === 0) {
+          hasMoreToFetch = false;
+        } else {
+          fetchOffset += fetchLimit;
+        }
+      }
+
+      if (allRecords.length === 0) {
+        showToast('No records available to export for the current filters.', 'warning');
+        return;
+      }
+
+      // Convert records to CSV text
+      var csvRows = [];
+      var headers = [];
+      var filename = currentReportTab + '-report.csv';
+
+      if (currentReportTab === 'customers') {
+        headers = ['Customer ID', 'Full Name', 'Phone', 'Email', 'Service Type', 'Service Status', 'Plan Name', 'Connection Date', 'Subscription Status'];
+        csvRows.push(headers.map(escapeCsvCell).join(','));
+
+        allRecords.forEach(function (c) {
+          var subStatus = c.active_subscription ? c.active_subscription.status : 'NO_SUBSCRIPTION';
+          var planName = c.plan_name || (c.active_subscription && c.active_subscription.plan_details ? c.active_subscription.plan_details.name : '');
+          csvRows.push([
+            c.customer_id || '',
+            c.full_name || '',
+            c.phone || '',
+            c.email || '',
+            c.service_type || '',
+            c.service_status || '',
+            planName,
+            c.connection_date || '',
+            subStatus
+          ].map(escapeCsvCell).join(','));
+        });
+
+      } else if (currentReportTab === 'billing') {
+        headers = ['Bill Number', 'Customer ID', 'Customer Name', 'Plan Name', 'Amount', 'Paid Amount', 'Outstanding Balance', 'Due Date', 'Status', 'Period Start', 'Period End'];
+        csvRows.push(headers.map(escapeCsvCell).join(','));
+
+        allRecords.forEach(function (b) {
+          csvRows.push([
+            b.bill_number || '',
+            b.customer_custom_id || '',
+            b.customer_name || '',
+            b.plan_name || '',
+            b.amount || 0,
+            b.paid_amount || 0,
+            b.outstanding_balance || 0,
+            b.due_date || '',
+            b.status || '',
+            b.billing_period_start || '',
+            b.billing_period_end || ''
+          ].map(escapeCsvCell).join(','));
+        });
+
+      } else if (currentReportTab === 'payments') {
+        headers = ['Payment Number', 'Customer ID', 'Customer Name', 'Bill Number', 'Amount', 'Payment Method', 'Payment Date', 'Transaction Reference'];
+        csvRows.push(headers.map(escapeCsvCell).join(','));
+
+        allRecords.forEach(function (p) {
+          csvRows.push([
+            p.payment_number || '',
+            p.customer_custom_id || '',
+            p.customer_name || '',
+            p.bill_number || '',
+            p.amount || 0,
+            p.payment_method || '',
+            p.payment_date || '',
+            p.transaction_reference || ''
+          ].map(escapeCsvCell).join(','));
+        });
+
+      } else if (currentReportTab === 'service_requests') {
+        headers = ['Request ID', 'Customer ID', 'Customer Name', 'Category', 'Subject', 'Priority', 'Status', 'Assigned Technician', 'Created At', 'Resolved At'];
+        csvRows.push(headers.map(escapeCsvCell).join(','));
+
+        allRecords.forEach(function (sr) {
+          csvRows.push([
+            sr.request_id || '',
+            sr.customer_custom_id || '',
+            sr.customer_name || '',
+            sr.category || '',
+            sr.subject || '',
+            sr.priority || '',
+            sr.status || '',
+            sr.assigned_technician_name || '',
+            sr.created_at || '',
+            sr.resolved_at || ''
+          ].map(escapeCsvCell).join(','));
+        });
+
+      } else if (currentReportTab === 'technicians') {
+        headers = ['Technician ID', 'Full Name', 'Phone', 'Email', 'Status', 'Invitation Status', 'Assigned Requests', 'In Progress Requests', 'Resolved Requests'];
+        csvRows.push(headers.map(escapeCsvCell).join(','));
+
+        allRecords.forEach(function (t) {
+          csvRows.push([
+            t.technician_id || '',
+            t.full_name || '',
+            t.phone || '',
+            t.email || '',
+            t.status || '',
+            t.invitation_status || '',
+            t.assigned_request_count || 0,
+            t.in_progress_request_count || 0,
+            t.resolved_request_count || 0
+          ].map(escapeCsvCell).join(','));
+        });
+      }
+
+      var csvContent = csvRows.join('\r\n');
+      var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast('Successfully exported ' + allRecords.length + ' records to ' + filename, 'success');
+
+    } catch (err) {
+      console.error('CSV Export Error:', err);
+      showToast('Failed to export CSV: ' + (err.message || 'Unknown error'), 'error');
+    } finally {
+      if (exportBtn) {
+        exportBtn.disabled = false;
+        exportBtn.innerHTML = originalBtnText;
+      }
+    }
+  }
+
+  function escapeCsvCell(cell) {
+    if (cell === null || cell === undefined) return '""';
+    var str = String(cell);
+    if (str.includes('"') || str.includes(',') || str.includes('\n') || str.includes('\r')) {
+      return '"' + str.replace(/"/g, '""') + '"';
+    }
+    return '"' + str + '"';
   }
 
 
