@@ -1599,3 +1599,148 @@
   color: #fff;
   border-color: transparent;
 }
+
+
+/* ══════════════════════════════════════════════
+   PHASE 13A: SUSPENDED BADGE
+   ══════════════════════════════════════════════ */
+
+.sa-badge.suspended {
+  background: #FDEDEC;
+  color: #C0392B;
+}
+
+.sa-badge.suspended::before {
+  background: #E74C3C;
+}
+
+
+/* ══════════════════════════════════════════════
+   PHASE 13A: INSPECTOR MODAL CONTENT
+   ══════════════════════════════════════════════ */
+
+.sa-inspect-section {
+  background: rgba(246, 242, 234, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 18px 20px;
+  margin-bottom: 14px;
+}
+
+.sa-inspect-section:last-child {
+  margin-bottom: 0;
+}
+
+.sa-inspect-section-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink);
+}
+
+.sa-inspect-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 20px;
+}
+
+@media (max-width: 600px) {
+  .sa-inspect-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.sa-inspect-field {
+  padding: 0;
+}
+
+
+/* ══════════════════════════════════════════════
+   PHASE 13A: GOVERNANCE ACTION BUTTONS
+   ══════════════════════════════════════════════ */
+
+.sa-btn-suspend {
+  padding: 10px 20px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: 10px;
+  border: 1.5px solid #FADBD8;
+  background: #fff;
+  color: #C0392B;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  box-shadow: 0 2px 6px rgba(231, 76, 60, 0.08);
+}
+
+.sa-btn-suspend:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: #E74C3C;
+  box-shadow: 0 6px 16px rgba(231, 76, 60, 0.14);
+}
+
+.sa-btn-reactivate {
+  padding: 10px 20px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(155deg, var(--teal), var(--teal-dark));
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 2px 8px rgba(11, 122, 110, 0.25);
+}
+
+.sa-btn-reactivate:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(11, 122, 110, 0.3);
+}
+
+.sa-btn-suspend:disabled,
+.sa-btn-reactivate:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
+/* ══════════════════════════════════════════════
+   PHASE 13A: LCO DIRECTORY ROW STYLING
+   ══════════════════════════════════════════════ */
+
+.sa-lco-dir-row {
+  transition: background 0.15s ease;
+}
+
+.sa-lco-dir-row:hover {
+  background: rgba(11, 122, 110, 0.03) !important;
+}
+
+
+/* ══════════════════════════════════════════════
+   PHASE 13A: LCO DETAIL MODAL - Large Variant
+   ══════════════════════════════════════════════ */
+
+.sa-modal.large {
+  max-width: 820px;
+}
+
+@media (max-width: 860px) {
+  .sa-modal.large {
+    max-width: 98%;
+    width: 98%;
+    padding: 20px 16px;
+    max-height: 85vh;
+  }
+}

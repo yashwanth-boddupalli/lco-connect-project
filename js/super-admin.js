@@ -27,6 +27,18 @@
   var currentSearch = '';
   var pendingDocRejectId = null;
 
+  // Phase 13A: LCO Directory & Governance State
+  var lcoDirData = [];
+  var lcoDirTotal = 0;
+  var lcoDirOffset = 0;
+  var lcoDirLimit = 15;
+  var lcoDirSearch = '';
+  var lcoDirStatusFilter = 'ALL';
+  var lcoDirSearchTimer = null;
+  var currentInspectAppId = null;
+  var currentInspectDetail = null;
+  var pendingGovernanceAction = null; // { applicationId, bizName, currentStatus, newStatus }
+
 
   /* ══════════════════════════════════════════════
      AUTH GUARD (uses shared LCOAuth module)
@@ -78,8 +90,12 @@
     setupSearch();
     setupFilters();
     setupStatCardClicks();
+    setupLcoDirectory();
+    setupInspectorModal();
+    setupGovernanceModal();
 
     // Load data
+    loadPlatformOverview();
     loadStats();
     loadApplications();
   }
@@ -116,8 +132,12 @@
 
     // Load data for specific views
     if (viewName === 'overview') {
+      loadPlatformOverview();
       loadStats();
       loadRecentApplications();
+    } else if (viewName === 'lco-directory') {
+      lcoDirOffset = 0;
+      loadLcoDirectory();
     } else if (viewName === 'applications') {
       renderApplicationsTable();
     } else if (viewName === 'approved') {
@@ -832,6 +852,8 @@
         closeApproveModal();
         closeRejectModal();
         closeDocRejectModal();
+        closeLcoInspector();
+        closeGovernanceModal();
         document.getElementById('imagePreview').classList.remove('visible');
       }
     });
@@ -1126,6 +1148,498 @@
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13A: PLATFORM OVERVIEW RPC
+     ══════════════════════════════════════════════ */
+
+  async function loadPlatformOverview() {
+    try {
+      var { data, error } = await sb.rpc('get_super_admin_platform_overview');
+      if (error) throw error;
+      if (!data) return;
+
+      var o = Array.isArray(data) ? data[0] : data;
+      if (!o) return;
+
+      // Row 1 – LCO Application & Account Metrics
+      setStatValue('statTotalValue', o.total_lco_applications);
+      setStatValue('statApprovedValue', o.total_approved_lcos);
+      setStatValue('statActiveLcosValue', o.active_lcos);
+      setStatValue('statSuspendedLcosValue', o.suspended_lcos);
+
+      // Row 2 – Secondary
+      setStatValue('statPendingValue', o.pending_lco_applications);
+      setStatValue('statRejectedValue', o.rejected_lco_applications);
+      setStatValue('statCustomersValue', o.total_customers);
+      setStatSub('statCustomersSub', 'Active: ' + (o.active_customers || 0));
+      setStatValue('statTechniciansValue', o.total_technicians);
+      setStatSub('statTechniciansSub', 'Active: ' + (o.active_technicians || 0));
+
+      // Row 3 – Service & Financial
+      setStatValue('statRequestsValue', o.total_service_requests);
+      setStatSub('statRequestsSub', 'Open: ' + (o.open_service_requests || 0));
+      setStatValue('statBilledValue', formatCurrency(o.total_billed_amount));
+      setStatValue('statCollectedValue', formatCurrency(o.total_collected_amount));
+
+      // Nav badge
+      document.getElementById('navPendingCount').textContent = o.pending_lco_applications || 0;
+
+    } catch (e) {
+      console.error('Platform overview error:', e);
+      // Silently fall back to existing loadStats
+    }
+  }
+
+  function setStatValue(id, val) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = (val !== null && val !== undefined) ? val : 0;
+  }
+
+  function setStatSub(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text;
+  }
+
+  function formatCurrency(amount) {
+    if (!amount && amount !== 0) return '₹0';
+    return '₹' + Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13A: LCO DIRECTORY
+     ══════════════════════════════════════════════ */
+
+  function setupLcoDirectory() {
+    // Search
+    var searchInput = document.getElementById('lcoDirSearchInput');
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        clearTimeout(lcoDirSearchTimer);
+        lcoDirSearchTimer = setTimeout(function () {
+          lcoDirSearch = searchInput.value.trim();
+          lcoDirOffset = 0;
+          loadLcoDirectory();
+        }, 300);
+      });
+    }
+
+    // Status filter
+    var statusSelect = document.getElementById('lcoDirStatusSelect');
+    if (statusSelect) {
+      statusSelect.addEventListener('change', function () {
+        lcoDirStatusFilter = statusSelect.value;
+        lcoDirOffset = 0;
+        loadLcoDirectory();
+      });
+    }
+
+    // Pagination
+    var prevBtn = document.getElementById('lcoDirPrevBtn');
+    var nextBtn = document.getElementById('lcoDirNextBtn');
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        if (lcoDirOffset >= lcoDirLimit) {
+          lcoDirOffset -= lcoDirLimit;
+          loadLcoDirectory();
+        }
+      });
+    }
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        if (lcoDirOffset + lcoDirLimit < lcoDirTotal) {
+          lcoDirOffset += lcoDirLimit;
+          loadLcoDirectory();
+        }
+      });
+    }
+  }
+
+  async function loadLcoDirectory() {
+    var tbody = document.getElementById('lcoDirTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading directory…</td></tr>';
+
+    try {
+      var { data, error } = await sb.rpc('get_super_admin_lco_directory', {
+        p_search: lcoDirSearch || null,
+        p_status: lcoDirStatusFilter === 'ALL' ? null : lcoDirStatusFilter,
+        p_limit: lcoDirLimit,
+        p_offset: lcoDirOffset
+      });
+
+      if (error) throw error;
+
+      var res = Array.isArray(data) ? data[0] : data;
+      lcoDirData = (res && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
+
+      if (res && res.pagination && res.pagination.total_records !== undefined) {
+        lcoDirTotal = parseInt(res.pagination.total_records, 10);
+      } else {
+        lcoDirTotal = lcoDirData.length;
+      }
+
+      if (lcoDirData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8"><div class="sa-empty"><div class="sa-empty-icon">🏢</div><h3>No LCOs found</h3><p>' +
+          (lcoDirSearch ? 'No results match your search criteria.' : 'No approved LCO operators yet.') +
+          '</p></div></td></tr>';
+        updateLcoDirPagination();
+        return;
+      }
+
+      tbody.innerHTML = lcoDirData.map(function (lco) {
+        var acctBadge = renderAccountBadge(lco.account_status || 'ACTIVE');
+        var custCount = lco.total_customers !== undefined ? lco.total_customers : (lco.customer_count || 0);
+        var techCount = lco.total_technicians !== undefined ? lco.total_technicians : (lco.technician_count || 0);
+        var targetId = lco.id || lco.application_id;
+
+        return '<tr data-app-id="' + esc(targetId) + '" class="sa-lco-dir-row">' +
+          '<td data-label="App ID"><span class="sa-app-id">' + esc(lco.application_id) + '</span></td>' +
+          '<td data-label="Business & Owner"><span class="sa-biz-name">' + esc(lco.business_name) + '</span><div style="font-size:12px;color:var(--slate);margin-top:2px;">' + esc(lco.owner_name) + '</div></td>' +
+          '<td data-label="Contact"><div style="font-size:13px;">' + esc(lco.phone || '—') + '</div><div style="font-size:12px;color:var(--slate);margin-top:1px;">' + esc(lco.email || '—') + '</div></td>' +
+          '<td data-label="Location">' + esc(lco.city || '') + (lco.state ? ', ' + esc(lco.state) : '') + '</td>' +
+          '<td data-label="Account Status">' + acctBadge + '</td>' +
+          '<td data-label="Customers" style="text-align:center; font-weight:600;">' + custCount + '</td>' +
+          '<td data-label="Technicians" style="text-align:center; font-weight:600;">' + techCount + '</td>' +
+          '<td data-label="Actions"><button class="sa-view-btn sa-inspect-btn" data-app-id="' + esc(targetId) + '">Inspect</button></td>' +
+          '</tr>';
+      }).join('');
+
+      // Attach click handlers
+      tbody.querySelectorAll('.sa-inspect-btn').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openLcoInspector(btn.dataset.appId);
+        });
+      });
+      tbody.querySelectorAll('.sa-lco-dir-row').forEach(function (row) {
+        row.addEventListener('click', function () {
+          openLcoInspector(row.dataset.appId);
+        });
+      });
+
+      updateLcoDirPagination();
+
+    } catch (e) {
+      console.error('LCO directory error:', e);
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#E74C3C;">Failed to load directory. ' + esc(e.message || '') + '</td></tr>';
+    }
+  }
+
+  function updateLcoDirPagination() {
+    var infoEl = document.getElementById('lcoDirPaginationInfo');
+    var prevBtn = document.getElementById('lcoDirPrevBtn');
+    var nextBtn = document.getElementById('lcoDirNextBtn');
+
+    var start = lcoDirTotal > 0 ? lcoDirOffset + 1 : 0;
+    var end = Math.min(lcoDirOffset + lcoDirLimit, lcoDirTotal);
+    if (infoEl) infoEl.textContent = 'Showing ' + start + '–' + end + ' of ' + lcoDirTotal;
+
+    if (prevBtn) prevBtn.disabled = (lcoDirOffset <= 0);
+    if (nextBtn) nextBtn.disabled = (lcoDirOffset + lcoDirLimit >= lcoDirTotal);
+  }
+
+  function renderAccountBadge(status) {
+    if (status === 'SUSPENDED') {
+      return '<span class="sa-badge suspended">SUSPENDED</span>';
+    }
+    return '<span class="sa-badge approved">ACTIVE</span>';
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13A: LCO DETAIL INSPECTOR
+     ══════════════════════════════════════════════ */
+
+  function setupInspectorModal() {
+    var closeTopBtn = document.getElementById('lcoInspectCloseTopBtn');
+    var closeBtn = document.getElementById('lcoInspectCloseBtn');
+    var overlay = document.getElementById('lcoDetailModal');
+
+    if (closeTopBtn) closeTopBtn.addEventListener('click', closeLcoInspector);
+    if (closeBtn) closeBtn.addEventListener('click', closeLcoInspector);
+    if (overlay) {
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closeLcoInspector();
+      });
+    }
+  }
+
+  function closeLcoInspector() {
+    var modal = document.getElementById('lcoDetailModal');
+    if (modal) modal.classList.remove('visible');
+    currentInspectAppId = null;
+    currentInspectDetail = null;
+  }
+
+  async function openLcoInspector(applicationId) {
+    currentInspectAppId = applicationId;
+    var modal = document.getElementById('lcoDetailModal');
+    modal.classList.add('visible');
+
+    // Reset content
+    document.getElementById('lcoInspectBizName').textContent = 'Loading…';
+    document.getElementById('lcoInspectAppId').textContent = applicationId;
+    document.getElementById('lcoInspectAccountBadge').innerHTML = '';
+    document.getElementById('lcoInspectContent').innerHTML =
+      '<div style="text-align:center; padding:40px; color:var(--slate);">Loading LCO detail inspection…</div>';
+    document.getElementById('lcoInspectActionWrap').innerHTML = '';
+
+    try {
+      var { data, error } = await sb.rpc('get_super_admin_lco_detail', {
+        p_application_id: applicationId
+      });
+
+      if (error) throw error;
+      if (!data) {
+        document.getElementById('lcoInspectContent').innerHTML =
+          '<div style="text-align:center; padding:40px; color:#E74C3C;">LCO detail not found for this application.</div>';
+        return;
+      }
+
+      var raw = Array.isArray(data) ? data[0] : data;
+      if (!raw) {
+        document.getElementById('lcoInspectContent').innerHTML =
+          '<div style="text-align:center; padding:40px; color:#E74C3C;">LCO detail not found for this application.</div>';
+        return;
+      }
+
+      var app = raw.application || raw;
+      var cust = raw.customers || {};
+      var tech = raw.technicians || {};
+      var bill = raw.billing || {};
+      var pay = raw.payments || {};
+      var req = raw.service_requests || {};
+      currentInspectDetail = app;
+
+      // Header
+      document.getElementById('lcoInspectBizName').textContent = app.business_name || '—';
+      document.getElementById('lcoInspectAppId').textContent = app.application_id || applicationId;
+      document.getElementById('lcoInspectAccountBadge').innerHTML = renderAccountBadge(app.account_status || 'ACTIVE');
+
+      // Build content sections
+      var html = '';
+
+      // Business Information
+      html += '<div class="sa-inspect-section">';
+      html += '<div class="sa-inspect-section-title"><span class="sa-detail-section-icon">🏢</span> Business Information</div>';
+      html += '<div class="sa-inspect-grid">';
+      html += inspectField('Business Name', app.business_name);
+      html += inspectField('Owner', app.owner_name);
+      html += inspectField('Email', app.email);
+      html += inspectField('Phone', app.phone);
+      html += inspectField('Address', app.address);
+      html += inspectField('City', app.city);
+      html += inspectField('State', app.state);
+      html += inspectField('PIN Code', app.pincode);
+      html += '</div></div>';
+
+      // Account & Application Status
+      html += '<div class="sa-inspect-section">';
+      html += '<div class="sa-inspect-section-title"><span class="sa-detail-section-icon">📋</span> Status & Application</div>';
+      html += '<div class="sa-inspect-grid">';
+      html += inspectField('Application Status', app.application_status || 'APPROVED');
+      html += inspectField('Account Status', app.account_status || 'ACTIVE');
+      html += inspectField('Application Date', formatDate(app.created_at));
+      html += inspectField('Approval Date', formatDate(app.reviewed_at));
+      html += '</div></div>';
+
+      // Customer Metrics
+      html += '<div class="sa-inspect-section">';
+      html += '<div class="sa-inspect-section-title"><span class="sa-detail-section-icon">👥</span> Customer Metrics</div>';
+      html += '<div class="sa-inspect-grid">';
+      html += inspectField('Total Customers', cust.total !== undefined ? cust.total : 0);
+      html += inspectField('Active Customers', cust.active !== undefined ? cust.active : 0);
+      html += '</div></div>';
+
+      // Technician Metrics
+      html += '<div class="sa-inspect-section">';
+      html += '<div class="sa-inspect-section-title"><span class="sa-detail-section-icon">🔧</span> Technician Metrics</div>';
+      html += '<div class="sa-inspect-grid">';
+      html += inspectField('Total Technicians', tech.total !== undefined ? tech.total : 0);
+      html += inspectField('Active Technicians', tech.active !== undefined ? tech.active : 0);
+      html += '</div></div>';
+
+      // Billing & Payment Metrics
+      html += '<div class="sa-inspect-section">';
+      html += '<div class="sa-inspect-section-title"><span class="sa-detail-section-icon">💰</span> Billing & Payment Metrics</div>';
+      html += '<div class="sa-inspect-grid">';
+      html += inspectField('Total Billed', formatCurrency(bill.total_billed_amount));
+      html += inspectField('Total Collected', formatCurrency(pay.total_collected_amount));
+      html += inspectField('Outstanding', formatCurrency(bill.outstanding_balance));
+      html += '</div></div>';
+
+      // Service Request Metrics
+      html += '<div class="sa-inspect-section">';
+      html += '<div class="sa-inspect-section-title"><span class="sa-detail-section-icon">📡</span> Service Request Metrics</div>';
+      html += '<div class="sa-inspect-grid">';
+      html += inspectField('Total Requests', req.total_requests !== undefined ? req.total_requests : 0);
+      html += inspectField('Open Requests', req.open_requests !== undefined ? req.open_requests : 0);
+      html += inspectField('Resolved Requests', req.resolved_requests !== undefined ? req.resolved_requests : 0);
+      html += '</div></div>';
+
+      document.getElementById('lcoInspectContent').innerHTML = html;
+
+      // Action buttons (governance)
+      renderInspectorActions(app);
+
+    } catch (e) {
+      console.error('LCO detail error:', e);
+      document.getElementById('lcoInspectContent').innerHTML =
+        '<div style="text-align:center; padding:40px; color:#E74C3C;">Failed to load LCO details. ' + esc(e.message || '') + '</div>';
+    }
+  }
+
+  function inspectField(label, value) {
+    return '<div class="sa-inspect-field">' +
+      '<div class="sa-detail-label">' + esc(label) + '</div>' +
+      '<div class="sa-detail-value">' + esc(String(value !== null && value !== undefined ? value : '—')) + '</div>' +
+      '</div>';
+  }
+
+  function renderInspectorActions(detail) {
+    var wrap = document.getElementById('lcoInspectActionWrap');
+    if (!wrap) return;
+
+    var acctStatus = detail.account_status || 'ACTIVE';
+
+    if (acctStatus === 'ACTIVE') {
+      wrap.innerHTML = '<button class="sa-btn-suspend" id="lcoInspectSuspendBtn">🚫 Suspend Account</button>';
+      document.getElementById('lcoInspectSuspendBtn').addEventListener('click', function () {
+        openGovernanceModal(detail.application_id, detail.business_name, 'ACTIVE', 'SUSPENDED');
+      });
+    } else if (acctStatus === 'SUSPENDED') {
+      wrap.innerHTML = '<button class="sa-btn-reactivate" id="lcoInspectReactivateBtn">✅ Reactivate Account</button>';
+      document.getElementById('lcoInspectReactivateBtn').addEventListener('click', function () {
+        openGovernanceModal(detail.application_id, detail.business_name, 'SUSPENDED', 'ACTIVE');
+      });
+    } else {
+      wrap.innerHTML = '';
+    }
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13A: ACCOUNT GOVERNANCE
+     ══════════════════════════════════════════════ */
+
+  function setupGovernanceModal() {
+    var cancelBtn = document.getElementById('manageLcoCancelBtn');
+    var confirmBtn = document.getElementById('manageLcoConfirmBtn');
+    var overlay = document.getElementById('manageLcoStatusModal');
+    var reasonInput = document.getElementById('manageLcoReasonInput');
+
+    if (cancelBtn) cancelBtn.addEventListener('click', closeGovernanceModal);
+    if (overlay) {
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) closeGovernanceModal();
+      });
+    }
+    if (confirmBtn) confirmBtn.addEventListener('click', confirmGovernanceAction);
+    if (reasonInput) {
+      reasonInput.addEventListener('input', function () {
+        document.getElementById('manageLcoReasonError').classList.remove('visible');
+      });
+    }
+  }
+
+  function openGovernanceModal(applicationId, bizName, currentStatus, newStatus) {
+    pendingGovernanceAction = {
+      applicationId: applicationId,
+      bizName: bizName,
+      currentStatus: currentStatus,
+      newStatus: newStatus
+    };
+
+    var titleEl = document.getElementById('manageLcoStatusModalTitle');
+    var alertEl = document.getElementById('manageLcoStatusAlert');
+    var infoEl = document.getElementById('manageLcoTargetInfo');
+    var confirmBtn = document.getElementById('manageLcoConfirmBtn');
+    var reasonInput = document.getElementById('manageLcoReasonInput');
+    var reasonError = document.getElementById('manageLcoReasonError');
+
+    // Reset
+    if (reasonInput) reasonInput.value = '';
+    if (reasonError) reasonError.classList.remove('visible');
+
+    if (newStatus === 'SUSPENDED') {
+      titleEl.textContent = '🚫 Suspend LCO Account';
+      alertEl.style.background = '#FDEDEC';
+      alertEl.style.color = '#C0392B';
+      alertEl.style.border = '1px solid #FADBD8';
+      alertEl.innerHTML = '<strong>Warning:</strong> Suspending this account will prevent the LCO from accessing their dashboard, managing customers, and processing service requests. This action can be reversed by reactivating the account.';
+      confirmBtn.textContent = '🚫 Confirm Suspension';
+      confirmBtn.style.background = '#E74C3C';
+      confirmBtn.style.boxShadow = '0 2px 8px rgba(231,76,60,0.2)';
+    } else {
+      titleEl.textContent = '✅ Reactivate LCO Account';
+      alertEl.style.background = 'var(--teal-light)';
+      alertEl.style.color = 'var(--teal-dark)';
+      alertEl.style.border = '1px solid rgba(11,122,110,0.15)';
+      alertEl.innerHTML = '<strong>Notice:</strong> Reactivating this account will restore the LCO\'s access to their dashboard, customer management, and service request processing.';
+      confirmBtn.textContent = '✅ Confirm Reactivation';
+      confirmBtn.style.background = 'linear-gradient(155deg, var(--teal), var(--teal-dark))';
+      confirmBtn.style.boxShadow = '0 2px 8px rgba(11,122,110,0.2)';
+    }
+
+    infoEl.innerHTML = 'LCO: <span style="color:var(--teal-dark);">' + esc(bizName) + '</span> (App ID: <span class="mono">' + esc(applicationId) + '</span>)';
+
+    document.getElementById('manageLcoStatusModal').classList.add('visible');
+  }
+
+  function closeGovernanceModal() {
+    document.getElementById('manageLcoStatusModal').classList.remove('visible');
+    pendingGovernanceAction = null;
+  }
+
+  async function confirmGovernanceAction() {
+    if (!pendingGovernanceAction) return;
+
+    var reason = document.getElementById('manageLcoReasonInput').value.trim();
+    if (!reason) {
+      document.getElementById('manageLcoReasonError').classList.add('visible');
+      return;
+    }
+
+    var btn = document.getElementById('manageLcoConfirmBtn');
+    btn.disabled = true;
+    var originalText = btn.textContent;
+    btn.innerHTML = '<span class="sa-spinner"></span> Processing…';
+
+    try {
+      var { data, error } = await sb.rpc('manage_lco_status', {
+        p_application_id: pendingGovernanceAction.applicationId,
+        p_new_status: pendingGovernanceAction.newStatus,
+        p_reason: reason
+      });
+
+      if (error) throw error;
+
+      var action = pendingGovernanceAction.newStatus === 'SUSPENDED' ? 'suspended' : 'reactivated';
+      showToast('Account successfully ' + action + ': ' + pendingGovernanceAction.bizName, 'success');
+
+      closeGovernanceModal();
+
+      // Refresh all affected views
+      await loadPlatformOverview();
+      await loadLcoDirectory();
+
+      // If the inspector is still open for this LCO, refresh it
+      if (currentInspectAppId === pendingGovernanceAction.applicationId) {
+        await openLcoInspector(currentInspectAppId);
+      }
+
+    } catch (e) {
+      console.error('Governance action error:', e);
+      showToast('Failed to update status: ' + (e.message || 'Unknown error'), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
   }
 
 
