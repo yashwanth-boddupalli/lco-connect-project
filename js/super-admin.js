@@ -121,6 +121,7 @@
     setupUserDirectory();
     setupUserInspectorModal();
     setupCommunicationOversight();
+    setupAuditSecurity();
 
     // Load data
     loadPlatformOverview();
@@ -173,6 +174,9 @@
     } else if (viewName === 'communication-oversight') {
       commOffset = 0;
       loadCommunicationOversight();
+    } else if (viewName === 'audit-security') {
+      auditOffset = 0;
+      loadAuditSecurity();
     } else if (viewName === 'applications') {
       renderApplicationsTable();
     } else if (viewName === 'approved') {
@@ -2275,6 +2279,345 @@
 
     if (prevBtn) prevBtn.disabled = commOffset === 0;
     if (nextBtn) nextBtn.disabled = commOffset + commLimit >= commTotal;
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13C-2: SYSTEM AUDIT & SECURITY OVERSIGHT
+     ══════════════════════════════════════════════ */
+
+  var auditSearchQuery = '';
+  var auditCategoryFilter = 'ALL';
+  var auditSeverityFilter = 'ALL';
+  var auditRoleFilter = 'ALL';
+  var auditDateFrom = null;
+  var auditDateTo = null;
+  var auditOffset = 0;
+  var AUDIT_LIMIT = 50;
+
+  function setupAuditSecurity() {
+    var searchInput = document.getElementById('saAuditSearch');
+    var catFilter = document.getElementById('saAuditCategoryFilter');
+    var sevFilter = document.getElementById('saAuditSeverityFilter');
+    var roleFilter = document.getElementById('saAuditRoleFilter');
+    var dateFromInput = document.getElementById('saAuditDateFrom');
+    var dateToInput = document.getElementById('saAuditDateTo');
+    var resetBtn = document.getElementById('saAuditResetBtn');
+    var prevBtn = document.getElementById('saAuditPrevBtn');
+    var nextBtn = document.getElementById('saAuditNextBtn');
+
+    var debounceTimer;
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+          auditSearchQuery = searchInput.value;
+          auditOffset = 0;
+          loadAuditLogs();
+        }, 350);
+      });
+    }
+
+    if (catFilter) {
+      catFilter.addEventListener('change', function () {
+        auditCategoryFilter = catFilter.value;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (sevFilter) {
+      sevFilter.addEventListener('change', function () {
+        auditSeverityFilter = sevFilter.value;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (roleFilter) {
+      roleFilter.addEventListener('change', function () {
+        auditRoleFilter = roleFilter.value;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (dateFromInput) {
+      dateFromInput.addEventListener('change', function () {
+        auditDateFrom = dateFromInput.value || null;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (dateToInput) {
+      dateToInput.addEventListener('change', function () {
+        auditDateTo = dateToInput.value || null;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function () {
+        auditSearchQuery = '';
+        auditCategoryFilter = 'ALL';
+        auditSeverityFilter = 'ALL';
+        auditRoleFilter = 'ALL';
+        auditDateFrom = null;
+        auditDateTo = null;
+        auditOffset = 0;
+
+        if (searchInput) searchInput.value = '';
+        if (catFilter) catFilter.value = 'ALL';
+        if (sevFilter) sevFilter.value = 'ALL';
+        if (roleFilter) roleFilter.value = 'ALL';
+        if (dateFromInput) dateFromInput.value = '';
+        if (dateToInput) dateToInput.value = '';
+
+        loadAuditLogs();
+      });
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        if (auditOffset >= AUDIT_LIMIT) {
+          auditOffset -= AUDIT_LIMIT;
+          loadAuditLogs();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        auditOffset += AUDIT_LIMIT;
+        loadAuditLogs();
+      });
+    }
+
+    // Modal Close handlers
+    var modal = document.getElementById('saAuditModal');
+    var closeTopBtn = document.getElementById('saAuditCloseTopBtn');
+    var closeBtn = document.getElementById('saAuditCloseBtn');
+
+    if (closeTopBtn) {
+      closeTopBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+      });
+    }
+    if (modal) {
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.classList.remove('visible');
+      });
+    }
+  }
+
+  async function loadAuditSecurity() {
+    await Promise.all([
+      loadAuditMetrics(),
+      loadAuditLogs()
+    ]);
+  }
+
+  async function loadAuditMetrics() {
+    try {
+      var client = await getSupabaseClient();
+      var { data, error } = await client.rpc('get_super_admin_security_metrics');
+      if (error) throw error;
+
+      var m = Array.isArray(data) ? data[0] : data;
+      if (!m) return;
+
+      var setVal = function (id, val) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = (val || 0).toLocaleString();
+      };
+
+      setVal('statAuditTotalVal', m.total_audit_events);
+      setVal('statAudit24hVal', m.events_last_24h);
+      setVal('statAudit7dVal', m.events_last_7d);
+      setVal('statAuditPrivilegedVal', m.recent_privileged_operations);
+      setVal('statAuditGovernanceVal', m.governance_events);
+      setVal('statAuditSecurityVal', m.security_events);
+      setVal('statAuditWarningVal', m.warning_events);
+      setVal('statAuditCriticalVal', m.critical_events);
+
+    } catch (err) {
+      console.error('Error loading security metrics:', err);
+    }
+  }
+
+  async function loadAuditLogs() {
+    var tbody = document.getElementById('saAuditTableBody');
+    var pagDiv = document.getElementById('saAuditPagination');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty">Loading audit logs...</td></tr>';
+
+    try {
+      var client = await getSupabaseClient();
+      var { data, error } = await client.rpc('get_super_admin_audit_logs', {
+        p_search: auditSearchQuery || null,
+        p_category: auditCategoryFilter || 'ALL',
+        p_severity: auditSeverityFilter || 'ALL',
+        p_actor_role: auditRoleFilter || 'ALL',
+        p_lco_id: null,
+        p_date_from: auditDateFrom ? new Date(auditDateFrom).toISOString() : null,
+        p_date_to: auditDateTo ? new Date(auditDateTo + 'T23:59:59').toISOString() : null,
+        p_limit: AUDIT_LIMIT,
+        p_offset: auditOffset
+      });
+
+      if (error) throw error;
+
+      var raw = Array.isArray(data) ? data[0] : data;
+      var list = (raw && raw.data) ? raw.data : [];
+      var pagination = (raw && raw.pagination) ? raw.pagination : { total_records: 0, limit: AUDIT_LIMIT, offset: 0, has_more: false };
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty">No audit logs found matching criteria.</td></tr>';
+        if (pagDiv) pagDiv.style.display = 'none';
+        return;
+      }
+
+      var html = '';
+      list.forEach(function (log) {
+        var dateStr = formatDateFull(log.created_at);
+        var categoryBadge = getCategoryBadgeHtml(log.category);
+        var severityBadge = getSeverityBadgeHtml(log.severity);
+        var actorDisplay = log.actor_email ? esc(log.actor_email) : 'System';
+        var roleBadge = '<span class="sa-role-badge sa-role-' + esc((log.actor_role || 'SYSTEM').toLowerCase()) + '">' + esc(log.actor_role || 'SYSTEM') + '</span>';
+        var entityDisplay = esc(log.entity_type) + ': <strong>' + esc(log.entity_id) + '</strong>';
+
+        html += '<tr>';
+        html += '<td style="white-space:nowrap;">' + dateStr + '</td>';
+        html += '<td>' + categoryBadge + '</td>';
+        html += '<td>' + severityBadge + '</td>';
+        html += '<td><code style="font-family:\'IBM Plex Mono\',monospace; font-size:12px; background:var(--sand); padding:2px 6px; border-radius:4px;">' + esc(log.action) + '</code></td>';
+        html += '<td><div>' + actorDisplay + '</div><div>' + roleBadge + '</div></td>';
+        html += '<td>' + entityDisplay + '</td>';
+        html += '<td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + esc(log.description) + '">' + esc(log.description) + '</td>';
+        html += '<td style="text-align:right;"><button class="sa-view-btn sa-btn-inspect-audit" data-audit-id="' + esc(log.id) + '">View</button></td>';
+        html += '</tr>';
+      });
+
+      tbody.innerHTML = html;
+
+      // Event delegation / click listeners for inspect view buttons
+      tbody.querySelectorAll('.sa-btn-inspect-audit').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var logId = btn.dataset.auditId;
+          var logObj = list.find(function (item) { return item.id === logId; });
+          if (logObj) openAuditInspector(logObj);
+        });
+      });
+
+      // Pagination rendering
+      if (pagDiv) {
+        pagDiv.style.display = 'flex';
+        var startNum = pagination.offset + 1;
+        var endNum = Math.min(pagination.offset + pagination.limit, pagination.total_records);
+        var info = document.getElementById('saAuditPaginationInfo');
+        if (info) info.textContent = 'Showing ' + startNum + '–' + endNum + ' of ' + pagination.total_records + ' audit logs';
+        var currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+        var totalPages = Math.ceil(pagination.total_records / pagination.limit) || 1;
+        var pageEl = document.getElementById('saAuditPageNum');
+        if (pageEl) pageEl.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+        var prevBtn = document.getElementById('saAuditPrevBtn');
+        if (prevBtn) prevBtn.disabled = (pagination.offset === 0);
+        var nextBtn = document.getElementById('saAuditNextBtn');
+        if (nextBtn) nextBtn.disabled = !pagination.has_more;
+      }
+
+    } catch (err) {
+      console.error('Error loading audit logs:', err);
+      tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty sa-error">Error loading audit logs: ' + esc(err.message || String(err)) + '</td></tr>';
+      if (pagDiv) pagDiv.style.display = 'none';
+    }
+  }
+
+  function openAuditInspector(log) {
+    var modal = document.getElementById('saAuditModal');
+    var body = document.getElementById('saAuditModalBody');
+    var modalId = document.getElementById('saAuditModalId');
+    var modalBadge = document.getElementById('saAuditModalSevBadge');
+
+    if (modalId) modalId.textContent = log.id;
+    if (modalBadge) modalBadge.innerHTML = getSeverityBadgeHtml(log.severity);
+
+    // Sanitize metadata payload to strictly exclude sensitive credentials/tokens if any exist
+    var cleanMeta = sanitizeMetadata(log.metadata || {});
+    var metaJson = '{}';
+    try {
+      metaJson = JSON.stringify(cleanMeta, null, 2);
+    } catch (e) {
+      metaJson = String(cleanMeta);
+    }
+
+    var html = '<div class="sa-inspect-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px;">';
+    html += renderInspectField('Action', log.action, true);
+    html += renderInspectField('Category', log.category);
+    html += renderInspectField('Severity', log.severity);
+    html += renderInspectField('Timestamp', formatDateFull(log.created_at));
+    html += renderInspectField('Actor Email', log.actor_email || 'SYSTEM');
+    html += renderInspectField('Actor Role', log.actor_role || 'SYSTEM');
+    html += renderInspectField('Actor User ID', log.actor_id || 'System (N/A)', true);
+    html += renderInspectField('Target Entity Type', log.entity_type);
+    html += renderInspectField('Target Entity ID', log.entity_id, true);
+    html += renderInspectField('Associated LCO', log.lco_business_name || (log.lco_id ? log.lco_id : 'None'));
+    html += '</div>';
+
+    html += '<div style="margin-bottom: 20px;">';
+    html += '<label style="font-size:12px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">Event Description</label>';
+    html += '<div style="font-size:14px; color:var(--ink); background:var(--sand); padding:12px 16px; border-radius:8px; border:1px solid var(--line);">' + esc(log.description) + '</div>';
+    html += '</div>';
+
+    html += '<div>';
+    html += '<label style="font-size:12px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">Event Metadata Payload (JSON)</label>';
+    html += '<pre class="sa-json-preview"><code>' + esc(metaJson) + '</code></pre>';
+    html += '</div>';
+
+    body.innerHTML = html;
+    modal.classList.add('visible');
+  }
+
+  function sanitizeMetadata(meta) {
+    if (!meta || typeof meta !== 'object') return {};
+    var copy = JSON.parse(JSON.stringify(meta));
+    var sensitiveKeys = ['password', 'token', 'secret', 'card', 'cvv', 'auth', 'jwt', 'api_key'];
+    
+    function recursiveClean(obj) {
+      if (!obj || typeof obj !== 'object') return;
+      Object.keys(obj).forEach(function (k) {
+        var lower = k.toLowerCase();
+        if (sensitiveKeys.some(function (sk) { return lower.includes(sk); })) {
+          obj[k] = '[REDACTED]';
+        } else if (typeof obj[k] === 'object') {
+          recursiveClean(obj[k]);
+        }
+      });
+    }
+    recursiveClean(copy);
+    return copy;
+  }
+
+  function getSeverityBadgeHtml(sev) {
+    var s = (sev || 'INFO').toUpperCase();
+    var cls = 'info';
+    if (s === 'WARNING') cls = 'warning';
+    if (s === 'CRITICAL') cls = 'critical';
+    return '<span class="sa-sev-badge ' + cls + '">' + esc(s) + '</span>';
+  }
+
+  function getCategoryBadgeHtml(cat) {
+    var c = (cat || 'SYSTEM').toUpperCase();
+    var cls = c.toLowerCase();
+    return '<span class="sa-audit-cat-badge ' + cls + '">' + esc(c) + '</span>';
   }
 
 

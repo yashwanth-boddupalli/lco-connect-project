@@ -82,6 +82,9 @@
         <button class="sa-nav-item" data-view="communication-oversight" id="navCommunicationOversight">
           <span class="sa-nav-icon">📡</span> Communication Oversight
         </button>
+        <button class="sa-nav-item" data-view="audit-security" id="navAuditSecurity">
+          <span class="sa-nav-icon">🛡️</span> Audit & Security
+        </button>
         <button class="sa-nav-item" data-view="applications" id="navApplications">
           <span class="sa-nav-icon">▤</span> Verification Requests
           <span class="sa-nav-count" id="navPendingCount">0</span>
@@ -576,6 +579,146 @@
 
         </section>
 
+        <!-- ═══════════ VIEW: SYSTEM AUDIT & SECURITY ═══════════ -->
+        <section class="sa-view" id="view-audit-security">
+          <h1 class="sa-view-title">System Audit & Security Oversight</h1>
+          <p class="sa-view-subtitle">Read-only immutable activity log and security metrics across the platform</p>
+
+          <!-- Security Overview Metrics Cards -->
+          <div class="sa-stats-grid" style="margin-bottom: 24px;">
+            <div class="sa-stat-card" id="statAuditTotal">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot total"></span> Total Audit Events
+              </div>
+              <div class="sa-stat-value" id="statAuditTotalVal"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statAudit24h">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot approved"></span> Events Last 24h
+              </div>
+              <div class="sa-stat-value" id="statAudit24hVal"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statAudit7d">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot pending"></span> Events Last 7d
+              </div>
+              <div class="sa-stat-value" id="statAudit7dVal"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statAuditPrivileged">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot total"></span> Privileged Ops (30d)
+              </div>
+              <div class="sa-stat-value" id="statAuditPrivilegedVal"><div class="sa-stat-loading"></div></div>
+            </div>
+          </div>
+
+          <div class="sa-stats-grid" style="margin-bottom: 32px;">
+            <div class="sa-stat-card" id="statAuditGovernance">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot approved"></span> Governance Events
+              </div>
+              <div class="sa-stat-value" id="statAuditGovernanceVal"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statAuditSecurity">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot pending"></span> Security Events
+              </div>
+              <div class="sa-stat-value" id="statAuditSecurityVal"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statAuditWarning">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot pending"></span> Warning Severity
+              </div>
+              <div class="sa-stat-value" id="statAuditWarningVal"><div class="sa-stat-loading"></div></div>
+            </div>
+            <div class="sa-stat-card" id="statAuditCritical">
+              <div class="sa-stat-label">
+                <span class="sa-stat-dot rejected"></span> Critical Severity
+              </div>
+              <div class="sa-stat-value" id="statAuditCriticalVal"><div class="sa-stat-loading"></div></div>
+            </div>
+          </div>
+
+          <!-- Audit Trail Section -->
+          <div class="sa-card">
+            <div class="sa-card-header" style="flex-wrap: wrap; gap: 16px;">
+              <h2 class="sa-card-title">Immutable System Audit Trail</h2>
+              <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; width: 100%;">
+                <!-- Search -->
+                <div class="sa-search-box" style="flex: 1; min-width: 200px;">
+                  <span class="sa-search-icon">🔍</span>
+                  <input type="text" id="saAuditSearch" placeholder="Search action, email, entity ID..." class="sa-input">
+                </div>
+                <!-- Category Filter -->
+                <select id="saAuditCategoryFilter" class="sa-select">
+                  <option value="ALL">All Categories</option>
+                  <option value="GOVERNANCE">Governance</option>
+                  <option value="SECURITY">Security</option>
+                  <option value="USER_MGMT">User Management</option>
+                  <option value="BILLING">Billing</option>
+                  <option value="SERVICE_REQUEST">Service Request</option>
+                  <option value="TECHNICIAN">Technician</option>
+                  <option value="SYSTEM">System</option>
+                </select>
+                <!-- Severity Filter -->
+                <select id="saAuditSeverityFilter" class="sa-select">
+                  <option value="ALL">All Severities</option>
+                  <option value="INFO">INFO</option>
+                  <option value="WARNING">WARNING</option>
+                  <option value="CRITICAL">CRITICAL</option>
+                </select>
+                <!-- Actor Role Filter -->
+                <select id="saAuditRoleFilter" class="sa-select">
+                  <option value="ALL">All Roles</option>
+                  <option value="SUPER_ADMIN">Super Admin</option>
+                  <option value="LCO_ADMIN">LCO Admin</option>
+                  <option value="CUSTOMER">Customer</option>
+                  <option value="TECHNICIAN">Technician</option>
+                  <option value="SYSTEM">System</option>
+                </select>
+                <!-- Date From / To -->
+                <input type="date" id="saAuditDateFrom" class="sa-input" title="Date From" style="width: 140px;">
+                <input type="date" id="saAuditDateTo" class="sa-input" title="Date To" style="width: 140px;">
+                <!-- Reset Button -->
+                <button id="saAuditResetBtn" class="sa-btn sa-btn-secondary" style="height: 38px;">Reset</button>
+              </div>
+            </div>
+
+            <!-- Audit Logs Table -->
+            <div class="sa-table-responsive">
+              <table class="sa-table" id="saAuditTable">
+                <thead>
+                  <tr>
+                    <th>Timestamp</th>
+                    <th>Category</th>
+                    <th>Severity</th>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Target Entity</th>
+                    <th>Description</th>
+                    <th style="text-align: right;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="saAuditTableBody">
+                  <tr>
+                    <td colspan="8" class="sa-table-empty">Loading audit logs...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Audit Pagination -->
+            <div class="sa-pagination" id="saAuditPagination" style="display: none;">
+              <div class="sa-pagination-info" id="saAuditPaginationInfo">Showing 0 of 0 records</div>
+              <div class="sa-pagination-controls">
+                <button class="sa-btn sa-btn-secondary sa-btn-sm" id="saAuditPrevBtn" disabled>Previous</button>
+                <span class="sa-pagination-page" id="saAuditPageNum">Page 1</span>
+                <button class="sa-btn sa-btn-secondary sa-btn-sm" id="saAuditNextBtn" disabled>Next</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
       </main>
     </div>
   </div>
@@ -637,6 +780,33 @@
 
       <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; align-items: center;">
         <button class="sa-modal-cancel" id="userInspectCloseBtn">Close Inspector</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit Event Detail Inspector Modal -->
+  <div class="sa-modal-overlay" id="saAuditModal">
+    <div class="sa-modal large" style="max-width: 820px; width: 92%; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; border-bottom: 1px solid var(--line); padding-bottom: 16px;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+            <h2 style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; margin: 0;">Audit Event Inspector</h2>
+            <span id="saAuditModalSevBadge"></span>
+          </div>
+          <div style="font-size: 13px; color: var(--slate);">
+            Event ID: <span class="mono" id="saAuditModalId" style="font-weight: 600; color: var(--teal-dark);">—</span>
+          </div>
+        </div>
+        <button class="sa-modal-cancel" id="saAuditCloseTopBtn" style="padding: 6px 12px; min-width: auto;">✕</button>
+      </div>
+
+      <!-- Audit Inspection Content Container -->
+      <div id="saAuditModalBody">
+        <div style="text-align: center; padding: 40px; color: var(--slate);">Loading audit event details…</div>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; align-items: center;">
+        <button class="sa-modal-cancel" id="saAuditCloseBtn">Close Inspector</button>
       </div>
     </div>
   </div>

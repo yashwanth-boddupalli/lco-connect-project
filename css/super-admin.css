@@ -1812,3 +1812,91 @@
 .sa-cat-badge.customer_activity { background: #CCFBF1; color: #0F766E; }
 .sa-cat-badge.technician_activity { background: #FEE2E2; color: #B91C1C; }
 
+
+/* ══════════════════════════════════════════════
+   PHASE 13C-2: AUDIT & SECURITY BADGES & STYLING
+   ══════════════════════════════════════════════ */
+
+/* Severity Badges */
+.sa-sev-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 100px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sa-sev-badge.info {
+  background: #E0F2FE;
+  color: #0369A1;
+}
+
+.sa-sev-badge.warning {
+  background: #FEF3C7;
+  color: #B45309;
+}
+
+.sa-sev-badge.critical {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+/* Category Badges */
+.sa-audit-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.sa-audit-cat-badge.governance { background: #EEF2FF; color: #4338CA; }
+.sa-audit-cat-badge.security { background: #FEE2E2; color: #991B1B; }
+.sa-audit-cat-badge.user_mgmt { background: #F3E8FF; color: #6B21A8; }
+.sa-audit-cat-badge.billing { background: #DCFCE7; color: #166534; }
+.sa-audit-cat-badge.service_request { background: #FEF3C7; color: #92400E; }
+.sa-audit-cat-badge.technician { background: #E0F2FE; color: #075985; }
+.sa-audit-cat-badge.system { background: #F3F4F6; color: #374151; }
+
+/* JSON Code Preview in Inspector Modal */
+.sa-json-preview {
+  background: #0F172A;
+  color: #38BDF8;
+  padding: 14px 16px;
+  border-radius: 8px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 250px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 6px 0 0 0;
+  border: 1px solid #1E293B;
+}
+
+.sa-role-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.sa-role-super_admin { background: #FCE7F3; color: #9D174D; }
+.sa-role-lco_admin { background: #E0F2FE; color: #0369A1; }
+.sa-role-customer { background: #CCFBF1; color: #0F766E; }
+.sa-role-technician { background: #FEF3C7; color: #B45309; }
+.sa-role-system { background: #F3F4F6; color: #4B5563; }
+
+
