@@ -2426,29 +2426,32 @@
 
   async function loadAuditMetrics() {
     try {
-      var client = await getSupabaseClient();
+      var client = sb || LCOAuth.getClient();
       var { data, error } = await client.rpc('get_super_admin_security_metrics');
       if (error) throw error;
 
       var m = Array.isArray(data) ? data[0] : data;
-      if (!m) return;
 
       var setVal = function (id, val) {
         var el = document.getElementById(id);
-        if (el) el.textContent = (val || 0).toLocaleString();
+        if (el) el.textContent = (val !== undefined && val !== null ? Number(val) : 0).toLocaleString();
       };
 
-      setVal('statAuditTotalVal', m.total_audit_events);
-      setVal('statAudit24hVal', m.events_last_24h);
-      setVal('statAudit7dVal', m.events_last_7d);
-      setVal('statAuditPrivilegedVal', m.recent_privileged_operations);
-      setVal('statAuditGovernanceVal', m.governance_events);
-      setVal('statAuditSecurityVal', m.security_events);
-      setVal('statAuditWarningVal', m.warning_events);
-      setVal('statAuditCriticalVal', m.critical_events);
+      setVal('statAuditTotalVal', m ? m.total_audit_events : 0);
+      setVal('statAudit24hVal', m ? m.events_last_24h : 0);
+      setVal('statAudit7dVal', m ? m.events_last_7d : 0);
+      setVal('statAuditPrivilegedVal', m ? m.recent_privileged_operations : 0);
+      setVal('statAuditGovernanceVal', m ? m.governance_events : 0);
+      setVal('statAuditSecurityVal', m ? m.security_events : 0);
+      setVal('statAuditWarningVal', m ? m.warning_events : 0);
+      setVal('statAuditCriticalVal', m ? m.critical_events : 0);
 
     } catch (err) {
       console.error('Error loading security metrics:', err);
+      ['statAuditTotalVal','statAudit24hVal','statAudit7dVal','statAuditPrivilegedVal','statAuditGovernanceVal','statAuditSecurityVal','statAuditWarningVal','statAuditCriticalVal'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = '0';
+      });
     }
   }
 
@@ -2457,10 +2460,10 @@
     var pagDiv = document.getElementById('saAuditPagination');
     if (!tbody) return;
 
-    tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty">Loading audit logs...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty" style="text-align:center; padding:32px; color:var(--slate);"><span class="sa-spinner"></span> Loading audit logs...</td></tr>';
 
     try {
-      var client = await getSupabaseClient();
+      var client = sb || LCOAuth.getClient();
       var { data, error } = await client.rpc('get_super_admin_audit_logs', {
         p_search: auditSearchQuery || null,
         p_category: auditCategoryFilter || 'ALL',
@@ -2480,7 +2483,7 @@
       var pagination = (raw && raw.pagination) ? raw.pagination : { total_records: 0, limit: AUDIT_LIMIT, offset: 0, has_more: false };
 
       if (!list || list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty">No audit logs found matching criteria.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty" style="text-align:center; padding:32px; color:var(--slate);">No audit logs found matching criteria.</td></tr>';
         if (pagDiv) pagDiv.style.display = 'none';
         return;
       }

@@ -640,47 +640,75 @@
           </div>
 
           <!-- Audit Trail Section -->
-          <div class="sa-card">
-            <div class="sa-card-header" style="flex-wrap: wrap; gap: 16px;">
-              <h2 class="sa-card-title">Immutable System Audit Trail</h2>
-              <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap; width: 100%;">
-                <!-- Search -->
-                <div class="sa-search-box" style="flex: 1; min-width: 200px;">
-                  <span class="sa-search-icon">🔍</span>
-                  <input type="text" id="saAuditSearch" placeholder="Search action, email, entity ID..." class="sa-input">
-                </div>
+          <div class="sa-card" style="padding: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+              <h2 class="sa-card-title" style="margin: 0; font-size: 18px; font-family: 'Space Grotesk', sans-serif;">Immutable System Audit Trail</h2>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="sa-toolbar" style="flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+              <!-- Search -->
+              <div class="sa-search-wrap" style="flex: 1; min-width: 240px;">
+                <span class="sa-search-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </span>
+                <input type="text" id="saAuditSearch" class="sa-search-input" placeholder="Search action, email, entity ID...">
+              </div>
+
+              <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                 <!-- Category Filter -->
-                <select id="saAuditCategoryFilter" class="sa-select">
-                  <option value="ALL">All Categories</option>
-                  <option value="GOVERNANCE">Governance</option>
-                  <option value="SECURITY">Security</option>
-                  <option value="USER_MGMT">User Management</option>
-                  <option value="BILLING">Billing</option>
-                  <option value="SERVICE_REQUEST">Service Request</option>
-                  <option value="TECHNICIAN">Technician</option>
-                  <option value="SYSTEM">System</option>
-                </select>
+                <div class="sa-filter-group" style="align-items: center;">
+                  <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Category:</label>
+                  <select id="saAuditCategoryFilter" class="sa-select-input">
+                    <option value="ALL">All Categories</option>
+                    <option value="GOVERNANCE">Governance</option>
+                    <option value="SECURITY">Security</option>
+                    <option value="USER_MGMT">User Management</option>
+                    <option value="BILLING">Billing</option>
+                    <option value="SERVICE_REQUEST">Service Request</option>
+                    <option value="TECHNICIAN">Technician</option>
+                    <option value="SYSTEM">System</option>
+                  </select>
+                </div>
+
                 <!-- Severity Filter -->
-                <select id="saAuditSeverityFilter" class="sa-select">
-                  <option value="ALL">All Severities</option>
-                  <option value="INFO">INFO</option>
-                  <option value="WARNING">WARNING</option>
-                  <option value="CRITICAL">CRITICAL</option>
-                </select>
+                <div class="sa-filter-group" style="align-items: center;">
+                  <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Severity:</label>
+                  <select id="saAuditSeverityFilter" class="sa-select-input">
+                    <option value="ALL">All Severities</option>
+                    <option value="INFO">INFO</option>
+                    <option value="WARNING">WARNING</option>
+                    <option value="CRITICAL">CRITICAL</option>
+                  </select>
+                </div>
+
                 <!-- Actor Role Filter -->
-                <select id="saAuditRoleFilter" class="sa-select">
-                  <option value="ALL">All Roles</option>
-                  <option value="SUPER_ADMIN">Super Admin</option>
-                  <option value="LCO_ADMIN">LCO Admin</option>
-                  <option value="CUSTOMER">Customer</option>
-                  <option value="TECHNICIAN">Technician</option>
-                  <option value="SYSTEM">System</option>
-                </select>
+                <div class="sa-filter-group" style="align-items: center;">
+                  <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Role:</label>
+                  <select id="saAuditRoleFilter" class="sa-select-input">
+                    <option value="ALL">All Roles</option>
+                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="LCO_ADMIN">LCO Admin</option>
+                    <option value="CUSTOMER">Customer</option>
+                    <option value="TECHNICIAN">Technician</option>
+                    <option value="SYSTEM">System</option>
+                  </select>
+                </div>
+
                 <!-- Date From / To -->
-                <input type="date" id="saAuditDateFrom" class="sa-input" title="Date From" style="width: 140px;">
-                <input type="date" id="saAuditDateTo" class="sa-input" title="Date To" style="width: 140px;">
+                <div class="sa-filter-group" style="align-items: center;">
+                  <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">From:</label>
+                  <input type="date" id="saAuditDateFrom" class="sa-date-input" title="Date From">
+                </div>
+                <div class="sa-filter-group" style="align-items: center;">
+                  <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">To:</label>
+                  <input type="date" id="saAuditDateTo" class="sa-date-input" title="Date To">
+                </div>
+
                 <!-- Reset Button -->
-                <button id="saAuditResetBtn" class="sa-btn sa-btn-secondary" style="height: 38px;">Reset</button>
+                <button id="saAuditResetBtn" class="sa-btn-secondary">Reset</button>
               </div>
             </div>
 
