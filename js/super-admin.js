@@ -39,6 +39,31 @@
   var currentInspectDetail = null;
   var pendingGovernanceAction = null; // { applicationId, bizName, currentStatus, newStatus }
 
+  // Phase 13B: User Directory State
+  var userDirData = [];
+  var userDirTotal = 0;
+  var userDirOffset = 0;
+  var userDirLimit = 15;
+  var userDirSearch = '';
+  var userDirRoleFilter = 'ALL';
+  var userDirStatusFilter = 'ALL';
+  var userDirSearchTimer = null;
+  var userDirRequestId = 0;
+
+  // Phase 13B: Communication Oversight State
+  var commData = [];
+  var commTotal = 0;
+  var commOffset = 0;
+  var commLimit = 15;
+  var commSearch = '';
+  var commCategoryFilter = 'ALL';
+  var commRecipientRoleFilter = 'ALL';
+  var commLcoFilter = 'ALL';
+  var commSearchTimer = null;
+  var commRequestId = 0;
+
+  var platformLcosList = [];
+
 
   /* ══════════════════════════════════════════════
      AUTH GUARD (uses shared LCOAuth module)
@@ -93,11 +118,16 @@
     setupLcoDirectory();
     setupInspectorModal();
     setupGovernanceModal();
+    setupUserDirectory();
+    setupUserInspectorModal();
+    setupCommunicationOversight();
+    setupAuditSecurity();
 
     // Load data
     loadPlatformOverview();
     loadStats();
     loadApplications();
+    loadPlatformLcos();
   }
 
 
@@ -138,6 +168,15 @@
     } else if (viewName === 'lco-directory') {
       lcoDirOffset = 0;
       loadLcoDirectory();
+    } else if (viewName === 'user-directory') {
+      userDirOffset = 0;
+      loadUserDirectory();
+    } else if (viewName === 'communication-oversight') {
+      commOffset = 0;
+      loadCommunicationOversight();
+    } else if (viewName === 'audit-security') {
+      auditOffset = 0;
+      loadAuditSecurity();
     } else if (viewName === 'applications') {
       renderApplicationsTable();
     } else if (viewName === 'approved') {
@@ -854,6 +893,7 @@
         closeDocRejectModal();
         closeLcoInspector();
         closeGovernanceModal();
+        closeUserInspectorModal();
         document.getElementById('imagePreview').classList.remove('visible');
       }
     });
@@ -1109,6 +1149,9 @@
     d.textContent = str;
     return d.innerHTML;
   }
+
+  // Alias for Phase 13B code that uses escapeHtml instead of esc
+  var escapeHtml = esc;
 
   function renderBadge(status) {
     var cls = 'pending';
@@ -1640,6 +1683,944 @@
       btn.disabled = false;
       btn.textContent = originalText;
     }
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13B: LCO DROPDOWN DATA
+     ══════════════════════════════════════════════ */
+
+  async function loadPlatformLcos() {
+    try {
+      var { data, error } = await sb.rpc('get_super_admin_lco_directory', {
+        p_search: null,
+        p_status: 'ALL',
+        p_limit: 500,
+        p_offset: 0
+      });
+      if (error) throw error;
+      var records = (data && data.data) ? data.data : [];
+      platformLcosList = records.map(function (r) {
+        return { id: r.lco_id || r.id, name: r.business_name || r.owner_name };
+      });
+
+      populateLcoDropdowns();
+    } catch (e) {
+      console.warn('Could not load LCO list for filters:', e);
+    }
+  }
+
+  function populateLcoDropdowns() {
+    var commSelect = document.getElementById('commLcoSelect');
+
+    var optsHtml = '<option value="ALL">All LCOs</option>';
+    platformLcosList.forEach(function (lco) {
+      if (lco.id && lco.name) {
+        optsHtml += '<option value="' + escapeHtml(lco.id) + '">' + escapeHtml(lco.name) + '</option>';
+      }
+    });
+
+    if (commSelect) commSelect.innerHTML = optsHtml;
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13B: USER DIRECTORY
+     ══════════════════════════════════════════════ */
+
+  function setupUserDirectory() {
+    var searchInput = document.getElementById('userDirSearchInput');
+    var roleSelect = document.getElementById('userDirRoleSelect');
+    var statusSelect = document.getElementById('userDirStatusSelect');
+    var prevBtn = document.getElementById('userDirPrevBtn');
+    var nextBtn = document.getElementById('userDirNextBtn');
+    var tbody = document.getElementById('userDirTableBody');
+
+    // Delegated click handler on user directory table
+    if (tbody) {
+      tbody.addEventListener('click', function (e) {
+        var btn = e.target.closest('.btn-inspect-user');
+        if (btn && btn.dataset.userId) {
+          e.stopPropagation();
+          openUserInspector(btn.dataset.userId);
+        }
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        if (userDirSearchTimer) clearTimeout(userDirSearchTimer);
+        userDirSearchTimer = setTimeout(function () {
+          userDirSearch = searchInput.value.trim();
+          userDirOffset = 0;
+          loadUserDirectory();
+        }, 300);
+      });
+    }
+
+    if (roleSelect) {
+      roleSelect.addEventListener('change', function () {
+        userDirRoleFilter = roleSelect.value;
+        userDirOffset = 0;
+        loadUserDirectory();
+      });
+    }
+
+    if (statusSelect) {
+      statusSelect.addEventListener('change', function () {
+        userDirStatusFilter = statusSelect.value;
+        userDirOffset = 0;
+        loadUserDirectory();
+      });
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        if (userDirOffset >= userDirLimit) {
+          userDirOffset -= userDirLimit;
+          loadUserDirectory();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        if (userDirOffset + userDirLimit < userDirTotal) {
+          userDirOffset += userDirLimit;
+          loadUserDirectory();
+        }
+      });
+    }
+  }
+
+  async function loadUserDirectory() {
+    console.log('[Phase13B] loadUserDirectory called');
+    var tbody = document.getElementById('userDirTableBody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);"><span class="sa-spinner"></span> Loading user directory…</td></tr>';
+    }
+
+    try {
+      var roleParam = userDirRoleFilter === 'ALL' ? null : userDirRoleFilter;
+      var statusParam = userDirStatusFilter === 'ALL' ? null : userDirStatusFilter;
+
+      console.log('[UserDir Debug] Requesting RPC get_super_admin_user_directory with params:', {
+        p_search: userDirSearch || null,
+        p_role: roleParam,
+        p_status: statusParam,
+        p_lco_id: null,
+        p_limit: userDirLimit,
+        p_offset: userDirOffset
+      });
+
+      var { data, error } = await sb.rpc('get_super_admin_user_directory', {
+        p_search: userDirSearch || null,
+        p_role: roleParam,
+        p_status: statusParam,
+        p_lco_id: null,
+        p_limit: userDirLimit,
+        p_offset: userDirOffset
+      });
+
+      console.log('[UserDir Debug] sb.rpc returned raw data:', data, 'error:', error);
+
+      if (error) {
+        console.error('[UserDir Debug] RPC returned error object:', error);
+        throw error;
+      }
+
+      // Unwrap result object or array returned by RPC
+      var res = Array.isArray(data) ? data[0] : data;
+      console.log('[UserDir Debug] Normalized res object:', res);
+
+      var rawRecords = (res && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
+      console.log('[UserDir Debug] Extracted rawRecords count:', rawRecords.length, rawRecords);
+
+      // Filter out SUPER_ADMIN role users from directory
+      userDirData = rawRecords.filter(function (u) {
+        return u && u.role !== 'SUPER_ADMIN';
+      });
+      console.log('[UserDir Debug] Filtered userDirData (excluding SUPER_ADMIN):', userDirData.length, userDirData);
+
+      if (res && res.pagination && res.pagination.total_records !== undefined) {
+        var totalFromPag = parseInt(res.pagination.total_records, 10);
+        var superAdminCountInPage = rawRecords.length - userDirData.length;
+        userDirTotal = Math.max(0, totalFromPag - superAdminCountInPage);
+      } else {
+        userDirTotal = userDirData.length;
+      }
+      console.log('[UserDir Debug] Calculated userDirTotal:', userDirTotal);
+
+      renderUserDirectoryTable();
+      updateUserDirPagination();
+    } catch (e) {
+      console.error('[UserDir Debug] Exception in loadUserDirectory:', e);
+      if (tbody) {
+        var errMsg = escapeHtml(e.message || e.error_description || (typeof e === 'string' ? e : 'Unknown error'));
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#E74C3C;"><div class="sa-empty"><div class="sa-empty-icon">⚠️</div><h3>Failed to load user directory</h3><p>' + errMsg + '</p></div></td></tr>';
+      }
+    }
+  }
+
+  function renderUserDirectoryTable() {
+    var tbody = document.getElementById('userDirTableBody');
+    if (!tbody) return;
+
+    if (!userDirData || userDirData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="sa-empty"><div class="sa-empty-icon">👤</div><h3>No users found</h3><p>' +
+        (userDirSearch ? 'No users match your search criteria.' : 'No registered platform users found.') +
+        '</p></div></td></tr>';
+      return;
+    }
+
+    var html = userDirData.map(function (u) {
+      var roleClass = 'role-' + (u.role || '').toLowerCase().replace(/_/g, '-');
+      var roleBadge = '<span class="sa-badge ' + roleClass + '">' + esc(u.role || '—') + '</span>';
+
+      var statusStr = u.status || 'ACTIVE';
+      var statusClass = statusStr.toUpperCase() === 'ACTIVE' ? 'approved' : statusStr.toUpperCase() === 'SUSPENDED' ? 'rejected' : 'pending';
+      var statusBadge = '<span class="sa-badge ' + statusClass + '">' + esc(statusStr) + '</span>';
+
+      var nameDisplay = esc(u.full_name || '—');
+      var emailDisplay = esc(u.email || '—');
+      var lcoDisplay = esc(u.lco_business_name || '—');
+      var dateDisplay = u.created_at ? formatDate(u.created_at) : '—';
+
+      return '<tr class="sa-lco-dir-row">' +
+        '<td><strong style="color:var(--ink);">' + nameDisplay + '</strong></td>' +
+        '<td><span class="mono" style="font-size:13px;">' + emailDisplay + '</span></td>' +
+        '<td>' + roleBadge + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td>' + lcoDisplay + '</td>' +
+        '<td style="font-size:13px; color:var(--slate);">' + dateDisplay + '</td>' +
+        '<td>' +
+          '<button class="sa-view-btn btn-inspect-user" data-user-id="' + esc(u.user_id) + '" title="Inspect User Details">' +
+            'View' +
+          '</button>' +
+        '</td>' +
+      '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+  }
+
+  function updateUserDirPagination() {
+    var info = document.getElementById('userDirPaginationInfo');
+    var prevBtn = document.getElementById('userDirPrevBtn');
+    var nextBtn = document.getElementById('userDirNextBtn');
+
+    if (userDirTotal === 0) {
+      if (info) info.textContent = 'Showing 0 of 0';
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+      return;
+    }
+
+    var start = userDirOffset + 1;
+    var end = Math.min(userDirOffset + userDirLimit, userDirTotal);
+    if (info) info.textContent = 'Showing ' + start + '–' + end + ' of ' + userDirTotal;
+
+    if (prevBtn) prevBtn.disabled = userDirOffset === 0;
+    if (nextBtn) nextBtn.disabled = userDirOffset + userDirLimit >= userDirTotal;
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13B: USER DETAIL INSPECTOR MODAL
+     ══════════════════════════════════════════════ */
+
+  function renderInspectField(label, value, isMono) {
+    var valStr = (value !== null && value !== undefined && String(value).trim() !== '') ? String(value) : 'Not available';
+    var valClass = 'sa-detail-value' + (isMono && valStr !== 'Not available' ? ' mono' : '');
+    return '<div class="sa-inspect-field">' +
+      '<div class="sa-detail-label">' + esc(label) + '</div>' +
+      '<div class="' + valClass + '">' + esc(valStr) + '</div>' +
+    '</div>';
+  }
+
+  function setupUserInspectorModal() {
+    var closeTopBtn = document.getElementById('userInspectCloseTopBtn');
+    var closeBtn = document.getElementById('userInspectCloseBtn');
+    var modal = document.getElementById('userDetailModal');
+
+    if (closeTopBtn) closeTopBtn.addEventListener('click', closeUserInspectorModal);
+    if (closeBtn) closeBtn.addEventListener('click', closeUserInspectorModal);
+
+    if (modal) {
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeUserInspectorModal();
+      });
+    }
+  }
+
+  function closeUserInspectorModal() {
+    var modal = document.getElementById('userDetailModal');
+    if (modal) modal.classList.remove('visible');
+  }
+
+  async function openUserInspector(userId) {
+    var modal = document.getElementById('userDetailModal');
+    var titleEl = document.getElementById('userInspectTitle');
+    var statusBadgeEl = document.getElementById('userInspectStatusBadge');
+    var roleBadgeEl = document.getElementById('userInspectRoleBadge');
+    var idLabelEl = document.getElementById('userInspectIdLabel');
+    var userIdEl = document.getElementById('userInspectUserId');
+    var contentEl = document.getElementById('userInspectContent');
+
+    if (!modal || !contentEl) return;
+
+    // Reset header & content immediately to prevent showing stale data from a previous user
+    if (titleEl) titleEl.textContent = 'User Details';
+    if (statusBadgeEl) statusBadgeEl.innerHTML = '';
+    if (roleBadgeEl) roleBadgeEl.innerHTML = '';
+    if (idLabelEl) idLabelEl.textContent = 'ID:';
+    if (userIdEl) userIdEl.textContent = '—';
+    contentEl.innerHTML = '<div style="text-align:center; padding:40px; color:var(--slate);"><span class="sa-spinner"></span> Loading user details…</div>';
+
+    // Open modal using Super Admin standard .visible class
+    modal.classList.add('visible');
+
+    try {
+      var { data, error } = await sb.rpc('get_super_admin_user_detail', {
+        p_user_id: userId
+      });
+
+      if (error) throw error;
+
+      var raw = Array.isArray(data) ? data[0] : data;
+      if (!raw || !raw.profile) {
+        contentEl.innerHTML = '<div class="sa-empty"><div class="sa-empty-icon">⚠️</div><h3>User profile not found</h3><p>No profile details found for the specified user ID.</p></div>';
+        return;
+      }
+
+      var prof = raw.profile || {};
+      var lco = raw.lco_association || {};
+      var entity = raw.role_specific_entity || {};
+      var comm = raw.communication_summary || {};
+
+      var displayName = entity.full_name || entity.owner_name || prof.email || 'User Profile';
+      if (titleEl) titleEl.textContent = displayName;
+
+      var roleClass = 'role-' + (prof.role || '').toLowerCase().replace(/_/g, '-');
+      if (roleBadgeEl) roleBadgeEl.innerHTML = '<span class="sa-badge ' + roleClass + '">' + esc(prof.role || '—') + '</span>';
+
+      var statusStr = prof.status || 'ACTIVE';
+      var statusClass = statusStr.toUpperCase() === 'ACTIVE' ? 'approved' : statusStr.toUpperCase() === 'SUSPENDED' ? 'rejected' : 'pending';
+      if (statusBadgeEl) statusBadgeEl.innerHTML = '<span class="sa-badge ' + statusClass + '">' + esc(statusStr) + '</span>';
+
+      // Role-aware Header ID Display (business identifier, never Supabase UUID)
+      var businessId = null;
+      var businessIdLabel = 'ID:';
+
+      if (prof.role === 'LCO_ADMIN') {
+        businessIdLabel = 'LCO ID:';
+        businessId = entity.application_id || lco.application_id || null;
+      } else if (prof.role === 'CUSTOMER') {
+        businessIdLabel = 'Customer ID:';
+        businessId = entity.customer_id || null;
+      } else if (prof.role === 'TECHNICIAN') {
+        businessIdLabel = 'Technician ID:';
+        businessId = entity.technician_id || null;
+      }
+
+      if (idLabelEl) idLabelEl.textContent = businessIdLabel;
+      if (userIdEl) userIdEl.textContent = businessId || 'Not available';
+
+      var phoneVal = entity.phone || prof.phone || null;
+      var emailVal = prof.email || entity.email || null;
+      var html = '';
+
+      // Section 1: ACCOUNT PROFILE
+      html += '<div class="sa-inspect-section">' +
+        '<div class="sa-inspect-section-title"><span>👤</span> Account Profile</div>' +
+        '<div class="sa-inspect-grid">' +
+          renderInspectField('Name', displayName) +
+          renderInspectField('Email Address', emailVal) +
+          renderInspectField('Account Status', prof.status || 'ACTIVE') +
+          renderInspectField('Account Created', formatDateFull(prof.created_at)) +
+          renderInspectField('Phone Number', phoneVal) +
+        '</div>' +
+      '</div>';
+
+      // Section 2: ORGANIZATION
+      if (lco && (lco.business_name || lco.lco_id || lco.application_id)) {
+        var lcoLocation = (lco.city || '') + (lco.state ? ', ' + lco.state : '');
+        html += '<div class="sa-inspect-section">' +
+          '<div class="sa-inspect-section-title"><span>🏢</span> Organization</div>' +
+          '<div class="sa-inspect-grid">' +
+            renderInspectField('LCO Business Name', lco.business_name) +
+            renderInspectField('LCO ID', lco.application_id || lco.lco_id, true) +
+            renderInspectField('Application ID', lco.application_id, true) +
+            renderInspectField('Location', lcoLocation || null) +
+          '</div>' +
+        '</div>';
+      }
+
+      // Section 3: ROLE-SPECIFIC DETAILS
+      if (prof.role === 'LCO_ADMIN') {
+        var fullAddr = [entity.address, entity.city, entity.state, entity.pincode].filter(Boolean).join(', ');
+        html += '<div class="sa-inspect-section">' +
+          '<div class="sa-inspect-section-title"><span>▤</span> LCO Admin Details</div>' +
+          '<div class="sa-inspect-grid">' +
+            renderInspectField('LCO ID', entity.application_id || lco.application_id, true) +
+            renderInspectField('Owner Name', entity.owner_name) +
+            renderInspectField('Contact Phone', entity.phone) +
+            renderInspectField('Application Status', entity.application_status) +
+            renderInspectField('Business Address', fullAddr || null) +
+          '</div>' +
+        '</div>';
+      } else if (prof.role === 'CUSTOMER') {
+        html += '<div class="sa-inspect-section">' +
+          '<div class="sa-inspect-section-title"><span>👥</span> Customer Details</div>' +
+          '<div class="sa-inspect-grid">' +
+            renderInspectField('Customer ID', entity.customer_id, true) +
+            renderInspectField('Full Name', entity.full_name) +
+            renderInspectField('Service Status', entity.service_status) +
+            renderInspectField('Service Type', entity.service_type) +
+            renderInspectField('Plan Name', entity.plan_name) +
+            renderInspectField('City', entity.city) +
+            renderInspectField('Pincode', entity.pincode) +
+            renderInspectField('Connection Date', entity.connection_date ? formatDate(entity.connection_date) : null) +
+          '</div>' +
+        '</div>';
+      } else if (prof.role === 'TECHNICIAN') {
+        html += '<div class="sa-inspect-section">' +
+          '<div class="sa-inspect-section-title"><span>🛠️</span> Technician Details</div>' +
+          '<div class="sa-inspect-grid">' +
+            renderInspectField('Technician ID', entity.technician_id, true) +
+            renderInspectField('Full Name', entity.full_name) +
+            renderInspectField('Operational Status', entity.status) +
+            renderInspectField('Invitation Status', entity.invitation_status) +
+          '</div>' +
+        '</div>';
+      }
+
+      // Section 4: COMMUNICATION ACTIVITY
+      html += '<div class="sa-inspect-section">' +
+        '<div class="sa-inspect-section-title"><span>📡</span> Communication Activity</div>' +
+        '<div class="sa-inspect-grid">' +
+          renderInspectField('Total Notifications', comm.total_notifications !== undefined && comm.total_notifications !== null ? comm.total_notifications : 0) +
+          renderInspectField('Last Activity', comm.last_notification_at ? formatDateFull(comm.last_notification_at) : 'No communication recorded') +
+        '</div>' +
+      '</div>';
+
+      contentEl.innerHTML = html;
+    } catch (e) {
+      console.error('Failed to load user detail:', e);
+      contentEl.innerHTML = '<div style="text-align:center; padding:32px; color:#E74C3C;"><div class="sa-empty"><div class="sa-empty-icon">⚠️</div><h3>Failed to load user details</h3><p>' + esc(e.message || 'Unknown error') + '</p></div></div>';
+    }
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13B: COMMUNICATION OVERSIGHT
+     ══════════════════════════════════════════════ */
+
+  function setupCommunicationOversight() {
+    var searchInput = document.getElementById('commSearchInput');
+    var categorySelect = document.getElementById('commCategorySelect');
+    var recipientRoleSelect = document.getElementById('commRecipientRoleSelect');
+    var lcoSelect = document.getElementById('commLcoSelect');
+    var prevBtn = document.getElementById('commPrevBtn');
+    var nextBtn = document.getElementById('commNextBtn');
+
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        if (commSearchTimer) clearTimeout(commSearchTimer);
+        commSearchTimer = setTimeout(function () {
+          commSearch = searchInput.value.trim();
+          commOffset = 0;
+          loadCommunicationOversight();
+        }, 300);
+      });
+    }
+
+    if (categorySelect) {
+      categorySelect.addEventListener('change', function () {
+        commCategoryFilter = categorySelect.value;
+        commOffset = 0;
+        loadCommunicationOversight();
+      });
+    }
+
+    if (recipientRoleSelect) {
+      recipientRoleSelect.addEventListener('change', function () {
+        commRecipientRoleFilter = recipientRoleSelect.value;
+        commOffset = 0;
+        loadCommunicationOversight();
+      });
+    }
+
+    if (lcoSelect) {
+      lcoSelect.addEventListener('change', function () {
+        commLcoFilter = lcoSelect.value;
+        commOffset = 0;
+        loadCommunicationOversight();
+      });
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        if (commOffset >= commLimit) {
+          commOffset -= commLimit;
+          loadCommunicationOversight();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        if (commOffset + commLimit < commTotal) {
+          commOffset += commLimit;
+          loadCommunicationOversight();
+        }
+      });
+    }
+  }
+
+  async function loadCommunicationOversight() {
+    console.log('[Phase13B] loadCommunicationOversight called');
+    var tbody = document.getElementById('commTableBody');
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);"><span class="sa-spinner"></span> Loading communication oversight feed…</td></tr>';
+    }
+
+    var thisReqId = ++commRequestId;
+
+    try {
+      var lcoParam = commLcoFilter === 'ALL' ? null : commLcoFilter;
+      var catParam = commCategoryFilter === 'ALL' ? null : commCategoryFilter;
+      var roleParam = commRecipientRoleFilter === 'ALL' ? null : commRecipientRoleFilter;
+
+      var { data, error } = await sb.rpc('get_super_admin_communication_oversight', {
+        p_search: commSearch || null,
+        p_lco_id: lcoParam,
+        p_category: catParam,
+        p_recipient_role: roleParam,
+        p_limit: commLimit,
+        p_offset: commOffset
+      });
+
+      if (thisReqId !== commRequestId) return; // Prevent stale request overwrite
+
+      if (error) throw error;
+
+      commData = (data && data.data) ? data.data : [];
+      var pag = (data && data.pagination) ? data.pagination : {};
+      commTotal = pag.total_records || 0;
+
+      renderCommunicationTable();
+      updateCommPagination();
+    } catch (e) {
+      if (thisReqId !== commRequestId) return;
+      console.error('Communication oversight fetch error:', e);
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#E74C3C;">Failed to load communication oversight feed: ' + escapeHtml(e.message || 'Unknown error') + '</td></tr>';
+      }
+    }
+  }
+
+  function renderCommunicationTable() {
+    var tbody = document.getElementById('commTableBody');
+    if (!tbody) return;
+
+    if (!commData || commData.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">No communication events found matching current filters.</td></tr>';
+      return;
+    }
+
+    var html = commData.map(function (c) {
+      var catClass = (c.category || '').toLowerCase();
+      var catBadge = '<span class="sa-cat-badge ' + catClass + '">' + escapeHtml(c.category || 'SYSTEM') + '</span>';
+
+      var roleClass = 'role-' + (c.recipient_role || '').toLowerCase().replace(/_/g, '-');
+      var roleBadge = '<span class="sa-badge ' + roleClass + '">' + escapeHtml(c.recipient_role || '—') + '</span>';
+
+      var statusText = escapeHtml(c.status_label || 'SENT');
+      var statusBadgeClass = statusText.toLowerCase() === 'unread' || statusText.toLowerCase() === 'active' ? 'approved' : 'pending';
+      var statusBadge = '<span class="sa-badge ' + statusBadgeClass + '">' + statusText + '</span>';
+
+      var dateDisplay = c.created_at ? formatDate(c.created_at) : '—';
+      var lcoDisplay = escapeHtml(c.lco_business_name || 'System');
+      var titleDisplay = escapeHtml(c.title || '—');
+      var recipientDisplay = escapeHtml(c.recipient_name || '—');
+      var summaryDisplay = escapeHtml(c.summary || '—');
+
+      return '<tr class="sa-lco-dir-row">' +
+        '<td style="font-size:13px; color:var(--slate); white-space:nowrap;">' + dateDisplay + '</td>' +
+        '<td><strong style="color:var(--ink); font-size:13px;">' + lcoDisplay + '</strong></td>' +
+        '<td>' + catBadge + '</td>' +
+        '<td><span style="font-weight:600; color:var(--ink);">' + titleDisplay + '</span></td>' +
+        '<td>' + recipientDisplay + '</td>' +
+        '<td>' + roleBadge + '</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td style="font-size:13px; color:var(--slate); max-width:240px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + summaryDisplay + '">' + summaryDisplay + '</td>' +
+      '</tr>';
+    }).join('');
+
+    tbody.innerHTML = html;
+  }
+
+  function updateCommPagination() {
+    var info = document.getElementById('commPaginationInfo');
+    var prevBtn = document.getElementById('commPrevBtn');
+    var nextBtn = document.getElementById('commNextBtn');
+
+    if (commTotal === 0) {
+      if (info) info.textContent = 'Showing 0 of 0';
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+      return;
+    }
+
+    var start = commOffset + 1;
+    var end = Math.min(commOffset + commLimit, commTotal);
+    if (info) info.textContent = 'Showing ' + start + '–' + end + ' of ' + commTotal;
+
+    if (prevBtn) prevBtn.disabled = commOffset === 0;
+    if (nextBtn) nextBtn.disabled = commOffset + commLimit >= commTotal;
+  }
+
+
+  /* ══════════════════════════════════════════════
+     PHASE 13C-2: SYSTEM AUDIT & SECURITY OVERSIGHT
+     ══════════════════════════════════════════════ */
+
+  var auditSearchQuery = '';
+  var auditCategoryFilter = 'ALL';
+  var auditSeverityFilter = 'ALL';
+  var auditRoleFilter = 'ALL';
+  var auditDateFrom = null;
+  var auditDateTo = null;
+  var auditOffset = 0;
+  var AUDIT_LIMIT = 50;
+
+  function setupAuditSecurity() {
+    var searchInput = document.getElementById('saAuditSearch');
+    var catFilter = document.getElementById('saAuditCategoryFilter');
+    var sevFilter = document.getElementById('saAuditSeverityFilter');
+    var roleFilter = document.getElementById('saAuditRoleFilter');
+    var dateFromInput = document.getElementById('saAuditDateFrom');
+    var dateToInput = document.getElementById('saAuditDateTo');
+    var resetBtn = document.getElementById('saAuditResetBtn');
+    var prevBtn = document.getElementById('saAuditPrevBtn');
+    var nextBtn = document.getElementById('saAuditNextBtn');
+
+    var debounceTimer;
+    if (searchInput) {
+      searchInput.addEventListener('input', function () {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(function () {
+          auditSearchQuery = searchInput.value;
+          auditOffset = 0;
+          loadAuditLogs();
+        }, 350);
+      });
+    }
+
+    if (catFilter) {
+      catFilter.addEventListener('change', function () {
+        auditCategoryFilter = catFilter.value;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (sevFilter) {
+      sevFilter.addEventListener('change', function () {
+        auditSeverityFilter = sevFilter.value;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (roleFilter) {
+      roleFilter.addEventListener('change', function () {
+        auditRoleFilter = roleFilter.value;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (dateFromInput) {
+      dateFromInput.addEventListener('change', function () {
+        auditDateFrom = dateFromInput.value || null;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (dateToInput) {
+      dateToInput.addEventListener('change', function () {
+        auditDateTo = dateToInput.value || null;
+        auditOffset = 0;
+        loadAuditLogs();
+      });
+    }
+
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function () {
+        auditSearchQuery = '';
+        auditCategoryFilter = 'ALL';
+        auditSeverityFilter = 'ALL';
+        auditRoleFilter = 'ALL';
+        auditDateFrom = null;
+        auditDateTo = null;
+        auditOffset = 0;
+
+        if (searchInput) searchInput.value = '';
+        if (catFilter) catFilter.value = 'ALL';
+        if (sevFilter) sevFilter.value = 'ALL';
+        if (roleFilter) roleFilter.value = 'ALL';
+        if (dateFromInput) dateFromInput.value = '';
+        if (dateToInput) dateToInput.value = '';
+
+        loadAuditLogs();
+      });
+    }
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        if (auditOffset >= AUDIT_LIMIT) {
+          auditOffset -= AUDIT_LIMIT;
+          loadAuditLogs();
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        auditOffset += AUDIT_LIMIT;
+        loadAuditLogs();
+      });
+    }
+
+    // Modal Close handlers
+    var modal = document.getElementById('saAuditModal');
+    var closeTopBtn = document.getElementById('saAuditCloseTopBtn');
+    var closeBtn = document.getElementById('saAuditCloseBtn');
+
+    if (closeTopBtn) {
+      closeTopBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+      });
+    }
+    if (closeBtn) {
+      closeBtn.addEventListener('click', function () {
+        modal.classList.remove('visible');
+      });
+    }
+    if (modal) {
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.classList.remove('visible');
+      });
+    }
+  }
+
+  async function loadAuditSecurity() {
+    await Promise.all([
+      loadAuditMetrics(),
+      loadAuditLogs()
+    ]);
+  }
+
+  async function loadAuditMetrics() {
+    try {
+      var client = sb || LCOAuth.getClient();
+      var { data, error } = await client.rpc('get_super_admin_security_metrics');
+      if (error) throw error;
+
+      var m = Array.isArray(data) ? data[0] : data;
+
+      var setVal = function (id, val) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = (val !== undefined && val !== null ? Number(val) : 0).toLocaleString();
+      };
+
+      setVal('statAuditTotalVal', m ? m.total_audit_events : 0);
+      setVal('statAudit24hVal', m ? m.events_last_24h : 0);
+      setVal('statAudit7dVal', m ? m.events_last_7d : 0);
+      setVal('statAuditPrivilegedVal', m ? m.recent_privileged_operations : 0);
+      setVal('statAuditGovernanceVal', m ? m.governance_events : 0);
+      setVal('statAuditSecurityVal', m ? m.security_events : 0);
+      setVal('statAuditWarningVal', m ? m.warning_events : 0);
+      setVal('statAuditCriticalVal', m ? m.critical_events : 0);
+
+    } catch (err) {
+      console.error('Error loading security metrics:', err);
+      ['statAuditTotalVal','statAudit24hVal','statAudit7dVal','statAuditPrivilegedVal','statAuditGovernanceVal','statAuditSecurityVal','statAuditWarningVal','statAuditCriticalVal'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = '0';
+      });
+    }
+  }
+
+  async function loadAuditLogs() {
+    var tbody = document.getElementById('saAuditTableBody');
+    var pagDiv = document.getElementById('saAuditPagination');
+    if (!tbody) return;
+
+    tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty" style="text-align:center; padding:32px; color:var(--slate);"><span class="sa-spinner"></span> Loading audit logs...</td></tr>';
+
+    try {
+      var client = sb || LCOAuth.getClient();
+      var { data, error } = await client.rpc('get_super_admin_audit_logs', {
+        p_search: auditSearchQuery || null,
+        p_category: auditCategoryFilter || 'ALL',
+        p_severity: auditSeverityFilter || 'ALL',
+        p_actor_role: auditRoleFilter || 'ALL',
+        p_lco_id: null,
+        p_date_from: auditDateFrom ? new Date(auditDateFrom).toISOString() : null,
+        p_date_to: auditDateTo ? new Date(auditDateTo + 'T23:59:59').toISOString() : null,
+        p_limit: AUDIT_LIMIT,
+        p_offset: auditOffset
+      });
+
+      if (error) throw error;
+
+      var raw = Array.isArray(data) ? data[0] : data;
+      var list = (raw && raw.data) ? raw.data : [];
+      var pagination = (raw && raw.pagination) ? raw.pagination : { total_records: 0, limit: AUDIT_LIMIT, offset: 0, has_more: false };
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty" style="text-align:center; padding:32px; color:var(--slate);">No audit logs found matching criteria.</td></tr>';
+        if (pagDiv) pagDiv.style.display = 'none';
+        return;
+      }
+
+      var html = '';
+      list.forEach(function (log) {
+        var dateStr = formatDateFull(log.created_at);
+        var categoryBadge = getCategoryBadgeHtml(log.category);
+        var severityBadge = getSeverityBadgeHtml(log.severity);
+        var actorDisplay = log.actor_email ? esc(log.actor_email) : 'System';
+        var roleBadge = '<span class="sa-role-badge sa-role-' + esc((log.actor_role || 'SYSTEM').toLowerCase()) + '">' + esc(log.actor_role || 'SYSTEM') + '</span>';
+        var entityDisplay = esc(log.entity_type) + ': <strong>' + esc(log.entity_id) + '</strong>';
+
+        html += '<tr>';
+        html += '<td style="white-space:nowrap;">' + dateStr + '</td>';
+        html += '<td>' + categoryBadge + '</td>';
+        html += '<td>' + severityBadge + '</td>';
+        html += '<td><code style="font-family:\'IBM Plex Mono\',monospace; font-size:12px; background:var(--sand); padding:2px 6px; border-radius:4px;">' + esc(log.action) + '</code></td>';
+        html += '<td><div>' + actorDisplay + '</div><div>' + roleBadge + '</div></td>';
+        html += '<td>' + entityDisplay + '</td>';
+        html += '<td style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="' + esc(log.description) + '">' + esc(log.description) + '</td>';
+        html += '<td style="text-align:right;"><button class="sa-view-btn sa-btn-inspect-audit" data-audit-id="' + esc(log.id) + '">View</button></td>';
+        html += '</tr>';
+      });
+
+      tbody.innerHTML = html;
+
+      // Event delegation / click listeners for inspect view buttons
+      tbody.querySelectorAll('.sa-btn-inspect-audit').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var logId = btn.dataset.auditId;
+          var logObj = list.find(function (item) { return item.id === logId; });
+          if (logObj) openAuditInspector(logObj);
+        });
+      });
+
+      // Pagination rendering
+      if (pagDiv) {
+        pagDiv.style.display = 'flex';
+        var startNum = pagination.offset + 1;
+        var endNum = Math.min(pagination.offset + pagination.limit, pagination.total_records);
+        var info = document.getElementById('saAuditPaginationInfo');
+        if (info) info.textContent = 'Showing ' + startNum + '–' + endNum + ' of ' + pagination.total_records + ' audit logs';
+        var currentPage = Math.floor(pagination.offset / pagination.limit) + 1;
+        var totalPages = Math.ceil(pagination.total_records / pagination.limit) || 1;
+        var pageEl = document.getElementById('saAuditPageNum');
+        if (pageEl) pageEl.textContent = 'Page ' + currentPage + ' of ' + totalPages;
+        var prevBtn = document.getElementById('saAuditPrevBtn');
+        if (prevBtn) prevBtn.disabled = (pagination.offset === 0);
+        var nextBtn = document.getElementById('saAuditNextBtn');
+        if (nextBtn) nextBtn.disabled = !pagination.has_more;
+      }
+
+    } catch (err) {
+      console.error('Error loading audit logs:', err);
+      tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty sa-error">Error loading audit logs: ' + esc(err.message || String(err)) + '</td></tr>';
+      if (pagDiv) pagDiv.style.display = 'none';
+    }
+  }
+
+  function openAuditInspector(log) {
+    var modal = document.getElementById('saAuditModal');
+    var body = document.getElementById('saAuditModalBody');
+    var modalId = document.getElementById('saAuditModalId');
+    var modalBadge = document.getElementById('saAuditModalSevBadge');
+
+    if (modalId) modalId.textContent = log.id;
+    if (modalBadge) modalBadge.innerHTML = getSeverityBadgeHtml(log.severity);
+
+    // Sanitize metadata payload to strictly exclude sensitive credentials/tokens if any exist
+    var cleanMeta = sanitizeMetadata(log.metadata || {});
+    var metaJson = '{}';
+    try {
+      metaJson = JSON.stringify(cleanMeta, null, 2);
+    } catch (e) {
+      metaJson = String(cleanMeta);
+    }
+
+    var html = '<div class="sa-inspect-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px;">';
+    html += renderInspectField('Action', log.action, true);
+    html += renderInspectField('Category', log.category);
+    html += renderInspectField('Severity', log.severity);
+    html += renderInspectField('Timestamp', formatDateFull(log.created_at));
+    html += renderInspectField('Actor Email', log.actor_email || 'SYSTEM');
+    html += renderInspectField('Actor Role', log.actor_role || 'SYSTEM');
+    html += renderInspectField('Actor User ID', log.actor_id || 'System (N/A)', true);
+    html += renderInspectField('Target Entity Type', log.entity_type);
+    html += renderInspectField('Target Entity ID', log.entity_id, true);
+    html += renderInspectField('Associated LCO', log.lco_business_name || (log.lco_id ? log.lco_id : 'None'));
+    html += '</div>';
+
+    html += '<div style="margin-bottom: 20px;">';
+    html += '<label style="font-size:12px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">Event Description</label>';
+    html += '<div style="font-size:14px; color:var(--ink); background:var(--sand); padding:12px 16px; border-radius:8px; border:1px solid var(--line);">' + esc(log.description) + '</div>';
+    html += '</div>';
+
+    html += '<div>';
+    html += '<label style="font-size:12px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:0.05em; display:block; margin-bottom:6px;">Event Metadata Payload (JSON)</label>';
+    html += '<pre class="sa-json-preview"><code>' + esc(metaJson) + '</code></pre>';
+    html += '</div>';
+
+    body.innerHTML = html;
+    modal.classList.add('visible');
+  }
+
+  function sanitizeMetadata(meta) {
+    if (!meta || typeof meta !== 'object') return {};
+    var copy = JSON.parse(JSON.stringify(meta));
+    var sensitiveKeys = ['password', 'token', 'secret', 'card', 'cvv', 'auth', 'jwt', 'api_key'];
+    
+    function recursiveClean(obj) {
+      if (!obj || typeof obj !== 'object') return;
+      Object.keys(obj).forEach(function (k) {
+        var lower = k.toLowerCase();
+        if (sensitiveKeys.some(function (sk) { return lower.includes(sk); })) {
+          obj[k] = '[REDACTED]';
+        } else if (typeof obj[k] === 'object') {
+          recursiveClean(obj[k]);
+        }
+      });
+    }
+    recursiveClean(copy);
+    return copy;
+  }
+
+  function getSeverityBadgeHtml(sev) {
+    var s = (sev || 'INFO').toUpperCase();
+    var cls = 'info';
+    if (s === 'WARNING') cls = 'warning';
+    if (s === 'CRITICAL') cls = 'critical';
+    return '<span class="sa-sev-badge ' + cls + '">' + esc(s) + '</span>';
+  }
+
+  function getCategoryBadgeHtml(cat) {
+    var c = (cat || 'SYSTEM').toUpperCase();
+    var cls = c.toLowerCase();
+    return '<span class="sa-audit-cat-badge ' + cls + '">' + esc(c) + '</span>';
   }
 
 
