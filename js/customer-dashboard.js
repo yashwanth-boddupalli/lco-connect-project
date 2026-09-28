@@ -1587,4 +1587,8 @@
     initAuth();
   }
 
+  // Exported for the inline onclick="loadNotifications()" Retry button rendered
+  // in the notifications error state (the script runs inside an IIFE)
+  window.loadNotifications = loadNotifications;
+
 })();

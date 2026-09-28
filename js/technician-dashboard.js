@@ -147,6 +147,11 @@
     });
   };
 
+  // Exported for inline onclick handlers rendered inside the ticket modal
+  // (the script runs inside an IIFE, so these would otherwise be undefined globally)
+  window.closeRequestModal = closeRequestModal;
+  window.loadNotifications = loadNotifications;
+
 
   /* ══════════════════════════════════════════════
      MOBILE NAV SIDEBAR

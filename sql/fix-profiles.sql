@@ -77,15 +77,21 @@ CREATE TRIGGER on_auth_user_created
 
 
 -- ══════════════════════════════════════════════
--- 5. VERIFY RLS POLICIES EXIST
+-- 5. HARDEN RLS POLICIES ON PROFILES
 -- ══════════════════════════════════════════════
 -- These should already exist from super-admin.sql.
--- Re-creating with IF NOT EXISTS equivalent via
--- DO block to avoid errors if already present.
+-- DROP + CREATE (instead of IF NOT EXISTS) so that re-running this script
+-- also repairs databases that still have the older, looser versions:
+--   - self-insert must be capped at role='USER' (the signup trigger
+--     allowlists roles itself; a client insert must never mint admins)
+--   - there is deliberately NO self-service UPDATE policy: a USING/WITH
+--     CHECK on id alone would let any user promote their own row to
+--     SUPER_ADMIN. All role/status changes go through SECURITY DEFINER
+--     functions (approval, invite acceptance), which bypass RLS.
 
 DO $$
 BEGIN
-  -- Check if the self-read policy exists
+  -- Self-read policy (unchanged)
   IF NOT EXISTS (
     SELECT 1 FROM pg_policies
     WHERE tablename = 'profiles'
@@ -98,18 +104,17 @@ BEGIN
       USING (id = auth.uid());
   END IF;
 
-  -- Check if the self-insert policy exists
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE tablename = 'profiles'
-      AND policyname = 'System insert on profiles'
-  ) THEN
-    CREATE POLICY "System insert on profiles"
-      ON public.profiles
-      FOR INSERT
-      TO authenticated
-      WITH CHECK (id = auth.uid());
-  END IF;
+  -- Hardened self-insert: id must be own AND role must be USER
+  DROP POLICY IF EXISTS "System insert on profiles" ON public.profiles;
+  CREATE POLICY "System insert on profiles"
+    ON public.profiles
+    FOR INSERT
+    TO authenticated
+    WITH CHECK (id = auth.uid() AND role = 'USER');
+
+  -- Remove the self-service UPDATE policy entirely (privilege-escalation
+  -- surface; no client code updates profiles — verified in js/*)
+  DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 END$$;
 
 

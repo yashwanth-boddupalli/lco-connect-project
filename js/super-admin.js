@@ -563,15 +563,9 @@
       detailField('State', app.state) +
       detailField('PIN Code', app.pincode);
 
-    // Registration info
-    var regGrid = document.getElementById('detailRegistrationGrid');
-    if (regGrid) {
-      regGrid.innerHTML =
-        detailField('Application ID', app.application_id) +
-        detailField('Submitted', formatDateFull(app.created_at)) +
-        detailField('Status', app.status) +
-        detailField('Login Email', app.email);
-    }
+    // NOTE: #detailRegistrationGrid no longer exists in the markup, so this
+    // dead block was removed. Registration fields (Application ID, Submitted,
+    // Status, Login Email) are rendered in the main detail grid above.
 
     // Services
     var svcDiv = document.getElementById('detailServices');
@@ -774,7 +768,7 @@
         previewOverlay.classList.add('visible');
       } else {
         // Open in new tab for PDFs and others
-        window.open(signedUrl, '_blank');
+        window.open(signedUrl, '_blank', 'noopener');
       }
 
     } catch (e) {
@@ -1804,15 +1798,6 @@
       var roleParam = userDirRoleFilter === 'ALL' ? null : userDirRoleFilter;
       var statusParam = userDirStatusFilter === 'ALL' ? null : userDirStatusFilter;
 
-      console.log('[UserDir Debug] Requesting RPC get_super_admin_user_directory with params:', {
-        p_search: userDirSearch || null,
-        p_role: roleParam,
-        p_status: statusParam,
-        p_lco_id: null,
-        p_limit: userDirLimit,
-        p_offset: userDirOffset
-      });
-
       var { data, error } = await sb.rpc('get_super_admin_user_directory', {
         p_search: userDirSearch || null,
         p_role: roleParam,
@@ -1822,39 +1807,31 @@
         p_offset: userDirOffset
       });
 
-      console.log('[UserDir Debug] sb.rpc returned raw data:', data, 'error:', error);
-
       if (error) {
-        console.error('[UserDir Debug] RPC returned error object:', error);
+        console.error('[UserDir] RPC error:', error);
         throw error;
       }
 
       // Unwrap result object or array returned by RPC
       var res = Array.isArray(data) ? data[0] : data;
-      console.log('[UserDir Debug] Normalized res object:', res);
 
-      var rawRecords = (res && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
-      console.log('[UserDir Debug] Extracted rawRecords count:', rawRecords.length, rawRecords);
-
-      // Filter out SUPER_ADMIN role users from directory
-      userDirData = rawRecords.filter(function (u) {
+      var records = (res && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
+      // SUPER_ADMIN rows are excluded server-side by the RPC; keep a defensive
+      // client-side filter in case an older database version is live.
+      userDirData = records.filter(function (u) {
         return u && u.role !== 'SUPER_ADMIN';
       });
-      console.log('[UserDir Debug] Filtered userDirData (excluding SUPER_ADMIN):', userDirData.length, userDirData);
 
       if (res && res.pagination && res.pagination.total_records !== undefined) {
-        var totalFromPag = parseInt(res.pagination.total_records, 10);
-        var superAdminCountInPage = rawRecords.length - userDirData.length;
-        userDirTotal = Math.max(0, totalFromPag - superAdminCountInPage);
+        userDirTotal = parseInt(res.pagination.total_records, 10) || 0;
       } else {
         userDirTotal = userDirData.length;
       }
-      console.log('[UserDir Debug] Calculated userDirTotal:', userDirTotal);
 
       renderUserDirectoryTable();
       updateUserDirPagination();
     } catch (e) {
-      console.error('[UserDir Debug] Exception in loadUserDirectory:', e);
+      console.error('[UserDir] Exception in loadUserDirectory:', e);
       if (tbody) {
         var errMsg = escapeHtml(e.message || e.error_description || (typeof e === 'string' ? e : 'Unknown error'));
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#E74C3C;"><div class="sa-empty"><div class="sa-empty-icon">⚠️</div><h3>Failed to load user directory</h3><p>' + errMsg + '</p></div></td></tr>';

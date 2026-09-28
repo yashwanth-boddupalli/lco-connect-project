@@ -3830,8 +3830,12 @@
     var methodContainer = document.getElementById('anPaymentMethodList');
     var trendContainer = document.getElementById('anPaymentTrendChart');
 
-    // Methods breakdown
-    var methods = payData.methods || [];
+    // Methods breakdown — SQL returns by_method as {"CASH": {"count": n, "amount": x}, ...}
+    var byMethod = payData.by_method || {};
+    var methods = Object.keys(byMethod).map(function (k) {
+      var entry = byMethod[k] || {};
+      return { method: k, count: entry.count || 0, amount: entry.amount || 0 };
+    });
     var totalAmount = payData.total_amount || 0;
 
     if (!methodContainer) return;
@@ -4026,7 +4030,8 @@
   function renderTechnicianAnalytics(techData) {
     if (!techData) return;
 
-    var summary = techData.summary || {};
+    // SQL returns flat keys: total / active / inactive / suspended (no nested summary object)
+    var summary = techData || {};
     var workload = techData.workload || [];
 
     var elTotal = document.getElementById('anTechTotal');
@@ -4054,9 +4059,9 @@
         '<td><span class="lco-cust-id">' + esc(t.technician_id || '—') + '</span></td>' +
         '<td><strong>' + esc(t.full_name) + '</strong></td>' +
         '<td>' + renderStatusBadge(t.status) + '</td>' +
-        '<td><span class="lco-badge pending">' + (t.assigned_requests || 0) + ' assigned</span></td>' +
-        '<td><span class="lco-badge active">' + (t.in_progress_requests || 0) + ' active</span></td>' +
-        '<td><span class="lco-badge active" style="background:#ECFDF5; color:#047857;">' + (t.resolved_requests || 0) + ' resolved</span></td>' +
+        '<td><span class="lco-badge pending">' + (t.assigned_count || 0) + ' assigned</span></td>' +
+        '<td><span class="lco-badge active">' + (t.in_progress_count || 0) + ' active</span></td>' +
+        '<td><span class="lco-badge active" style="background:#ECFDF5; color:#047857;">' + (t.resolved_count || 0) + ' resolved</span></td>' +
         '</tr>';
     }).join('');
   }
