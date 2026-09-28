@@ -547,6 +547,32 @@
       document.getElementById('rejectBtn').addEventListener('click', function () {
         openRejectModal();
       });
+    } else if (app.status === 'APPROVED') {
+      // Activation invite controls: the invite is sent on approval and can
+      // be resent when delivery failed or never went out. ACTIVATED apps
+      // (password set) need nothing.
+      var invStatus = app.invitation_status || 'PENDING';
+      if (invStatus !== 'ACTIVATED') {
+        actionsDiv.innerHTML =
+          '<button class="sa-btn-secondary" id="resendInviteBtn">↻ Resend invitation</button>';
+        document.getElementById('resendInviteBtn').addEventListener('click', function () {
+          var btn = this;
+          btn.disabled = true;
+          btn.innerHTML = '<span class="sa-spinner"></span> Sending…';
+          sendInvitationEmail(app.id).then(function (res) {
+            btn.disabled = false;
+            btn.innerHTML = '↻ Resend invitation';
+            if (res.success) {
+              showToast('Activation invitation sent.', 'success');
+              loadApplications().then(function () { openDetail(app.id); });
+            } else {
+              showToast('Failed to send invitation. ' + (res.error || ''), 'error');
+            }
+          });
+        });
+      } else {
+        actionsDiv.innerHTML = '';
+      }
     } else {
       actionsDiv.innerHTML = '';
     }
@@ -607,6 +633,12 @@
         var notifLabel = app.notification_status === 'SENT' ? '✓ Sent' :
           app.notification_status === 'FAILED' ? '✕ Failed' : 'Not sent';
         auditHtml += '<div class="sa-audit-row"><strong>Email Notification</strong> ' + notifLabel + '</div>';
+      }
+      if (app.invitation_status) {
+        var invLabel = app.invitation_status === 'ACTIVATED' ? '✓ Activated' :
+          app.invitation_status === 'INVITED' ? 'Sent — awaiting activation' :
+          app.invitation_status === 'FAILED' ? '✕ Failed' : 'Not sent';
+        auditHtml += '<div class="sa-audit-row"><strong>Activation Invitation</strong> ' + invLabel + '</div>';
       }
       auditDiv.innerHTML = auditHtml;
     } else {
@@ -972,7 +1004,14 @@
       // completed approval. The Edge Function records its own delivery state.
       var emailResult = await sendNotificationEmail(currentDetailApp.id, 'APPROVED');
 
-      showToast('Application approved successfully!' + (emailResult.success ? ' Notification sent.' : ' (Email notification pending configuration)'), 'success');
+      // Approval-triggered activation invite (new registration workflow).
+      // Invite failure must never undo a completed approval — it can be
+      // resent from the application detail view.
+      var inviteResult = await sendInvitationEmail(currentDetailApp.id);
+
+      showToast('Application approved successfully!' +
+        (emailResult.success ? ' Notification sent.' : ' (Email notification pending configuration)') +
+        (inviteResult.success ? ' Activation invite sent.' : ' (Activation invite pending — resend from application detail)'), 'success');
       closeApproveModal();
 
       // Refresh data
@@ -1111,6 +1150,37 @@
       // Edge function not deployed or not available
       console.warn('Email notification not available (Edge Function not deployed):', e.message);
       return { success: false, error: 'Email service not configured' };
+    }
+  }
+
+
+  /* ── LCO activation invitation (Wave B) ── */
+  // Invokes the send-lco-invitation Edge Function, which emails the
+  // approved LCO an activation link for password setup. Fail-closed:
+  // the approval itself is never affected by an invite failure.
+
+  async function sendInvitationEmail(applicationId) {
+    try {
+      // Attempt to call Supabase Edge Function
+      // This is the secure server-side approach.
+      // The Edge Function must be deployed separately.
+      var { data, error } = await sb.functions.invoke('send-lco-invitation', {
+        body: {
+          application_id: applicationId
+        }
+      });
+
+      if (error) {
+        console.warn('LCO invitation edge function error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: !!(data && data.ok), error: data && data.error ? data.error : null };
+
+    } catch (e) {
+      // Edge function not deployed or not available
+      console.warn('LCO invitation not available (Edge Function not deployed):', e.message);
+      return { success: false, error: 'Invitation service not configured' };
     }
   }
 

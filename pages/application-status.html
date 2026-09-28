@@ -96,28 +96,51 @@
     </div>
   </footer>
 
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <script>
-    // Populate status page from URL params or sessionStorage
+    // Real status lookup: the Application ID comes from the URL (or the
+    // session left by a fresh registration), then the row is read through
+    // the PII-safe get_application_status RPC. Nothing is fabricated.
     (function () {
       'use strict';
 
-      var params = new URLSearchParams(window.location.search);
-      var appId = params.get('id') || sessionStorage.getItem('lco_app_id');
-      var bizName = params.get('biz') || sessionStorage.getItem('lco_biz_name');
-      var submittedDate = params.get('date') || sessionStorage.getItem('lco_submitted_date');
+      var SUPABASE_URL = 'https://qlidbycuvuurnalbvfcc.supabase.co';
+      var SUPABASE_ANON_KEY = 'sb_publishable_LpSmIK-o-DO1_-fKIQ7yWg_VYbVddGC';
 
-      if (appId) {
-        document.getElementById('statusAppId').textContent = appId;
+      var STATUS_LABELS = {
+        PENDING: 'PENDING VERIFICATION',
+        UNDER_REVIEW: 'UNDER REVIEW',
+        APPROVED: 'APPROVED',
+        REJECTED: 'NOT APPROVED'
+      };
+      var STATUS_CLASSES = {
+        PENDING: 'pending',
+        UNDER_REVIEW: 'pending',
+        APPROVED: 'approved',
+        REJECTED: 'rejected'
+      };
+
+      var card = document.getElementById('statusCard');
+      var heading = card.querySelector('h1');
+      var subtitle = card.querySelector('.status-subtitle');
+      var messageBox = card.querySelector('.status-message');
+      var detailsBox = card.querySelector('.status-details');
+      var actionsBox = card.querySelector('.status-actions');
+
+      function showNotFound() {
+        heading.textContent = 'No Application Found';
+        subtitle.textContent = 'We could not find an application with that ID.';
+        document.querySelector('.status-icon').textContent = '!';
+        detailsBox.style.display = 'none';
+        messageBox.innerHTML = '<p>Check the Application ID from your registration confirmation, or start a new application below.</p>';
+        actionsBox.innerHTML = '<a href="register-lco.html" class="btn btn-primary">Start New Application</a>';
       }
 
-      if (bizName) {
-        document.getElementById('statusBizName').textContent = bizName;
-      }
-
-      if (submittedDate) {
+      function formatDate(iso) {
         try {
-          var d = new Date(submittedDate);
-          document.getElementById('statusDate').textContent = d.toLocaleDateString('en-IN', {
+          return new Date(iso).toLocaleDateString('en-IN', {
             day: 'numeric',
             month: 'long',
             year: 'numeric',
@@ -125,15 +148,55 @@
             minute: '2-digit'
           });
         } catch (e) {
-          document.getElementById('statusDate').textContent = submittedDate;
+          return iso || '—';
         }
-      } else {
-        document.getElementById('statusDate').textContent = new Date().toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric'
-        });
       }
+
+      var params = new URLSearchParams(window.location.search);
+      var appId = params.get('id') || sessionStorage.getItem('lco_app_id');
+
+      if (!appId) {
+        showNotFound();
+        return;
+      }
+
+      var sb = null;
+      try {
+        if (window.supabase && window.supabase.createClient) {
+          sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        }
+      } catch (e) { /* fall through to not found */ }
+
+      if (!sb) {
+        showNotFound();
+        return;
+      }
+
+      sb.rpc('get_application_status', { p_application_id: appId }).then(function (res) {
+        var data = res.data;
+        if (res.error || !data || !data.found) {
+          showNotFound();
+          return;
+        }
+
+        document.getElementById('statusAppId').textContent = data.application_id;
+        document.getElementById('statusBizName').textContent = data.business_name;
+        document.getElementById('statusDate').textContent = formatDate(data.submitted_at);
+
+        var badge = document.getElementById('statusBadge');
+        badge.textContent = STATUS_LABELS[data.status] || data.status;
+        badge.className = 'status-badge ' + (STATUS_CLASSES[data.status] || 'pending');
+
+        if (data.status === 'APPROVED') {
+          messageBox.innerHTML = '<p>Your application has been <strong>approved</strong>! ' +
+            'We\'ve emailed you an activation link — open it to set your password and activate your LCO account.</p>';
+        } else if (data.status === 'REJECTED') {
+          messageBox.innerHTML = '<p>Your application was not approved. You can contact support for details, or submit a new application.</p>';
+          actionsBox.innerHTML = '<a href="register-lco.html" class="btn btn-primary">New Application</a>';
+        }
+      }).catch(function () {
+        showNotFound();
+      });
     })();
   </script>
 

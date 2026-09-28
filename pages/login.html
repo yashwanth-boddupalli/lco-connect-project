@@ -70,6 +70,19 @@
           Sign In
         </button>
 
+        <div style="margin-top: 12px; text-align: center;">
+          <a href="#" id="forgotPasswordLink">Forgot password?</a>
+        </div>
+
+        <div id="forgotForm" style="display: none; margin-top: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 10px;">
+          <div class="sa-form-group" style="margin-bottom: 10px;">
+            <label for="forgotEmail">Account email</label>
+            <input type="email" id="forgotEmail" placeholder="you@example.com" autocomplete="email">
+            <div class="sa-field-error" id="forgotEmail-error">Please enter a valid email</div>
+          </div>
+          <button type="button" class="sa-login-btn" id="forgotSendBtn">Send Reset Link</button>
+        </div>
+
         <div class="sa-login-footer-text">
           <div>Customer first time? <a href="activate-account.html"
               style="font-weight: 600; color: var(--primary);">Activate Account →</a></div>
@@ -139,6 +152,62 @@
       passwordInput.addEventListener('input', function () {
         passwordInput.classList.remove('error');
         document.getElementById('loginPassword-error').classList.remove('visible');
+      });
+
+
+      /* ══════════════════════════════════════════════
+         FORGOT PASSWORD — INLINE MINI-FORM
+         ══════════════════════════════════════════════ */
+
+      var forgotLink = document.getElementById('forgotPasswordLink');
+      var forgotForm = document.getElementById('forgotForm');
+      var forgotEmail = document.getElementById('forgotEmail');
+      var forgotSendBtn = document.getElementById('forgotSendBtn');
+
+      forgotLink.addEventListener('click', function (e) {
+        e.preventDefault();
+        var isHidden = forgotForm.style.display === 'none';
+        forgotForm.style.display = isHidden ? 'block' : 'none';
+        if (isHidden && !forgotEmail.value) {
+          forgotEmail.value = emailInput.value.trim();
+        }
+      });
+
+      forgotEmail.addEventListener('input', function () {
+        forgotEmail.classList.remove('error');
+        document.getElementById('forgotEmail-error').classList.remove('visible');
+      });
+
+      forgotSendBtn.addEventListener('click', async function () {
+        var email = forgotEmail.value.trim();
+
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          forgotEmail.classList.add('error');
+          document.getElementById('forgotEmail-error').classList.add('visible');
+          return;
+        }
+
+        forgotSendBtn.disabled = true;
+        forgotSendBtn.innerHTML = '<span class="sa-spinner"></span> Sending…';
+
+        try {
+          var sbClient = LCOAuth.getClient();
+          if (!sbClient) throw new Error('Connection unavailable.');
+
+          var { error } = await sbClient.auth.resetPasswordForEmail(email, {
+            redirectTo: 'https://lco-connect-project.vercel.app/pages/login.html'
+          });
+          if (error) throw error;
+
+          showToast('Password reset link sent. Check your email.', 'success');
+          forgotForm.style.display = 'none';
+
+        } catch (err) {
+          showToast(err.message || 'Could not send reset link.', 'error');
+        } finally {
+          forgotSendBtn.disabled = false;
+          forgotSendBtn.innerHTML = 'Send Reset Link';
+        }
       });
 
 

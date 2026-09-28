@@ -48,7 +48,7 @@
      ══════════════════════════════════════════════ */
 
   var currentStep = 1;
-  var totalSteps = 6; // Updated: now includes Account step
+  var totalSteps = 5; // 5 steps: Business, Services, Area, Documents, Review
 
   var uploadedFiles = {
     business_proof: [],
@@ -80,7 +80,6 @@
     setupEditButtons();
     setupFormSubmit();
     setupInputListeners();
-    setupPasswordToggles();
   }
 
 
@@ -135,27 +134,6 @@
   }
 
 
-  /* ── Password visibility toggles ── */
-  function setupPasswordToggles() {
-    var togglePairs = [
-      { toggle: 'toggleAccountPassword', input: 'accountPassword' },
-      { toggle: 'toggleAccountPasswordConfirm', input: 'accountPasswordConfirm' }
-    ];
-
-    togglePairs.forEach(function (pair) {
-      var toggleBtn = document.getElementById(pair.toggle);
-      var inputEl = document.getElementById(pair.input);
-      if (toggleBtn && inputEl) {
-        toggleBtn.addEventListener('click', function () {
-          var isPassword = inputEl.type === 'password';
-          inputEl.type = isPassword ? 'text' : 'password';
-          toggleBtn.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
-        });
-      }
-    });
-  }
-
-
   /* ══════════════════════════════════════════════
      STEP NAVIGATION
      ══════════════════════════════════════════════ */
@@ -166,14 +144,12 @@
     bindClick('step2Next', function () { goToStep(3); });
     bindClick('step3Next', function () { goToStep(4); });
     bindClick('step4Next', function () { goToStep(5); });
-    bindClick('step5Next', function () { goToStep(6); });
 
     // Previous buttons
     bindClick('step2Prev', function () { goToStep(1); });
     bindClick('step3Prev', function () { goToStep(2); });
     bindClick('step4Prev', function () { goToStep(3); });
     bindClick('step5Prev', function () { goToStep(4); });
-    bindClick('step6Prev', function () { goToStep(5); });
 
     // Completed progress steps are clickable
     progressSteps.forEach(function (ps) {
@@ -195,16 +171,8 @@
       }
     }
 
-    // If going to account step (5), show email
+    // If going to review (step 5), populate review data
     if (step === 5) {
-      var emailDisplay = document.getElementById('accountEmailDisplay');
-      if (emailDisplay) {
-        emailDisplay.textContent = getVal('businessEmail').trim();
-      }
-    }
-
-    // If going to review, populate review data
-    if (step === 6) {
       populateReview();
     }
 
@@ -257,7 +225,6 @@
       case 2: return validateStep2();
       case 3: return validateStep3();
       case 4: return validateStep4();
-      case 5: return validateStep5();
       default: return true;
     }
   }
@@ -407,34 +374,6 @@
         errorEl.classList.remove('visible');
       }
     });
-
-    return valid;
-  }
-
-
-  /* ── Step 5: Account / Password ── */
-  function validateStep5() {
-    var valid = true;
-
-    var password = document.getElementById('accountPassword');
-    var confirmPassword = document.getElementById('accountPasswordConfirm');
-
-    // Password: minimum 8 characters
-    if (!password.value || password.value.length < 8) {
-      showFieldError(password, 'accountPassword-error', 'Password must be at least 8 characters');
-      valid = false;
-    }
-
-    // Confirm password must match
-    if (!confirmPassword.value || confirmPassword.value !== password.value) {
-      showFieldError(confirmPassword, 'accountPasswordConfirm-error', 'Passwords do not match');
-      valid = false;
-    }
-
-    if (!valid) {
-      var firstError = document.querySelector('#step-5 input.error');
-      if (firstError) firstError.focus();
-    }
 
     return valid;
   }
@@ -664,14 +603,6 @@
       docsHtml = '<p style="font-size: 14px; color: var(--slate);">No documents uploaded</p>';
     }
     docsContainer.innerHTML = docsHtml;
-
-    // Account info
-    var accountGrid = document.getElementById('reviewAccount');
-    if (accountGrid) {
-      accountGrid.innerHTML =
-        createReviewItem('Login Email', getVal('businessEmail')) +
-        createReviewItem('Password', '••••••••');
-    }
   }
 
 
@@ -698,8 +629,8 @@
   async function handleSubmit() {
     var submitBtn = document.getElementById('submitBtn');
 
-    // Re-validate all steps (1-5)
-    for (var s = 1; s <= 5; s++) {
+    // Re-validate all steps (1-4)
+    for (var s = 1; s <= 4; s++) {
       if (!validateStep(s)) {
         goToStep(s, true);
         showToast('Please complete all required fields in step ' + s, 'error');
@@ -709,7 +640,7 @@
 
     // Disable submit button and show loading
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner"></span> Creating account…';
+    submitBtn.innerHTML = '<span class="spinner"></span> Submitting application…';
 
     try {
       if (!supabase) {
@@ -717,52 +648,15 @@
       }
 
       var email = getVal('businessEmail').trim().toLowerCase();
-      var password = document.getElementById('accountPassword').value;
 
       // ═══════════════════════════════════════
-      // STEP A: Create Supabase Auth Account
+      // STEP A: Generate Application ID
       // ═══════════════════════════════════════
-      // The handle_new_user() trigger will auto-create
-      // a profiles row with role=LCO_ADMIN, status=PENDING
+      // Application-first flow: no auth user is created here. The
+      // applicant stays anonymous; a password is set later through
+      // the activation email sent after super-admin approval.
 
-      submitBtn.innerHTML = '<span class="spinner"></span> Creating account…';
-
-      var signUpResult = await supabase.auth.signUp({
-        email: email,
-        password: password,
-        options: {
-          data: {
-            role: 'LCO_ADMIN',
-            account_status: 'PENDING',
-            business_name: getVal('businessName').trim()
-          }
-        }
-      });
-
-      if (signUpResult.error) {
-        // Handle specific errors
-        var errMsg = signUpResult.error.message;
-        if (errMsg.indexOf('already registered') !== -1 || errMsg.indexOf('already been registered') !== -1) {
-          throw new Error('An account with this email already exists. Please use a different email or log in.');
-        }
-        throw new Error('Failed to create account: ' + errMsg);
-      }
-
-      var userId = signUpResult.data.user ? signUpResult.data.user.id : null;
-
-      if (!userId) {
-        throw new Error('Account creation failed. Please try again.');
-      }
-      if (!signUpResult.data.session) {
-        // This flow immediately creates an application and uploads private
-        // documents under the authenticated user's folder. It therefore needs
-        // a session; see the deployment checklist for the Auth setting.
-        throw new Error('Account created, but email confirmation is enabled. Please contact support to complete your registration.');
-      }
-
-      // ═══════════════════════════════════════
-      // STEP B: Generate Application ID
-      // ═══════════════════════════════════════
+      submitBtn.innerHTML = '<span class="spinner"></span> Generating application ID…';
 
       submitBtn.innerHTML = '<span class="spinner"></span> Generating application ID…';
 
@@ -775,8 +669,10 @@
       var applicationId = appIdResult.data;
 
       // ═══════════════════════════════════════
-      // STEP C: Prepare & Insert Application
+      // STEP B: Prepare & Insert Application
       // ═══════════════════════════════════════
+      // No user_id: the application is submitted anonymously. The
+      // row is linked to an auth user later, at activation time.
 
       submitBtn.innerHTML = '<span class="spinner"></span> Saving application…';
 
@@ -793,7 +689,6 @@
 
       var appData = {
         application_id: applicationId,
-        user_id: userId,
         business_name: getVal('businessName').trim(),
         owner_name: getVal('ownerName').trim(),
         email: email,
@@ -825,8 +720,11 @@
       var appUUID = insertResult.data.id;
 
       // ═══════════════════════════════════════
-      // STEP D: Upload Documents
+      // STEP C: Upload Documents
       // ═══════════════════════════════════════
+      // Anonymous uploads go under applications/<application_id>/.
+      // The storage policy only allows folders whose application
+      // row exists and is still PENDING.
 
       submitBtn.innerHTML = '<span class="spinner"></span> Uploading documents…';
 
@@ -838,9 +736,8 @@
 
         for (var j = 0; j < files.length; j++) {
           var fileEntry = files[j];
-          // Storage policies bind this prefix to the authenticated applicant.
-          // Never use a public application ID as the access-control boundary.
-          var filePath = userId + '/' + docType + '/' + Date.now() + '_' + sanitizeFileName(fileEntry.name);
+          var filePath = 'applications/' + applicationId + '/' + docType + '/' +
+            Date.now() + '_' + sanitizeFileName(fileEntry.name);
 
           var uploadResult = await supabase.storage
             .from('verification-documents')
@@ -876,16 +773,11 @@
       }
 
       // ═══════════════════════════════════════
-      // STEP E: Sign out the new user
+      // STEP D: Success — redirect to status
       // ═══════════════════════════════════════
-      // The LCO account is PENDING. They should not
-      // be logged in until approved.
-
-      await supabase.auth.signOut();
-
-      // ═══════════════════════════════════════
-      // STEP F: Success — redirect to status
-      // ═══════════════════════════════════════
+      // No auth session exists (nothing to sign out of); the
+      // applicant activates their account from the invitation
+      // email after approval.
 
       sessionStorage.setItem('lco_app_id', applicationId);
       sessionStorage.setItem('lco_biz_name', appData.business_name);

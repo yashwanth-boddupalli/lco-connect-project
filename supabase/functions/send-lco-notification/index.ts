@@ -67,10 +67,10 @@ Deno.serve(async (request) => {
       ? 'Your LCO Connect account is approved'
       : 'Update on your LCO Connect application';
     const body = decision === 'APPROVED'
-      ? `<p>Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Sign in with the email address you registered and the password you created during registration: <a href="${escapeAttribute(loginUrl)}">Sign in to LCO Connect</a>.</p><p>For security, we never send or retrieve passwords by email.</p>`
+      ? `<p>Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Your application is approved — a separate activation email is on its way; open it to set your password and activate your account.</p><p>For security, we never send or retrieve passwords by email.</p>`
       : `<p>Hello,</p><p>Your application for <strong>${escapeHtml(application.business_name)}</strong> has not been approved.</p><p><strong>Reason:</strong> ${escapeHtml(application.rejection_reason || 'Please contact support for more information.')}</p><p>If you need help, please contact the LCO Connect support channel provided to you.</p>`;
     const textBody = decision === 'APPROVED'
-      ? `Hello,\n\n${application.business_name} has been approved and your LCO Connect account is now active.\n\nSign in with the email address you registered and the password you created during registration: ${loginUrl}\n\nFor security, we never send or retrieve passwords by email.`
+      ? `Hello,\n\n${application.business_name} has been approved and your LCO Connect account is now active.\n\nYour application is approved — a separate activation email is on its way; open it to set your password and activate your account.\n\nFor security, we never send or retrieve passwords by email.`
       : `Hello,\n\nYour application for ${application.business_name} has not been approved.\n\nReason: ${application.rejection_reason || 'Please contact support for more information.'}\n\nIf you need help, please contact the LCO Connect support channel provided to you.`;
 
     let sent = false;
