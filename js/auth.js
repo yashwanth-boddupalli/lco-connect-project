@@ -253,9 +253,17 @@ var LCOAuth = (function () {
     }
 
     if (data.profile.role !== requiredRole) {
-      // Authenticated but wrong role
-      await signOut();
-      redirectToLogin();
+      // Authenticated but wrong role for this page. The session itself is
+      // valid — do NOT sign out here. Signing out turned a curious click
+      // on another role's URL into a forced re-login (audit MAJOR-A).
+      // Send them to their own dashboard instead; if their account state
+      // has no dashboard, fall back to the login page, session untouched.
+      var ownDashboard = resolveDashboardForProfile(data.profile);
+      if (ownDashboard) {
+        window.location.href = ownDashboard;
+      } else {
+        redirectToLogin();
+      }
       return null;
     }
 
@@ -285,6 +293,51 @@ var LCOAuth = (function () {
     // We are in the /pages/ directory
     window.location.href = LOGIN_PAGE;
   }
+
+
+  /* ══════════════════════════════════════════════
+     BACK/FORWARD-CACHE GUARD (dashboard pages)
+     After logout, pressing the browser Back button
+     can restore a dashboard from the back-forward
+     cache with names, bills and tickets still
+     rendered — the page scripts don't re-run, so
+     requireRole() never gets a chance to block it
+     (audit CRITICAL-1). On a cache restore, re-check
+     the session: if it is gone, wipe the DOM and go
+     to login. A live session (ordinary back
+     navigation while still logged in) is untouched.
+     ══════════════════════════════════════════════ */
+
+  var DASHBOARD_PAGES = [
+    'super-admin.html',
+    'lco-dashboard.html',
+    'customer-dashboard.html',
+    'technician-dashboard.html'
+  ];
+
+  function isDashboardPage() {
+    var path = window.location.pathname;
+    return DASHBOARD_PAGES.some(function (name) {
+      return path.slice(-name.length) === name;
+    });
+  }
+
+  window.addEventListener('pageshow', function (event) {
+    if (!event.persisted || !isDashboardPage()) return;
+
+    if (!sb) {
+      document.body.innerHTML = '';
+      window.location.replace(LOGIN_PAGE);
+      return;
+    }
+
+    sb.auth.getSession().then(function (result) {
+      if (!result.data || !result.data.session) {
+        document.body.innerHTML = '';
+        window.location.replace(LOGIN_PAGE);
+      }
+    });
+  });
 
 
   /* ══════════════════════════════════════════════

@@ -600,7 +600,7 @@
 
     accountGrid.innerHTML =
       detailField('Service Status', cust.service_status) +
-      detailField('Portal Access', activationStatusHtml) +
+      detailFieldHtml('Portal Access', activationStatusHtml) +
       detailField('Invitation Sent', cust.invitation_sent_at ? formatDateFull(cust.invitation_sent_at) : '—') +
       detailField('Created', formatDateFull(cust.created_at));
 
@@ -703,6 +703,18 @@
     return '<div class="lco-detail-field' + (fullWidth ? ' full-width' : '') + '">' +
       '<div class="lco-detail-label">' + esc(label) + '</div>' +
       '<div class="lco-detail-value">' + esc(value || '—') + '</div>' +
+      '</div>';
+  }
+
+  // Same as detailField, but the value is trusted app-generated HTML
+  // (e.g. a status badge built from fixed strings) and must NOT be
+  // escaped — audit LA-2: the Portal Access badge was run through
+  // detailField() and rendered as raw text. Never pass user-entered
+  // data through this helper.
+  function detailFieldHtml(label, html, fullWidth) {
+    return '<div class="lco-detail-field' + (fullWidth ? ' full-width' : '') + '">' +
+      '<div class="lco-detail-label">' + esc(label) + '</div>' +
+      '<div class="lco-detail-value">' + (html || '—') + '</div>' +
       '</div>';
   }
 
@@ -2579,6 +2591,25 @@
       if (billsErr) throw billsErr;
       allBills = bills || [];
 
+      // Derive OVERDUE at load (audit LA-1): nothing in the backend ever
+      // sets a bill's stored status to OVERDUE, so a PENDING bill whose
+      // due date has passed with a balance remaining is overdue. This is
+      // display-only — the in-memory copy is adjusted so the stats, the
+      // Overdue filter and the status badges all see it; the stored
+      // status is never written back (Record Payment recomputes the
+      // stored status from the amounts when a payment is recorded).
+      var nowD = new Date();
+      var todayStr = nowD.getFullYear() + '-' +
+        String(nowD.getMonth() + 1).padStart(2, '0') + '-' +
+        String(nowD.getDate()).padStart(2, '0');
+      allBills.forEach(function (b) {
+        if (b.status !== 'PENDING' || !b.due_date) return;
+        var balance = Number(b.amount || 0) - Number(b.paid_amount || 0);
+        if (balance > 0 && String(b.due_date).slice(0, 10) < todayStr) {
+          b.status = 'OVERDUE';
+        }
+      });
+
       // 2. Fetch all payments for this LCO
       var { data: payments, error: payErr } = await sb.from('customer_payments')
         .select('*, customers(full_name, customer_id), customer_bills(bill_number)')
@@ -3617,6 +3648,7 @@
     else if (status === 'EXPIRED') cls = 'expired';
     else if (status === 'CANCELLED') cls = 'cancelled';
     else if (status === 'PENDING') cls = 'pending';
+    else if (status === 'OVERDUE') cls = 'expired';
     else if (status === 'DISCONNECTED') cls = 'disconnected';
     return '<span class="lco-badge ' + cls + '">' + label + '</span>';
   }
