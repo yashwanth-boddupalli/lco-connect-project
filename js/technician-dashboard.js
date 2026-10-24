@@ -422,6 +422,18 @@
     document.getElementById('modalCustomerDescription').textContent = req.description || 'No description provided by customer.';
     document.getElementById('modalCreatedDate').textContent = 'Raised on: ' + formatDateFull(req.created_at);
 
+    // Show the resolution timestamp when there is one — without it the
+    // "Resolved Today" count can never be checked against the ticket.
+    var resolvedEl = document.getElementById('modalResolvedDate');
+    if (resolvedEl) {
+      if (req.status === 'RESOLVED' && req.resolved_at) {
+        resolvedEl.textContent = 'Resolved on: ' + formatDateFull(req.resolved_at);
+        resolvedEl.style.display = '';
+      } else {
+        resolvedEl.style.display = 'none';
+      }
+    }
+
     // Badges
     var priorityBadge = document.getElementById('modalPriorityBadge');
     var statusBadge = document.getElementById('modalStatusBadge');
@@ -649,6 +661,7 @@
 
   var techNotifCategoryFilter = 'ALL';
   var techNotifStatusFilter = 'ALL';
+  var techNotifLoadId = 0;
 
   function formatTimeAgo(dateStr) {
     if (!dateStr) return '—';
@@ -714,8 +727,18 @@
     if (togglePrefBtn && prefCard) {
       togglePrefBtn.addEventListener('click', function() {
         var isHidden = prefCard.style.display === 'none';
-        prefCard.style.display = isHidden ? 'block' : 'none';
-        if (isHidden) loadNotificationPreferences();
+        if (isHidden) {
+          // The card lives inside the Activity Feed tab pane, so opening
+          // it from the Communication History tab showed nothing — switch
+          // to the feed tab first so the card is actually visible.
+          var feedPane = document.getElementById('techNotifTabFeedContainer');
+          var feedTabBtn = document.querySelector('[data-tech-notif-tab="feed"]');
+          if (feedPane && feedTabBtn && feedPane.style.display === 'none') feedTabBtn.click();
+          prefCard.style.display = 'block';
+          loadNotificationPreferences();
+        } else {
+          prefCard.style.display = 'none';
+        }
       });
     }
     if (closePrefBtn && prefCard) {
@@ -821,7 +844,7 @@
     if (cat === 'ACCOUNT') cls = 'account';
     else if (cat === 'SERVICE_REQUEST') cls = 'service';
     else if (cat === 'SYSTEM') cls = 'system';
-    return '<span class="lco-notif-cat-badge ' + cls + '">' + esc(cat) + '</span>';
+    return '<span class="lco-notif-cat-badge ' + cls + '">' + esc(getTechCategoryMeta(cat).label) + '</span>';
   }
 
   function renderChannelBadge(ch) {
@@ -844,6 +867,11 @@
     var container = document.getElementById('techNotifList');
     if (!container) return;
 
+    // Rapid filter clicks fire overlapping loads; only the newest load may
+    // render, otherwise a slower earlier request overwrites the list with
+    // the previous filter's rows (stale-render race).
+    var myLoadId = ++techNotifLoadId;
+
     try {
       var query = sb.from('notifications')
         .select('*')
@@ -862,6 +890,7 @@
 
       var { data, error } = await query.order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
+      if (myLoadId !== techNotifLoadId) return;
 
       var notifications = data || [];
 
@@ -894,7 +923,7 @@
           '<span class="lco-notif-cat-badge cat-' + (n.category || 'SERVICE_REQUEST') + '">' + esc(catMeta.label) + '</span>' +
           '</div>' +
           '<div class="lco-notif-message">' + esc(n.message) + '</div>' +
-          '<div class="lco-notif-time">' + formatTimeAgo(n.created_at) + ' • ' + formatDateFull(n.created_at) + '</div>' +
+          '<div class="lco-notif-time">' + formatTimeAgo(n.created_at) + ' • ' + formatTimeOnly(n.created_at) + '</div>' +
           '</div>' +
           '</div>';
       }).join('');
@@ -1151,6 +1180,15 @@
     if (!dateStr) return '—';
     var d = new Date(dateStr);
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Time only — paired with formatTimeAgo in the notification list, where
+  // appending formatDateFull repeated the date for anything a week old
+  // ("23 Sept 2026 • 23 Sept 2026, 01:03 am").
+  function formatTimeOnly(dateStr) {
+    if (!dateStr) return '—';
+    var d = new Date(dateStr);
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
   }
 
   // Local (IST) calendar date as YYYY-MM-DD. NEVER derive a date-only
