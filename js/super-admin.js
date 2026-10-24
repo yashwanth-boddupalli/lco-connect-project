@@ -728,8 +728,12 @@
     html += renderBadge(doc.status);
     html += '<button class="sa-doc-view-btn" data-doc-id="' + doc.id + '" data-path="' + esc(doc.file_path) + '" data-mime="' + esc(doc.mime_type) + '">View</button>';
 
-    // Show verify/reject buttons only for PENDING docs
-    if (doc.status === 'PENDING') {
+    // Show verify/reject buttons only for PENDING docs on an application
+    // that is still awaiting its decision — once the application is APPROVED
+    // or REJECTED the decision is final, so document actions must not stay
+    // active even if an individual document row is still PENDING.
+    var appDecided = currentDetailApp && (currentDetailApp.status === 'APPROVED' || currentDetailApp.status === 'REJECTED');
+    if (doc.status === 'PENDING' && !appDecided) {
       html += '<button class="sa-doc-status-btn verify" data-doc-id="' + doc.id + '" data-action="verify">✓ Verify</button>';
       html += '<button class="sa-doc-status-btn reject" data-doc-id="' + doc.id + '" data-action="reject">✕ Reject</button>';
     }
@@ -791,15 +795,30 @@
 
       var signedUrl = data.signedUrl;
       var isImage = mimeType && mimeType.startsWith('image/');
+      var isPdf = mimeType === 'application/pdf';
+
+      var previewOverlay = document.getElementById('imagePreview');
+      var previewImg = document.getElementById('previewImage');
+      var previewFrame = document.getElementById('previewFrame');
 
       if (isImage) {
         // Show in preview modal
-        var previewOverlay = document.getElementById('imagePreview');
-        var previewImg = document.getElementById('previewImage');
+        previewFrame.style.display = 'none';
+        previewFrame.src = '';
+        previewImg.style.display = '';
         previewImg.src = signedUrl;
         previewOverlay.classList.add('visible');
+      } else if (isPdf) {
+        // Preview PDFs in the modal too. window.open() after this await has
+        // lost the click's user-activation, so popup blockers silently kill
+        // it and the admin is left staring at the "Loading document…" toast.
+        previewImg.style.display = 'none';
+        previewImg.src = '';
+        previewFrame.style.display = '';
+        previewFrame.src = signedUrl;
+        previewOverlay.classList.add('visible');
       } else {
-        // Open in new tab for PDFs and others
+        // Open in new tab for other file types
         window.open(signedUrl, '_blank', 'noopener');
       }
 
@@ -814,12 +833,18 @@
   document.getElementById('previewClose').addEventListener('click', function () {
     document.getElementById('imagePreview').classList.remove('visible');
     document.getElementById('previewImage').src = '';
+    var frame = document.getElementById('previewFrame');
+    frame.src = '';
+    frame.style.display = 'none';
   });
 
   document.getElementById('imagePreview').addEventListener('click', function (e) {
     if (e.target === this) {
       this.classList.remove('visible');
       document.getElementById('previewImage').src = '';
+      var frame = document.getElementById('previewFrame');
+      frame.src = '';
+      frame.style.display = 'none';
     }
   });
 
@@ -1893,7 +1918,12 @@
       });
 
       if (res && res.pagination && res.pagination.total_records !== undefined) {
-        userDirTotal = parseInt(res.pagination.total_records, 10) || 0;
+        // The RPC total can include rows the defensive filter above removed
+        // (e.g. a SUPER_ADMIN row counted by an older database version), so
+        // subtract what this page actually dropped — otherwise the footer
+        // claims more rows than are rendered.
+        var droppedRows = records.length - userDirData.length;
+        userDirTotal = Math.max(userDirData.length, (parseInt(res.pagination.total_records, 10) || 0) - droppedRows);
       } else {
         userDirTotal = userDirData.length;
       }
@@ -1957,7 +1987,7 @@
     var nextBtn = document.getElementById('userDirNextBtn');
 
     if (userDirTotal === 0) {
-      if (info) info.textContent = 'Showing 0 of 0';
+      if (info) info.textContent = 'Showing 0–0 of 0';
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
       return;
@@ -2314,7 +2344,7 @@
     var nextBtn = document.getElementById('commNextBtn');
 
     if (commTotal === 0) {
-      if (info) info.textContent = 'Showing 0 of 0';
+      if (info) info.textContent = 'Showing 0–0 of 0';
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
       return;
