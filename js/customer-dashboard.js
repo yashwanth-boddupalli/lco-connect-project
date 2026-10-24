@@ -482,6 +482,16 @@
     }
   }
 
+  // Local (IST) calendar date as YYYY-MM-DD. NEVER derive a date-only
+  // value from toISOString() - that is UTC, so between 00:00 and 05:30
+  // IST it returns yesterday (same helper as the other dashboards).
+  function localDateStr(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
   function renderSubscription() {
     var container = document.getElementById('custSubDetails');
     if (!container) return;
@@ -498,8 +508,18 @@
     var priceStr = plan ? '₹' + plan.price + ' / ' + plan.duration + ' ' + plan.duration_unit.toLowerCase() : '—';
     var speedOrChannels = plan ? (plan.speed_mbps ? plan.speed_mbps + ' Mbps' : (plan.channel_count ? plan.channel_count + ' Channels' : '—')) : '—';
 
+    // Display-only derivation (same pattern as overdue bills): nothing in
+    // the backend flips a subscription to EXPIRED when its end date
+    // passes, so an ACTIVE subscription past its end date would keep
+    // showing ACTIVE forever. The stored status is never changed.
+    var displayStatus = activeSubscription.status;
+    if (displayStatus === 'ACTIVE' && activeSubscription.end_date &&
+        String(activeSubscription.end_date).slice(0, 10) < localDateStr()) {
+      displayStatus = 'EXPIRED';
+    }
+
     document.getElementById('custHeroExpiry').textContent = formatDate(activeSubscription.end_date);
-    document.getElementById('custOverviewSubStatus').textContent = activeSubscription.status;
+    document.getElementById('custOverviewSubStatus').textContent = displayStatus;
     document.getElementById('custOverviewPrice').textContent = plan ? '₹' + plan.price : '—';
 
     container.innerHTML =
@@ -508,7 +528,7 @@
       '<div style="font-family:\'Space Grotesk\',sans-serif; font-size:20px; font-weight:700;">' + esc(plan ? plan.name : (customerData.plan_name || 'Subscribed Plan')) + '</div>' +
       '<div style="margin-top:4px; font-size:13px; color:#64748B;">Category: ' + esc(plan ? plan.service_type : customerData.service_type) + '</div>' +
       '</div>' +
-      '<div>' + renderStatusBadge(activeSubscription.status) + '</div>' +
+      '<div>' + renderStatusBadge(displayStatus) + '</div>' +
       '</div>' +
 
       '<div class="cust-grid">' +
@@ -860,6 +880,7 @@
 
   var custNotifCategoryFilter = 'ALL';
   var custNotifStatusFilter = 'ALL';
+  var custNotifLoadId = 0;
 
   function formatTimeAgo(dateStr) {
     if (!dateStr) return '—';
@@ -925,8 +946,18 @@
     if (togglePrefBtn && prefCard) {
       togglePrefBtn.addEventListener('click', function() {
         var isHidden = prefCard.style.display === 'none';
-        prefCard.style.display = isHidden ? 'block' : 'none';
-        if (isHidden) loadNotificationPreferences();
+        if (isHidden) {
+          // The card lives inside the Activity Feed tab pane, so opening
+          // it from the Communication History tab showed nothing — switch
+          // to the feed tab first so the card is actually visible.
+          var feedPane = document.getElementById('custNotifTabFeedContainer');
+          var feedTabBtn = document.querySelector('[data-cust-notif-tab="feed"]');
+          if (feedPane && feedTabBtn && feedPane.style.display === 'none') feedTabBtn.click();
+          prefCard.style.display = 'block';
+          loadNotificationPreferences();
+        } else {
+          prefCard.style.display = 'none';
+        }
       });
     }
     if (closePrefBtn && prefCard) {
@@ -1070,6 +1101,12 @@
     var container = document.getElementById('custNotifList');
     if (!container) return;
 
+    // Rapid filter clicks fire overlapping loads; without a guard the
+    // slower earlier load renders after the newer one, so the list lags
+    // exactly one click behind the selected filter. Only the newest
+    // load may render.
+    var myLoadId = ++custNotifLoadId;
+
     try {
       var query = sb.from('notifications')
         .select('*')
@@ -1088,6 +1125,7 @@
 
       var { data, error } = await query.order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
+      if (myLoadId !== custNotifLoadId) return;
 
       notifications = data || [];
 
@@ -1098,6 +1136,8 @@
         .eq('customer_id', customerData.id)
         .eq('recipient_role', 'CUSTOMER')
         .eq('is_read', false);
+
+      if (myLoadId !== custNotifLoadId) return;
 
       var badge = document.getElementById('custNotifCount');
       if (badge) {

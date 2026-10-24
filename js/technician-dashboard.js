@@ -902,6 +902,8 @@
         .eq('recipient_role', 'TECHNICIAN')
         .eq('is_read', false);
 
+      if (myLoadId !== techNotifLoadId) return;
+
       var badge = document.getElementById('techNotifCount');
       if (badge) {
         badge.textContent = unreadCount || 0;
