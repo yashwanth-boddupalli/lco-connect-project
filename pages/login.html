@@ -194,10 +194,27 @@
           var sbClient = LCOAuth.getClient();
           if (!sbClient) throw new Error('Connection unavailable.');
 
-          var { error } = await sbClient.auth.resetPasswordForEmail(email, {
-            redirectTo: 'https://lco-connect-project.vercel.app/pages/login.html'
+          // Branded reset email via SMTP2GO (send-password-reset Edge
+          // Function) — NOT Supabase's built-in mailer. The link lands on
+          // pages/reset-password.html, which sets the new password.
+          // The function answers generically whether or not the account
+          // exists, so this cannot be used to probe registered emails.
+          var res = await sbClient.functions.invoke('send-password-reset', {
+            body: { email: email }
           });
-          if (error) throw error;
+
+          if (res.error) {
+            var msg = 'Could not send reset link.';
+            try {
+              var errBody = await res.error.context.json();
+              if (errBody && errBody.error) msg = errBody.error;
+            } catch (ignored) { /* keep generic message */ }
+            throw new Error(msg);
+          }
+
+          if (res.data && res.data.ok === false) {
+            throw new Error(res.data.error || 'Could not send reset link.');
+          }
 
           showToast('Password reset link sent. Check your email.', 'success');
           forgotForm.style.display = 'none';

@@ -4,6 +4,7 @@ project_id = "qlidbycuvuurnalbvfcc"
 site_url = "https://lco-connect-project.vercel.app"
 additional_redirect_urls = [
   "https://lco-connect-project.vercel.app/pages/activate-account.html",
+  "https://lco-connect-project.vercel.app/pages/reset-password.html",
   "https://lco-connect-project.vercel.app/pages/login.html",
   "https://lco-connect-project.vercel.app/*",
   "http://localhost:3000/pages/activate-account.html",
