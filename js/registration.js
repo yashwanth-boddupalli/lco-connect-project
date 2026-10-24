@@ -53,7 +53,6 @@
   var uploadedFiles = {
     business_proof: [],
     identity_proof: [],
-    registration_certificate: [],
     other_document: []
   };
 
@@ -363,7 +362,7 @@
   /* ── Step 4: Documents ── */
   function validateStep4() {
     var valid = true;
-    var requiredDocs = ['business_proof', 'identity_proof', 'registration_certificate'];
+    var requiredDocs = ['business_proof', 'identity_proof'];
 
     requiredDocs.forEach(function (docType) {
       var errorEl = document.getElementById('docError-' + docType);
@@ -584,9 +583,8 @@
     var docsContainer = document.getElementById('reviewDocuments');
     var docsHtml = '';
     var docLabels = {
-      business_proof: 'Business Proof',
+      business_proof: 'Business Proof / Registration Certificate',
       identity_proof: 'Identity Proof',
-      registration_certificate: 'Registration Certificate',
       other_document: 'Other Document'
     };
 
@@ -728,7 +726,7 @@
 
       submitBtn.innerHTML = '<span class="spinner"></span> Uploading documents…';
 
-      var docTypes = ['business_proof', 'identity_proof', 'registration_certificate', 'other_document'];
+      var docTypes = ['business_proof', 'identity_proof', 'other_document'];
 
       for (var i = 0; i < docTypes.length; i++) {
         var docType = docTypes[i];
@@ -794,6 +792,20 @@
 
     } catch (error) {
       console.error('Submission error:', error);
+
+      // Best-effort cleanup: a failed submission must not leave a
+      // half-created application behind — it piles up in the Super
+      // Admin queue and duplicates on every retry. The
+      // withdraw_application RPC only ever removes an application
+      // that is still PENDING and not linked to an account.
+      if (supabase && typeof applicationId !== 'undefined' && applicationId) {
+        try {
+          await supabase.rpc('withdraw_application', { p_application_id: applicationId });
+        } catch (cleanupError) {
+          console.error('Failed-submission cleanup error:', cleanupError);
+        }
+      }
+
       submitBtn.disabled = false;
       submitBtn.innerHTML = 'Submit Application';
       showToast(error.message || 'Something went wrong. Please try again.', 'error');
