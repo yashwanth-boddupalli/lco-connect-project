@@ -2682,3 +2682,45 @@
   }
 
 })();
+
+/* ==============================================
+   MOBILE TABLE LABELS (develop1 fix)
+   The responsive CSS turns tables into cards on
+   small screens and labels each cell via
+   td::before { content: attr(data-label) } - but
+   most renderers build <td>s without data-label.
+   This stamper copies each table's header text
+   onto its cells (by column, colspan-aware) after
+   every render, observed via MutationObserver.
+   ============================================== */
+(function () {
+  function stampDataLabels(root) {
+    (root || document).querySelectorAll('table').forEach(function (tbl) {
+      var heads = Array.prototype.map.call(
+        tbl.querySelectorAll('thead th'),
+        function (th) { return th.textContent.trim(); }
+      );
+      if (!heads.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        var col = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          var span = td.colSpan || 1;
+          if (td.tagName === 'TD' && span === 1 && !td.hasAttribute('data-label') && heads[col]) {
+            td.setAttribute('data-label', heads[col]);
+          }
+          col += span;
+        });
+      });
+    });
+  }
+  function init() {
+    stampDataLabels(document);
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function () { stampDataLabels(document); })
+        .observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
+})();

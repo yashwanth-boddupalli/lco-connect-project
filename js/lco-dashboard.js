@@ -1153,7 +1153,7 @@
     }
 
     // Default start date = today
-    var today = new Date().toISOString().split('T')[0];
+    var today = localDateStr();
     document.getElementById('subStartDate').value = today;
     document.getElementById('subStatus').value = 'ACTIVE';
 
@@ -1180,7 +1180,7 @@
       end.setMonth(end.getMonth() + plan.duration);
     }
 
-    document.getElementById('subEndDate').value = end.toISOString().split('T')[0];
+    document.getElementById('subEndDate').value = localDateStr(end);
   }
 
   async function saveSubscription() {
@@ -2301,7 +2301,7 @@
           service_type: serviceType,
           plan_name: planName || null,
           service_status: 'ACTIVE',
-          connection_date: new Date().toISOString().split('T')[0],
+          connection_date: localDateStr(),
           notes: notes || null
         })
         .select()
@@ -2864,9 +2864,9 @@
 
     // Pre-set dates
     var today = new Date();
-    var firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-    var lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-    var due = new Date(today.getFullYear(), today.getMonth(), 15).toISOString().split('T')[0];
+    var firstDay = localDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
+    var lastDay = localDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+    var due = localDateStr(new Date(today.getFullYear(), today.getMonth(), 15));
 
     document.getElementById('genBillPeriodStart').value = firstDay;
     document.getElementById('genBillPeriodEnd').value = lastDay;
@@ -3632,6 +3632,16 @@
   /* ══════════════════════════════════════════════
      UTILITY FUNCTIONS
      ══════════════════════════════════════════════ */
+
+  // Local (IST) calendar date as YYYY-MM-DD. NEVER derive a date-only
+  // value from toISOString() - that is UTC, so between 00:00 and 05:30
+  // IST it returns yesterday (develop1 fix for the UTC date bugs).
+  function localDateStr(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
 
   function esc(str) {
     if (!str) return '';
@@ -5041,4 +5051,46 @@
     initAuth();
   }
 
+})();
+
+/* ══════════════════════════════════════════════
+   MOBILE TABLE LABELS (develop1 fix)
+   The responsive CSS turns tables into cards on
+   small screens and labels each cell via
+   td::before { content: attr(data-label) } — but
+   most renderers build <td>s without data-label.
+   This stamper copies each table's header text
+   onto its cells (by column, colspan-aware) after
+   every render, observed via MutationObserver.
+   ══════════════════════════════════════════════ */
+(function () {
+  function stampDataLabels(root) {
+    (root || document).querySelectorAll('table').forEach(function (tbl) {
+      var heads = Array.prototype.map.call(
+        tbl.querySelectorAll('thead th'),
+        function (th) { return th.textContent.trim(); }
+      );
+      if (!heads.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        var col = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          var span = td.colSpan || 1;
+          if (td.tagName === 'TD' && span === 1 && !td.hasAttribute('data-label') && heads[col]) {
+            td.setAttribute('data-label', heads[col]);
+          }
+          col += span;
+        });
+      });
+    });
+  }
+  function init() {
+    stampDataLabels(document);
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function () { stampDataLabels(document); })
+        .observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
 })();

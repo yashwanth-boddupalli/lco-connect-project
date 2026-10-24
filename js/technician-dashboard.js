@@ -231,12 +231,12 @@
     var inProgressCount = allRequests.filter(function (r) { return r.status === 'IN_PROGRESS'; }).length;
 
     // Resolved today calculation
-    var todayStr = new Date().toISOString().split('T')[0];
+    var todayStr = localDateStr();
     var resolvedTodayCount = allRequests.filter(function (r) {
       if (r.status !== 'RESOLVED') return false;
       var dateVal = r.resolved_at || r.updated_at || r.created_at;
       if (!dateVal) return true;
-      return dateVal.split('T')[0] === todayStr;
+      return localDateStr(new Date(dateVal)) === todayStr;
     }).length;
 
     document.getElementById('statTotalAssigned').textContent = total;
@@ -1153,6 +1153,16 @@
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
+  // Local (IST) calendar date as YYYY-MM-DD. NEVER derive a date-only
+  // value from toISOString() - that is UTC, so between 00:00 and 05:30
+  // IST it returns yesterday (develop1 fix for the UTC date bugs).
+  function localDateStr(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
   function esc(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -1186,4 +1196,46 @@
     }, 4500);
   }
 
+})();
+
+/* ══════════════════════════════════════════════
+   MOBILE TABLE LABELS (develop1 fix)
+   The responsive CSS turns tables into cards on
+   small screens and labels each cell via
+   td::before { content: attr(data-label) } — but
+   most renderers build <td>s without data-label.
+   This stamper copies each table's header text
+   onto its cells (by column, colspan-aware) after
+   every render, observed via MutationObserver.
+   ══════════════════════════════════════════════ */
+(function () {
+  function stampDataLabels(root) {
+    (root || document).querySelectorAll('table').forEach(function (tbl) {
+      var heads = Array.prototype.map.call(
+        tbl.querySelectorAll('thead th'),
+        function (th) { return th.textContent.trim(); }
+      );
+      if (!heads.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        var col = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          var span = td.colSpan || 1;
+          if (td.tagName === 'TD' && span === 1 && !td.hasAttribute('data-label') && heads[col]) {
+            td.setAttribute('data-label', heads[col]);
+          }
+          col += span;
+        });
+      });
+    });
+  }
+  function init() {
+    stampDataLabels(document);
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function () { stampDataLabels(document); })
+        .observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
 })();
