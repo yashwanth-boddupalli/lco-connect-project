@@ -776,8 +776,22 @@
     var filtered = getFilteredPlans();
 
     if (filtered.length === 0) {
-      var msg = currentPlanSearch ? 'No plans match your search.' : 'No service plans created yet.';
-      container.innerHTML = '<div class="lco-empty" style="grid-column: 1 / -1;"><div class="lco-empty-icon">📦</div><h3>' + msg + '</h3><p>Create your first Broadband or Cable TV plan to start subscribing customers.</p><button class="lco-quick-btn primary" data-action="add-plan">+ Create Plan</button></div>';
+      // Distinguish "no plans exist at all" from "the current search/filters
+      // match nothing" — claiming no plans were created when a filter (e.g.
+      // Cable TV) produced the empty result is simply false.
+      var filtersActive = !!currentPlanSearch || currentPlanFilterType !== 'all' || currentPlanFilterStatus !== 'all';
+      var msg, sub;
+      if (allPlans.length === 0 && !filtersActive) {
+        msg = 'No service plans created yet.';
+        sub = 'Create your first Broadband or Cable TV plan to start subscribing customers.';
+      } else if (currentPlanSearch) {
+        msg = 'No plans match your search.';
+        sub = 'Try a different search term, or clear the search to see all plans.';
+      } else {
+        msg = 'No plans match the current filters.';
+        sub = 'Try a different service type or status filter to see more plans.';
+      }
+      container.innerHTML = '<div class="lco-empty" style="grid-column: 1 / -1;"><div class="lco-empty-icon">📦</div><h3>' + msg + '</h3><p>' + sub + '</p><button class="lco-quick-btn primary" data-action="add-plan">+ Create Plan</button></div>';
 
       container.querySelectorAll('[data-action="add-plan"]').forEach(function (btn) {
         btn.addEventListener('click', function () { openPlanModal(); });
@@ -1869,9 +1883,17 @@
           statusBadge = '<span class="lco-badge urgent" style="background:#DC2626; color:white;">🚨 ACTIVE</span>';
         }
 
-        var toggleAction = un.is_active
-          ? '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="false" style="padding:4px 10px; font-size:12px; color:#DC2626; border-color:#FCA5A5;">Deactivate</button>'
-          : '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="true" style="padding:4px 10px; font-size:12px; color:#166534; border-color:#86EFAC;">Activate</button>';
+        // An expired notice must not be re-activatable — once its expiry
+        // has passed it stays dead, whatever its stored status says.
+        var isExpired = un.status === 'EXPIRED' || (un.expires_at && new Date(un.expires_at).getTime() < Date.now());
+        var toggleAction;
+        if (un.is_active) {
+          toggleAction = '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="false" style="padding:4px 10px; font-size:12px; color:#DC2626; border-color:#FCA5A5;">Deactivate</button>';
+        } else if (isExpired) {
+          toggleAction = '<span style="font-size:12px; color:#94A3B8; font-weight:600;">Expired</span>';
+        } else {
+          toggleAction = '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="true" style="padding:4px 10px; font-size:12px; color:#166534; border-color:#86EFAC;">Activate</button>';
+        }
 
         return '<tr>' +
           '<td><strong style="color:#B91C1C;">' + esc(un.title) + '</strong><div style="font-size:12px; color:#64748B; margin-top:2px;">' + esc(un.message) + '</div></td>' +
