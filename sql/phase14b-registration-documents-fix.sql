@@ -101,10 +101,14 @@ CREATE POLICY "Anonymous application uploads to verification-documents"
 
 -- ── D. Withdraw a failed submission ──
 -- Called by the registration wizard when anything fails after the
--- application row was created. Removes the stored files, the
--- document rows and the application row, but ONLY for an application
--- that is still PENDING and not yet linked to an account — anything
--- already reviewed or activated can never be withdrawn this way.
+-- application row was created. Removes the document rows and the
+-- application row, but ONLY for an application that is still
+-- PENDING and not yet linked to an account — anything already
+-- reviewed or activated can never be withdrawn this way.
+-- Note: Supabase blocks direct SQL deletes on storage.objects
+-- ("Use the Storage API instead"), so the uploaded file bytes of a
+-- withdrawn application stay in the bucket as invisible orphans —
+-- no document row points at them, so they never surface anywhere.
 
 CREATE OR REPLACE FUNCTION public.withdraw_application(p_application_id TEXT)
 RETURNS BOOLEAN
@@ -125,10 +129,6 @@ BEGIN
   IF v_uuid IS NULL THEN
     RETURN FALSE;
   END IF;
-
-  DELETE FROM storage.objects
-  WHERE bucket_id = 'verification-documents'
-    AND name LIKE 'applications/' || v_application_id || '/%';
 
   DELETE FROM public.verification_documents
   WHERE application_id = v_uuid;
