@@ -129,7 +129,19 @@
       var detailsBox = card.querySelector('.status-details');
       var actionsBox = card.querySelector('.status-actions');
 
+      // Loading state: keep the "Application Submitted" template (with blank
+      // "—" fields and a PENDING badge) hidden until the lookup resolves, so
+      // an invalid ID never flashes a misleading success card first.
+      detailsBox.style.display = 'none';
+      messageBox.style.display = 'none';
+      actionsBox.style.display = 'none';
+      heading.textContent = 'Checking your application…';
+      subtitle.textContent = 'Looking up your application status…';
+      document.querySelector('.status-icon').textContent = '⋯';
+
       function showNotFound() {
+        messageBox.style.display = '';
+        actionsBox.style.display = '';
         heading.textContent = 'No Application Found';
         subtitle.textContent = 'We could not find an application with that ID.';
         document.querySelector('.status-icon').textContent = '!';
@@ -178,6 +190,13 @@
           showNotFound();
           return;
         }
+
+        heading.textContent = 'Application Submitted';
+        subtitle.textContent = 'Your LCO registration is being processed';
+        document.querySelector('.status-icon').textContent = '✓';
+        detailsBox.style.display = '';
+        messageBox.style.display = '';
+        actionsBox.style.display = '';
 
         document.getElementById('statusAppId').textContent = data.application_id;
         document.getElementById('statusBizName').textContent = data.business_name;
