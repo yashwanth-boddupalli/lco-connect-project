@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Activate Account — LCO Connect</title>
+  <meta name="robots" content="noindex">
+  <!--
+    Activation is unified: this legacy LCO activation address now forwards
+    to the single Activate Account page. Query string and hash are preserved
+    so invitation links already sent by email keep working — the hash carries
+    the one-time session from the email link.
+  -->
+  <script>
+    window.location.replace('activate-account.html' + window.location.search + window.location.hash);
+  </script>
+  <meta http-equiv="refresh" content="0; url=activate-account.html">
+</head>
+
+<body>
+  <p>Redirecting to <a href="activate-account.html">Activate Account</a>…</p>
+</body>
+
+</html>

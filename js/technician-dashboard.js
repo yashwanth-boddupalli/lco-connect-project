@@ -147,6 +147,11 @@
     });
   };
 
+  // Exported for inline onclick handlers rendered inside the ticket modal
+  // (the script runs inside an IIFE, so these would otherwise be undefined globally)
+  window.closeRequestModal = closeRequestModal;
+  window.loadNotifications = loadNotifications;
+
 
   /* ══════════════════════════════════════════════
      MOBILE NAV SIDEBAR
@@ -226,12 +231,12 @@
     var inProgressCount = allRequests.filter(function (r) { return r.status === 'IN_PROGRESS'; }).length;
 
     // Resolved today calculation
-    var todayStr = new Date().toISOString().split('T')[0];
+    var todayStr = localDateStr();
     var resolvedTodayCount = allRequests.filter(function (r) {
       if (r.status !== 'RESOLVED') return false;
       var dateVal = r.resolved_at || r.updated_at || r.created_at;
       if (!dateVal) return true;
-      return dateVal.split('T')[0] === todayStr;
+      return localDateStr(new Date(dateVal)) === todayStr;
     }).length;
 
     document.getElementById('statTotalAssigned').textContent = total;
@@ -416,6 +421,18 @@
     document.getElementById('modalSubject').textContent = req.subject || '—';
     document.getElementById('modalCustomerDescription').textContent = req.description || 'No description provided by customer.';
     document.getElementById('modalCreatedDate').textContent = 'Raised on: ' + formatDateFull(req.created_at);
+
+    // Show the resolution timestamp when there is one — without it the
+    // "Resolved Today" count can never be checked against the ticket.
+    var resolvedEl = document.getElementById('modalResolvedDate');
+    if (resolvedEl) {
+      if (req.status === 'RESOLVED' && req.resolved_at) {
+        resolvedEl.textContent = 'Resolved on: ' + formatDateFull(req.resolved_at);
+        resolvedEl.style.display = '';
+      } else {
+        resolvedEl.style.display = 'none';
+      }
+    }
 
     // Badges
     var priorityBadge = document.getElementById('modalPriorityBadge');
@@ -644,6 +661,7 @@
 
   var techNotifCategoryFilter = 'ALL';
   var techNotifStatusFilter = 'ALL';
+  var techNotifLoadId = 0;
 
   function formatTimeAgo(dateStr) {
     if (!dateStr) return '—';
@@ -709,8 +727,18 @@
     if (togglePrefBtn && prefCard) {
       togglePrefBtn.addEventListener('click', function() {
         var isHidden = prefCard.style.display === 'none';
-        prefCard.style.display = isHidden ? 'block' : 'none';
-        if (isHidden) loadNotificationPreferences();
+        if (isHidden) {
+          // The card lives inside the Activity Feed tab pane, so opening
+          // it from the Communication History tab showed nothing — switch
+          // to the feed tab first so the card is actually visible.
+          var feedPane = document.getElementById('techNotifTabFeedContainer');
+          var feedTabBtn = document.querySelector('[data-tech-notif-tab="feed"]');
+          if (feedPane && feedTabBtn && feedPane.style.display === 'none') feedTabBtn.click();
+          prefCard.style.display = 'block';
+          loadNotificationPreferences();
+        } else {
+          prefCard.style.display = 'none';
+        }
       });
     }
     if (closePrefBtn && prefCard) {
@@ -816,7 +844,7 @@
     if (cat === 'ACCOUNT') cls = 'account';
     else if (cat === 'SERVICE_REQUEST') cls = 'service';
     else if (cat === 'SYSTEM') cls = 'system';
-    return '<span class="lco-notif-cat-badge ' + cls + '">' + esc(cat) + '</span>';
+    return '<span class="lco-notif-cat-badge ' + cls + '">' + esc(getTechCategoryMeta(cat).label) + '</span>';
   }
 
   function renderChannelBadge(ch) {
@@ -839,6 +867,11 @@
     var container = document.getElementById('techNotifList');
     if (!container) return;
 
+    // Rapid filter clicks fire overlapping loads; only the newest load may
+    // render, otherwise a slower earlier request overwrites the list with
+    // the previous filter's rows (stale-render race).
+    var myLoadId = ++techNotifLoadId;
+
     try {
       var query = sb.from('notifications')
         .select('*')
@@ -857,6 +890,7 @@
 
       var { data, error } = await query.order('created_at', { ascending: false }).limit(50);
       if (error) throw error;
+      if (myLoadId !== techNotifLoadId) return;
 
       var notifications = data || [];
 
@@ -867,6 +901,8 @@
         .eq('technician_id', techProfile.id)
         .eq('recipient_role', 'TECHNICIAN')
         .eq('is_read', false);
+
+      if (myLoadId !== techNotifLoadId) return;
 
       var badge = document.getElementById('techNotifCount');
       if (badge) {
@@ -889,7 +925,7 @@
           '<span class="lco-notif-cat-badge cat-' + (n.category || 'SERVICE_REQUEST') + '">' + esc(catMeta.label) + '</span>' +
           '</div>' +
           '<div class="lco-notif-message">' + esc(n.message) + '</div>' +
-          '<div class="lco-notif-time">' + formatTimeAgo(n.created_at) + ' • ' + formatDateFull(n.created_at) + '</div>' +
+          '<div class="lco-notif-time">' + formatTimeAgo(n.created_at) + ' • ' + formatTimeOnly(n.created_at) + '</div>' +
           '</div>' +
           '</div>';
       }).join('');
@@ -1148,6 +1184,25 @@
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
+  // Time only — paired with formatTimeAgo in the notification list, where
+  // appending formatDateFull repeated the date for anything a week old
+  // ("23 Sept 2026 • 23 Sept 2026, 01:03 am").
+  function formatTimeOnly(dateStr) {
+    if (!dateStr) return '—';
+    var d = new Date(dateStr);
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // Local (IST) calendar date as YYYY-MM-DD. NEVER derive a date-only
+  // value from toISOString() - that is UTC, so between 00:00 and 05:30
+  // IST it returns yesterday (develop1 fix for the UTC date bugs).
+  function localDateStr(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
   function esc(str) {
     if (str === null || str === undefined) return '';
     return String(str)
@@ -1181,4 +1236,46 @@
     }, 4500);
   }
 
+})();
+
+/* ══════════════════════════════════════════════
+   MOBILE TABLE LABELS (develop1 fix)
+   The responsive CSS turns tables into cards on
+   small screens and labels each cell via
+   td::before { content: attr(data-label) } — but
+   most renderers build <td>s without data-label.
+   This stamper copies each table's header text
+   onto its cells (by column, colspan-aware) after
+   every render, observed via MutationObserver.
+   ══════════════════════════════════════════════ */
+(function () {
+  function stampDataLabels(root) {
+    (root || document).querySelectorAll('table').forEach(function (tbl) {
+      var heads = Array.prototype.map.call(
+        tbl.querySelectorAll('thead th'),
+        function (th) { return th.textContent.trim(); }
+      );
+      if (!heads.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        var col = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          var span = td.colSpan || 1;
+          if (td.tagName === 'TD' && span === 1 && !td.hasAttribute('data-label') && heads[col]) {
+            td.setAttribute('data-label', heads[col]);
+          }
+          col += span;
+        });
+      });
+    });
+  }
+  function init() {
+    stampDataLabels(document);
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function () { stampDataLabels(document); })
+        .observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
 })();

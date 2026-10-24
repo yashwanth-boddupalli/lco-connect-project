@@ -77,7 +77,8 @@ BEGIN
   )
   SELECT COUNT(*) INTO v_total_records
   FROM raw_users u
-  WHERE (v_role IS NULL OR u.role = v_role)
+  WHERE u.role != 'SUPER_ADMIN'
+    AND (v_role IS NULL OR u.role = v_role)
     AND (v_status IS NULL OR u.status = v_status)
     AND (v_lco_id IS NULL OR u.lco_id = v_lco_id)
     AND (
@@ -125,7 +126,8 @@ BEGIN
   FROM (
     SELECT *
     FROM raw_users u
-    WHERE (v_role IS NULL OR u.role = v_role)
+    WHERE u.role != 'SUPER_ADMIN'
+      AND (v_role IS NULL OR u.role = v_role)
       AND (v_status IS NULL OR u.status = v_status)
       AND (v_lco_id IS NULL OR u.lco_id = v_lco_id)
       AND (

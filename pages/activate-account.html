@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Activate Account — LCO Connect</title>
   <meta name="description"
-    content="Activate your LCO Connect customer account. Set your password and log in to manage your broadband & cable TV service.">
+    content="Activate your LCO Connect account. Set your password and log in to your portal.">
   <meta name="theme-color" content="#0B7A6E">
 
   <!-- Fonts -->
@@ -27,7 +27,13 @@
   <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
   <!-- ═══════════════════════════════════════════
-     ACTIVATION FORM
+     ACTIVATION FORM (unified: LCO / Customer / Technician)
+     One page for every first-time activation. The invitation link
+     identifies the account type:
+       ?application_id=LCO-2026-XXXX  → LCO operator
+       ?customer_id=CUST-XXXX        → Customer
+       ?technician_id=TECH-XXXX      → Technician
+     The matching link_*_account RPC is called after the password is set.
      ═══════════════════════════════════════════ -->
   <main class="sa-login-main">
     <div class="sa-login-card" style="max-width: 460px;">
@@ -41,8 +47,8 @@
 
       <!-- Activation form -->
       <form id="activateForm" novalidate autocomplete="off">
-        <h1 id="activateHeading">Activate Customer Account</h1>
-        <p class="sa-login-desc" id="activateSubtext">Enter your details to create your password and activate your portal access.</p>
+        <h1 id="activateHeading">Activate Account</h1>
+        <p class="sa-login-desc" id="activateSubtext">Enter your details to create your password and activate your account.</p>
 
         <!-- Dynamic status notice banner -->
         <div id="activateNotice" style="display:none; padding: 12px 16px; background: rgba(11,122,110,0.1); border-left: 4px solid #0B7A6E; border-radius: 6px; font-size: 13px; margin-bottom: 20px; color: #0B7A6E;">
@@ -50,23 +56,23 @@
         </div>
 
         <div class="sa-form-group">
-          <label for="activateCustId">Customer ID *</label>
-          <input type="text" id="activateCustId" name="customerId" placeholder="e.g. CUST-2026-0001" required style="text-transform: uppercase;">
-          <div class="sa-field-error" id="activateCustId-error">Please enter your Customer ID</div>
+          <label for="activateId" id="activateIdLabel">Account ID *</label>
+          <input type="text" id="activateId" name="accountId" placeholder="e.g. LCO-2026-0001" required style="text-transform: uppercase;">
+          <div class="sa-field-error" id="activateId-error">Please enter your ID</div>
         </div>
 
         <div class="sa-form-group">
           <label for="activateEmail">Registered Email *</label>
-          <input type="email" id="activateEmail" name="email" placeholder="customer@email.com" required>
+          <input type="email" id="activateEmail" name="email" placeholder="you@email.com" required>
           <div class="sa-field-error" id="activateEmail-error">Please enter a valid email</div>
         </div>
 
         <div class="sa-form-group">
           <label for="activatePassword">Create Password *</label>
           <div class="sa-password-wrap">
-            <input type="password" id="activatePassword" name="password" placeholder="Minimum 6 characters" required minlength="6">
+            <input type="password" id="activatePassword" name="password" placeholder="Minimum 8 characters" required minlength="8">
           </div>
-          <div class="sa-field-error" id="activatePassword-error">Password must be at least 6 characters</div>
+          <div class="sa-field-error" id="activatePassword-error">Password must be at least 8 characters</div>
         </div>
 
         <div class="sa-form-group">
@@ -83,6 +89,7 @@
 
         <div class="sa-login-footer-text">
           Already activated? <a href="login.html">Sign In →</a>
+          <div style="margin-top: 8px;"><a href="../index.html">← Back to LCO Connect</a></div>
         </div>
       </form>
 
@@ -107,17 +114,83 @@
     (function () {
       'use strict';
 
+      // Per-role configuration. The invitation link (or the ID's prefix)
+      // decides which row of this table applies.
+      var ROLES = {
+        LCO: {
+          param: 'application_id',
+          label: 'Application ID',
+          placeholder: 'e.g. LCO-2026-0001',
+          errorText: 'Please enter your Application ID',
+          rpc: 'link_lco_account',
+          rpcParam: 'p_application_id',
+          dashboard: 'lco-dashboard.html'
+        },
+        CUSTOMER: {
+          param: 'customer_id',
+          label: 'Customer ID',
+          placeholder: 'e.g. CUST-2026-0001',
+          errorText: 'Please enter your Customer ID',
+          rpc: 'link_customer_account',
+          rpcParam: 'p_customer_id',
+          dashboard: 'customer-dashboard.html'
+        },
+        TECHNICIAN: {
+          param: 'technician_id',
+          label: 'Technician ID',
+          placeholder: 'e.g. TECH-0001',
+          errorText: 'Please enter your Technician ID',
+          rpc: 'link_technician_account',
+          rpcParam: 'p_technician_id',
+          dashboard: 'technician-dashboard.html'
+        }
+      };
+
+      function detectRoleFromId(idValue) {
+        var v = String(idValue || '').trim().toUpperCase();
+        if (v.indexOf('LCO-') === 0) return 'LCO';
+        if (v.indexOf('CUST-') === 0) return 'CUSTOMER';
+        if (v.indexOf('TECH-') === 0) return 'TECHNICIAN';
+        return null;
+      }
+
       var sb = LCOAuth.getClient();
       var form = document.getElementById('activateForm');
-      var custIdInput = document.getElementById('activateCustId');
+      var idInput = document.getElementById('activateId');
+      var idLabel = document.getElementById('activateIdLabel');
+      var idError = document.getElementById('activateId-error');
       var emailInput = document.getElementById('activateEmail');
       var passwordInput = document.getElementById('activatePassword');
       var confirmPwInput = document.getElementById('activateConfirmPassword');
       var activateBtn = document.getElementById('activateBtn');
       var noticeEl = document.getElementById('activateNotice');
+      var subtextEl = document.getElementById('activateSubtext');
 
       var hasInviteSession = false;
-      var subtextEl = document.getElementById('activateSubtext');
+      var activeRole = null;
+
+      function applyRole(role, idValue, lockField) {
+        if (!role || !ROLES[role]) return;
+        activeRole = role;
+        var cfg = ROLES[role];
+        idLabel.textContent = cfg.label + ' *';
+        idInput.placeholder = cfg.placeholder;
+        idError.textContent = cfg.errorText;
+        if (idValue) {
+          idInput.value = String(idValue).trim().toUpperCase();
+        }
+        if (lockField && idInput.value) {
+          idInput.readOnly = true;
+          idInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+        }
+      }
+
+      // 1) Role + ID from the invitation link's query string
+      var urlParams = new URLSearchParams(window.location.search);
+      Object.keys(ROLES).forEach(function (role) {
+        var v = urlParams.get(ROLES[role].param);
+        if (v) applyRole(role, v, true);
+      });
 
       function applyInviteSession(session) {
         if (!session || !session.user) return;
@@ -131,20 +204,17 @@
           emailInput.readOnly = true;
           emailInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
         }
-        if (session.user.user_metadata && session.user.user_metadata.customer_id && !custIdInput.value) {
-          custIdInput.value = String(session.user.user_metadata.customer_id).trim().toUpperCase();
-          custIdInput.readOnly = true;
-          custIdInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
-        }
-      }
 
-      // Pre-fill Customer ID from invite redirect (email comes from authenticated session only)
-      var urlParams = new URLSearchParams(window.location.search);
-      var paramCustId = urlParams.get('customer_id');
-      if (paramCustId) {
-        custIdInput.value = paramCustId.trim().toUpperCase();
-        custIdInput.readOnly = true;
-        custIdInput.style.backgroundColor = 'rgba(0,0,0,0.03)';
+        // 2) Role + ID from the invitation's user metadata, if the link
+        //    itself did not carry them.
+        if (!activeRole && session.user.user_metadata) {
+          var md = session.user.user_metadata;
+          Object.keys(ROLES).forEach(function (role) {
+            if (!activeRole && md[ROLES[role].param]) {
+              applyRole(role, md[ROLES[role].param], true);
+            }
+          });
+        }
       }
 
       if (sb) {
@@ -169,7 +239,7 @@
       }
 
       // Clear errors on input
-      [custIdInput, emailInput, passwordInput, confirmPwInput].forEach(function (input) {
+      [idInput, emailInput, passwordInput, confirmPwInput].forEach(function (input) {
         input.addEventListener('input', function () {
           input.classList.remove('error');
           var errEl = document.getElementById(input.id + '-error');
@@ -181,14 +251,21 @@
         e.preventDefault();
         var valid = true;
 
-        var custId = custIdInput.value.trim().toUpperCase();
+        var accountId = idInput.value.trim().toUpperCase();
         var email = emailInput.value.trim().toLowerCase();
         var password = passwordInput.value;
         var confirmPw = confirmPwInput.value;
 
-        if (!custId) {
-          custIdInput.classList.add('error');
-          document.getElementById('activateCustId-error').classList.add('visible');
+        // 3) Last resort: recognise the role from the typed ID's prefix.
+        if (!activeRole && accountId) {
+          var detected = detectRoleFromId(accountId);
+          if (detected) applyRole(detected, accountId, false);
+        }
+        var cfg = activeRole ? ROLES[activeRole] : null;
+
+        if (!accountId) {
+          idInput.classList.add('error');
+          idError.classList.add('visible');
           valid = false;
         }
 
@@ -198,7 +275,7 @@
           valid = false;
         }
 
-        if (!password || password.length < 6) {
+        if (!password || password.length < 8) {
           passwordInput.classList.add('error');
           document.getElementById('activatePassword-error').classList.add('visible');
           valid = false;
@@ -211,6 +288,11 @@
         }
 
         if (!valid) return;
+
+        if (!cfg) {
+          showToast('We could not recognise this ID. Please open the activation link from your invitation email.', 'error');
+          return;
+        }
 
         activateBtn.disabled = true;
         activateBtn.innerHTML = '<span class="sa-spinner"></span> Activating account…';
@@ -233,24 +315,25 @@
           var updateRes = await sb.auth.updateUser({ password: password });
           if (updateRes.error) throw updateRes.error;
 
-          var linkRes = await sb.rpc('link_customer_account', {
-            p_customer_id: custId,
-            p_email: email
-          });
+          // Link the auth user to their record and activate the
+          // auto-created (handle_new_user) profile for this role.
+          var linkArgs = { p_email: email };
+          linkArgs[cfg.rpcParam] = accountId;
+          var linkRes = await sb.rpc(cfg.rpc, linkArgs);
 
           if (linkRes.error) throw linkRes.error;
 
           showToast('Account activated successfully! Redirecting to dashboard…', 'success');
 
           setTimeout(function () {
-            window.location.href = 'customer-dashboard.html';
+            window.location.href = cfg.dashboard;
           }, 1200);
 
         } catch (err) {
           console.error('Activation failed:', err);
           activateBtn.disabled = false;
           activateBtn.innerHTML = 'Set Password & Activate Account';
-          showToast(err.message || 'Activation failed. Please check your Customer ID and Email.', 'error');
+          showToast(err.message || ('Activation failed. Please check your ' + (cfg ? cfg.label : 'ID') + ' and Email.'), 'error');
         }
       });
 

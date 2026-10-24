@@ -66,11 +66,32 @@ Deno.serve(async (request) => {
     const subject = decision === 'APPROVED'
       ? 'Your LCO Connect account is approved'
       : 'Update on your LCO Connect application';
-    const body = decision === 'APPROVED'
-      ? `<p>Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Sign in with the email address you registered and the password you created during registration: <a href="${escapeAttribute(loginUrl)}">Sign in to LCO Connect</a>.</p><p>For security, we never send or retrieve passwords by email.</p>`
-      : `<p>Hello,</p><p>Your application for <strong>${escapeHtml(application.business_name)}</strong> has not been approved.</p><p><strong>Reason:</strong> ${escapeHtml(application.rejection_reason || 'Please contact support for more information.')}</p><p>If you need help, please contact the LCO Connect support channel provided to you.</p>`;
+    const innerBody = decision === 'APPROVED'
+      ? `<p style="font-size: 16px; margin-top: 0;">Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Your application is approved — a separate activation email is on its way; open it to set your password and activate your account.</p>`
+      : `<p style="font-size: 16px; margin-top: 0;">Hello,</p><p>Your application for <strong>${escapeHtml(application.business_name)}</strong> has not been approved.</p><p><strong>Reason:</strong> ${escapeHtml(application.rejection_reason || 'Please contact support for more information.')}</p><p>If you need help, please contact the LCO Connect support channel provided to you.</p>`;
+    // Branded LCO CONNECT shell — same label/header as the invitation
+    // and password-reset emails, so every mail from the platform
+    // carries the brand instead of arriving as bare text.
+    const body = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1E293B; background-color: #FAF8F5; border-radius: 12px;">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="color: #0B7A6E; margin: 0;">LCO CONNECT</h2>
+          <p style="color: #64748B; font-size: 14px; margin-top: 4px;">${decision === 'APPROVED' ? 'Application Approved' : 'Application Update'}</p>
+        </div>
+
+        <div style="background-color: #FFFFFF; padding: 28px; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 12px rgba(0,0,0,0.03);">
+          ${innerBody}
+
+          <hr style="border: 0; border-top: 1px solid #E2E8F0; margin: 24px 0;">
+
+          <p style="font-size: 12px; color: #94A3B8; margin-bottom: 0;">
+            For security reasons, we never send or retrieve passwords by email.
+          </p>
+        </div>
+      </div>
+    `;
     const textBody = decision === 'APPROVED'
-      ? `Hello,\n\n${application.business_name} has been approved and your LCO Connect account is now active.\n\nSign in with the email address you registered and the password you created during registration: ${loginUrl}\n\nFor security, we never send or retrieve passwords by email.`
+      ? `Hello,\n\n${application.business_name} has been approved and your LCO Connect account is now active.\n\nYour application is approved — a separate activation email is on its way; open it to set your password and activate your account.\n\nFor security, we never send or retrieve passwords by email.`
       : `Hello,\n\nYour application for ${application.business_name} has not been approved.\n\nReason: ${application.rejection_reason || 'Please contact support for more information.'}\n\nIf you need help, please contact the LCO Connect support channel provided to you.`;
 
     let sent = false;

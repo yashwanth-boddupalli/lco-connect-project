@@ -547,6 +547,35 @@
       document.getElementById('rejectBtn').addEventListener('click', function () {
         openRejectModal();
       });
+    } else if (app.status === 'APPROVED') {
+      // Activation invite controls: the invite is sent on approval and can
+      // be resent when delivery failed or never went out. ACTIVATED apps
+      // (password set) need nothing.
+      var invStatus = app.invitation_status || 'PENDING';
+      if (invStatus !== 'ACTIVATED') {
+        actionsDiv.innerHTML =
+          '<button class="sa-btn-secondary" id="resendInviteBtn">↻ Resend invitation</button>';
+        document.getElementById('resendInviteBtn').addEventListener('click', function () {
+          var btn = this;
+          btn.disabled = true;
+          btn.innerHTML = '<span class="sa-spinner"></span> Sending…';
+          sendInvitationEmail(app.id).then(function (res) {
+            btn.disabled = false;
+            btn.innerHTML = '↻ Resend invitation';
+            if (res.success) {
+              // Surface the function's own message — it names the recipient
+              // inbox, so a "sent" toast can always be checked against the
+              // right mailbox instead of looking like a false success.
+              showToast(res.message || 'Activation invitation sent.', 'success');
+              loadApplications().then(function () { openDetail(app.id); });
+            } else {
+              showToast('Failed to send invitation. ' + (res.error || ''), 'error');
+            }
+          });
+        });
+      } else {
+        actionsDiv.innerHTML = '';
+      }
     } else {
       actionsDiv.innerHTML = '';
     }
@@ -563,15 +592,9 @@
       detailField('State', app.state) +
       detailField('PIN Code', app.pincode);
 
-    // Registration info
-    var regGrid = document.getElementById('detailRegistrationGrid');
-    if (regGrid) {
-      regGrid.innerHTML =
-        detailField('Application ID', app.application_id) +
-        detailField('Submitted', formatDateFull(app.created_at)) +
-        detailField('Status', app.status) +
-        detailField('Login Email', app.email);
-    }
+    // NOTE: #detailRegistrationGrid no longer exists in the markup, so this
+    // dead block was removed. Registration fields (Application ID, Submitted,
+    // Status, Login Email) are rendered in the main detail grid above.
 
     // Services
     var svcDiv = document.getElementById('detailServices');
@@ -613,6 +636,12 @@
         var notifLabel = app.notification_status === 'SENT' ? '✓ Sent' :
           app.notification_status === 'FAILED' ? '✕ Failed' : 'Not sent';
         auditHtml += '<div class="sa-audit-row"><strong>Email Notification</strong> ' + notifLabel + '</div>';
+      }
+      if (app.invitation_status) {
+        var invLabel = app.invitation_status === 'ACTIVATED' ? '✓ Activated' :
+          app.invitation_status === 'INVITED' ? 'Sent — awaiting activation' :
+          app.invitation_status === 'FAILED' ? '✕ Failed' : 'Not sent';
+        auditHtml += '<div class="sa-audit-row"><strong>Activation Invitation</strong> ' + invLabel + '</div>';
       }
       auditDiv.innerHTML = auditHtml;
     } else {
@@ -702,8 +731,12 @@
     html += renderBadge(doc.status);
     html += '<button class="sa-doc-view-btn" data-doc-id="' + doc.id + '" data-path="' + esc(doc.file_path) + '" data-mime="' + esc(doc.mime_type) + '">View</button>';
 
-    // Show verify/reject buttons only for PENDING docs
-    if (doc.status === 'PENDING') {
+    // Show verify/reject buttons only for PENDING docs on an application
+    // that is still awaiting its decision — once the application is APPROVED
+    // or REJECTED the decision is final, so document actions must not stay
+    // active even if an individual document row is still PENDING.
+    var appDecided = currentDetailApp && (currentDetailApp.status === 'APPROVED' || currentDetailApp.status === 'REJECTED');
+    if (doc.status === 'PENDING' && !appDecided) {
       html += '<button class="sa-doc-status-btn verify" data-doc-id="' + doc.id + '" data-action="verify">✓ Verify</button>';
       html += '<button class="sa-doc-status-btn reject" data-doc-id="' + doc.id + '" data-action="reject">✕ Reject</button>';
     }
@@ -765,16 +798,31 @@
 
       var signedUrl = data.signedUrl;
       var isImage = mimeType && mimeType.startsWith('image/');
+      var isPdf = mimeType === 'application/pdf';
+
+      var previewOverlay = document.getElementById('imagePreview');
+      var previewImg = document.getElementById('previewImage');
+      var previewFrame = document.getElementById('previewFrame');
 
       if (isImage) {
         // Show in preview modal
-        var previewOverlay = document.getElementById('imagePreview');
-        var previewImg = document.getElementById('previewImage');
+        previewFrame.style.display = 'none';
+        previewFrame.src = '';
+        previewImg.style.display = '';
         previewImg.src = signedUrl;
         previewOverlay.classList.add('visible');
+      } else if (isPdf) {
+        // Preview PDFs in the modal too. window.open() after this await has
+        // lost the click's user-activation, so popup blockers silently kill
+        // it and the admin is left staring at the "Loading document…" toast.
+        previewImg.style.display = 'none';
+        previewImg.src = '';
+        previewFrame.style.display = '';
+        previewFrame.src = signedUrl;
+        previewOverlay.classList.add('visible');
       } else {
-        // Open in new tab for PDFs and others
-        window.open(signedUrl, '_blank');
+        // Open in new tab for other file types
+        window.open(signedUrl, '_blank', 'noopener');
       }
 
     } catch (e) {
@@ -788,12 +836,18 @@
   document.getElementById('previewClose').addEventListener('click', function () {
     document.getElementById('imagePreview').classList.remove('visible');
     document.getElementById('previewImage').src = '';
+    var frame = document.getElementById('previewFrame');
+    frame.src = '';
+    frame.style.display = 'none';
   });
 
   document.getElementById('imagePreview').addEventListener('click', function (e) {
     if (e.target === this) {
       this.classList.remove('visible');
       document.getElementById('previewImage').src = '';
+      var frame = document.getElementById('previewFrame');
+      frame.src = '';
+      frame.style.display = 'none';
     }
   });
 
@@ -978,7 +1032,14 @@
       // completed approval. The Edge Function records its own delivery state.
       var emailResult = await sendNotificationEmail(currentDetailApp.id, 'APPROVED');
 
-      showToast('Application approved successfully!' + (emailResult.success ? ' Notification sent.' : ' (Email notification pending configuration)'), 'success');
+      // Approval-triggered activation invite (new registration workflow).
+      // Invite failure must never undo a completed approval — it can be
+      // resent from the application detail view.
+      var inviteResult = await sendInvitationEmail(currentDetailApp.id);
+
+      showToast('Application approved successfully!' +
+        (emailResult.success ? ' Notification sent.' : ' (Email notification pending configuration)') +
+        (inviteResult.success ? ' Activation invite sent.' : ' (Activation invite pending — resend from application detail)'), 'success');
       closeApproveModal();
 
       // Refresh data
@@ -1117,6 +1178,37 @@
       // Edge function not deployed or not available
       console.warn('Email notification not available (Edge Function not deployed):', e.message);
       return { success: false, error: 'Email service not configured' };
+    }
+  }
+
+
+  /* ── LCO activation invitation (Wave B) ── */
+  // Invokes the send-lco-invitation Edge Function, which emails the
+  // approved LCO an activation link for password setup. Fail-closed:
+  // the approval itself is never affected by an invite failure.
+
+  async function sendInvitationEmail(applicationId) {
+    try {
+      // Attempt to call Supabase Edge Function
+      // This is the secure server-side approach.
+      // The Edge Function must be deployed separately.
+      var { data, error } = await sb.functions.invoke('send-lco-invitation', {
+        body: {
+          application_id: applicationId
+        }
+      });
+
+      if (error) {
+        console.warn('LCO invitation edge function error:', error);
+        return { success: false, error: error.message };
+      }
+
+      return { success: !!(data && data.ok), error: data && data.error ? data.error : null, message: data && data.message ? data.message : null };
+
+    } catch (e) {
+      // Edge function not deployed or not available
+      console.warn('LCO invitation not available (Edge Function not deployed):', e.message);
+      return { success: false, error: 'Invitation service not configured' };
     }
   }
 
@@ -1550,15 +1642,20 @@
 
     var acctStatus = detail.account_status || 'ACTIVE';
 
+    // manage_lco_status expects the application's UUID (lco_applications.id),
+    // NOT the human-readable application_id (e.g. LCO-2026-0013) — passing the
+    // text ID makes Postgres reject it: "invalid input syntax for type uuid".
+    var appUuid = detail.id || currentInspectAppId;
+
     if (acctStatus === 'ACTIVE') {
       wrap.innerHTML = '<button class="sa-btn-suspend" id="lcoInspectSuspendBtn">🚫 Suspend Account</button>';
       document.getElementById('lcoInspectSuspendBtn').addEventListener('click', function () {
-        openGovernanceModal(detail.application_id, detail.business_name, 'ACTIVE', 'SUSPENDED');
+        openGovernanceModal(appUuid, detail.application_id, detail.business_name, 'ACTIVE', 'SUSPENDED');
       });
     } else if (acctStatus === 'SUSPENDED') {
       wrap.innerHTML = '<button class="sa-btn-reactivate" id="lcoInspectReactivateBtn">✅ Reactivate Account</button>';
       document.getElementById('lcoInspectReactivateBtn').addEventListener('click', function () {
-        openGovernanceModal(detail.application_id, detail.business_name, 'SUSPENDED', 'ACTIVE');
+        openGovernanceModal(appUuid, detail.application_id, detail.business_name, 'SUSPENDED', 'ACTIVE');
       });
     } else {
       wrap.innerHTML = '';
@@ -1590,9 +1687,10 @@
     }
   }
 
-  function openGovernanceModal(applicationId, bizName, currentStatus, newStatus) {
+  function openGovernanceModal(appUuid, displayAppId, bizName, currentStatus, newStatus) {
     pendingGovernanceAction = {
-      applicationId: applicationId,
+      applicationId: appUuid,
+      displayAppId: displayAppId,
       bizName: bizName,
       currentStatus: currentStatus,
       newStatus: newStatus
@@ -1629,7 +1727,7 @@
       confirmBtn.style.boxShadow = '0 2px 8px rgba(11,122,110,0.2)';
     }
 
-    infoEl.innerHTML = 'LCO: <span style="color:var(--teal-dark);">' + esc(bizName) + '</span> (App ID: <span class="mono">' + esc(applicationId) + '</span>)';
+    infoEl.innerHTML = 'LCO: <span style="color:var(--teal-dark);">' + esc(bizName) + '</span> (App ID: <span class="mono">' + esc(displayAppId || appUuid) + '</span>)';
 
     document.getElementById('manageLcoStatusModal').classList.add('visible');
   }
@@ -1804,15 +1902,6 @@
       var roleParam = userDirRoleFilter === 'ALL' ? null : userDirRoleFilter;
       var statusParam = userDirStatusFilter === 'ALL' ? null : userDirStatusFilter;
 
-      console.log('[UserDir Debug] Requesting RPC get_super_admin_user_directory with params:', {
-        p_search: userDirSearch || null,
-        p_role: roleParam,
-        p_status: statusParam,
-        p_lco_id: null,
-        p_limit: userDirLimit,
-        p_offset: userDirOffset
-      });
-
       var { data, error } = await sb.rpc('get_super_admin_user_directory', {
         p_search: userDirSearch || null,
         p_role: roleParam,
@@ -1822,39 +1911,36 @@
         p_offset: userDirOffset
       });
 
-      console.log('[UserDir Debug] sb.rpc returned raw data:', data, 'error:', error);
-
       if (error) {
-        console.error('[UserDir Debug] RPC returned error object:', error);
+        console.error('[UserDir] RPC error:', error);
         throw error;
       }
 
       // Unwrap result object or array returned by RPC
       var res = Array.isArray(data) ? data[0] : data;
-      console.log('[UserDir Debug] Normalized res object:', res);
 
-      var rawRecords = (res && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
-      console.log('[UserDir Debug] Extracted rawRecords count:', rawRecords.length, rawRecords);
-
-      // Filter out SUPER_ADMIN role users from directory
-      userDirData = rawRecords.filter(function (u) {
+      var records = (res && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
+      // SUPER_ADMIN rows are excluded server-side by the RPC; keep a defensive
+      // client-side filter in case an older database version is live.
+      userDirData = records.filter(function (u) {
         return u && u.role !== 'SUPER_ADMIN';
       });
-      console.log('[UserDir Debug] Filtered userDirData (excluding SUPER_ADMIN):', userDirData.length, userDirData);
 
       if (res && res.pagination && res.pagination.total_records !== undefined) {
-        var totalFromPag = parseInt(res.pagination.total_records, 10);
-        var superAdminCountInPage = rawRecords.length - userDirData.length;
-        userDirTotal = Math.max(0, totalFromPag - superAdminCountInPage);
+        // The RPC total can include rows the defensive filter above removed
+        // (e.g. a SUPER_ADMIN row counted by an older database version), so
+        // subtract what this page actually dropped — otherwise the footer
+        // claims more rows than are rendered.
+        var droppedRows = records.length - userDirData.length;
+        userDirTotal = Math.max(userDirData.length, (parseInt(res.pagination.total_records, 10) || 0) - droppedRows);
       } else {
         userDirTotal = userDirData.length;
       }
-      console.log('[UserDir Debug] Calculated userDirTotal:', userDirTotal);
 
       renderUserDirectoryTable();
       updateUserDirPagination();
     } catch (e) {
-      console.error('[UserDir Debug] Exception in loadUserDirectory:', e);
+      console.error('[UserDir] Exception in loadUserDirectory:', e);
       if (tbody) {
         var errMsg = escapeHtml(e.message || e.error_description || (typeof e === 'string' ? e : 'Unknown error'));
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#E74C3C;"><div class="sa-empty"><div class="sa-empty-icon">⚠️</div><h3>Failed to load user directory</h3><p>' + errMsg + '</p></div></td></tr>';
@@ -1910,7 +1996,7 @@
     var nextBtn = document.getElementById('userDirNextBtn');
 
     if (userDirTotal === 0) {
-      if (info) info.textContent = 'Showing 0 of 0';
+      if (info) info.textContent = 'Showing 0–0 of 0';
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
       return;
@@ -2267,7 +2353,7 @@
     var nextBtn = document.getElementById('commNextBtn');
 
     if (commTotal === 0) {
-      if (info) info.textContent = 'Showing 0 of 0';
+      if (info) info.textContent = 'Showing 0–0 of 0';
       if (prevBtn) prevBtn.disabled = true;
       if (nextBtn) nextBtn.disabled = true;
       return;
@@ -2303,6 +2389,14 @@
     var dateFromInput = document.getElementById('saAuditDateFrom');
     var dateToInput = document.getElementById('saAuditDateTo');
     var resetBtn = document.getElementById('saAuditResetBtn');
+    var filtersToggle = document.getElementById('saAuditFiltersToggle');
+    var moreFilters = document.getElementById('saAuditMoreFilters');
+    if (filtersToggle && moreFilters) {
+      filtersToggle.addEventListener('click', function () {
+        var isOpen = moreFilters.style.display !== 'none';
+        moreFilters.style.display = isOpen ? 'none' : 'flex';
+      });
+    }
     var prevBtn = document.getElementById('saAuditPrevBtn');
     var nextBtn = document.getElementById('saAuditNextBtn');
 
@@ -2456,6 +2550,13 @@
   }
 
   async function loadAuditLogs() {
+    // Keep the "More filters" toggle honest: a dot marks that a secondary
+    // filter (severity / role / date range) is currently active.
+    var toggleBtn = document.getElementById('saAuditFiltersToggle');
+    if (toggleBtn) {
+      var secondaryActive = auditSeverityFilter !== 'ALL' || auditRoleFilter !== 'ALL' || !!auditDateFrom || !!auditDateTo;
+      toggleBtn.textContent = secondaryActive ? '⚙ More filters •' : '⚙ More filters';
+    }
     var tbody = document.getElementById('saAuditTableBody');
     var pagDiv = document.getElementById('saAuditPagination');
     if (!tbody) return;
@@ -2634,4 +2735,46 @@
     initAuth();
   }
 
+})();
+
+/* ==============================================
+   MOBILE TABLE LABELS (develop1 fix)
+   The responsive CSS turns tables into cards on
+   small screens and labels each cell via
+   td::before { content: attr(data-label) } - but
+   most renderers build <td>s without data-label.
+   This stamper copies each table's header text
+   onto its cells (by column, colspan-aware) after
+   every render, observed via MutationObserver.
+   ============================================== */
+(function () {
+  function stampDataLabels(root) {
+    (root || document).querySelectorAll('table').forEach(function (tbl) {
+      var heads = Array.prototype.map.call(
+        tbl.querySelectorAll('thead th'),
+        function (th) { return th.textContent.trim(); }
+      );
+      if (!heads.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        var col = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          var span = td.colSpan || 1;
+          if (td.tagName === 'TD' && span === 1 && !td.hasAttribute('data-label') && heads[col]) {
+            td.setAttribute('data-label', heads[col]);
+          }
+          col += span;
+        });
+      });
+    });
+  }
+  function init() {
+    stampDataLabels(document);
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function () { stampDataLabels(document); })
+        .observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
 })();

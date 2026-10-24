@@ -45,20 +45,22 @@ CREATE POLICY "Super admins can read all profiles"
     )
   );
 
--- Profiles: only system can insert (via trigger)
+-- Profiles: only system can insert (via trigger). The trigger
+-- (handle_new_user) allowlists roles, so a self-insert must never be able
+-- to mint anything above a plain USER row.
+DROP POLICY IF EXISTS "System insert on profiles" ON public.profiles;
 CREATE POLICY "System insert on profiles"
   ON public.profiles
   FOR INSERT
   TO authenticated
-  WITH CHECK (id = auth.uid());
+  WITH CHECK (id = auth.uid() AND role = 'USER');
 
--- Profiles: users can update their own non-role fields
-CREATE POLICY "Users can update own profile"
-  ON public.profiles
-  FOR UPDATE
-  TO authenticated
-  USING (id = auth.uid())
-  WITH CHECK (id = auth.uid());
+-- Profiles: NO self-service UPDATE policy.
+-- A USING/WITH CHECK on id alone would let any authenticated user promote
+-- their own row (e.g. SET role='SUPER_ADMIN'). All role/status changes go
+-- through SECURITY DEFINER functions (approval, invite acceptance), which
+-- bypass RLS. There is deliberately no client-side update path.
+DROP POLICY IF EXISTS "Users can update own profile" ON public.profiles;
 
 
 -- ══════════════════════════════════════════════

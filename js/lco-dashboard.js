@@ -600,7 +600,7 @@
 
     accountGrid.innerHTML =
       detailField('Service Status', cust.service_status) +
-      detailField('Portal Access', activationStatusHtml) +
+      detailFieldHtml('Portal Access', activationStatusHtml) +
       detailField('Invitation Sent', cust.invitation_sent_at ? formatDateFull(cust.invitation_sent_at) : '—') +
       detailField('Created', formatDateFull(cust.created_at));
 
@@ -706,6 +706,18 @@
       '</div>';
   }
 
+  // Same as detailField, but the value is trusted app-generated HTML
+  // (e.g. a status badge built from fixed strings) and must NOT be
+  // escaped — audit LA-2: the Portal Access badge was run through
+  // detailField() and rendered as raw text. Never pass user-entered
+  // data through this helper.
+  function detailFieldHtml(label, html, fullWidth) {
+    return '<div class="lco-detail-field' + (fullWidth ? ' full-width' : '') + '">' +
+      '<div class="lco-detail-label">' + esc(label) + '</div>' +
+      '<div class="lco-detail-value">' + (html || '—') + '</div>' +
+      '</div>';
+  }
+
   // Back button
   var backBtn = document.getElementById('lcoDetailBack');
   if (backBtn) {
@@ -764,8 +776,22 @@
     var filtered = getFilteredPlans();
 
     if (filtered.length === 0) {
-      var msg = currentPlanSearch ? 'No plans match your search.' : 'No service plans created yet.';
-      container.innerHTML = '<div class="lco-empty" style="grid-column: 1 / -1;"><div class="lco-empty-icon">📦</div><h3>' + msg + '</h3><p>Create your first Broadband or Cable TV plan to start subscribing customers.</p><button class="lco-quick-btn primary" data-action="add-plan">+ Create Plan</button></div>';
+      // Distinguish "no plans exist at all" from "the current search/filters
+      // match nothing" — claiming no plans were created when a filter (e.g.
+      // Cable TV) produced the empty result is simply false.
+      var filtersActive = !!currentPlanSearch || currentPlanFilterType !== 'all' || currentPlanFilterStatus !== 'all';
+      var msg, sub;
+      if (allPlans.length === 0 && !filtersActive) {
+        msg = 'No service plans created yet.';
+        sub = 'Create your first Broadband or Cable TV plan to start subscribing customers.';
+      } else if (currentPlanSearch) {
+        msg = 'No plans match your search.';
+        sub = 'Try a different search term, or clear the search to see all plans.';
+      } else {
+        msg = 'No plans match the current filters.';
+        sub = 'Try a different service type or status filter to see more plans.';
+      }
+      container.innerHTML = '<div class="lco-empty" style="grid-column: 1 / -1;"><div class="lco-empty-icon">📦</div><h3>' + msg + '</h3><p>' + sub + '</p><button class="lco-quick-btn primary" data-action="add-plan">+ Create Plan</button></div>';
 
       container.querySelectorAll('[data-action="add-plan"]').forEach(function (btn) {
         btn.addEventListener('click', function () { openPlanModal(); });
@@ -1141,7 +1167,7 @@
     }
 
     // Default start date = today
-    var today = new Date().toISOString().split('T')[0];
+    var today = localDateStr();
     document.getElementById('subStartDate').value = today;
     document.getElementById('subStatus').value = 'ACTIVE';
 
@@ -1168,7 +1194,7 @@
       end.setMonth(end.getMonth() + plan.duration);
     }
 
-    document.getElementById('subEndDate').value = end.toISOString().split('T')[0];
+    document.getElementById('subEndDate').value = localDateStr(end);
   }
 
   async function saveSubscription() {
@@ -1857,9 +1883,17 @@
           statusBadge = '<span class="lco-badge urgent" style="background:#DC2626; color:white;">🚨 ACTIVE</span>';
         }
 
-        var toggleAction = un.is_active
-          ? '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="false" style="padding:4px 10px; font-size:12px; color:#DC2626; border-color:#FCA5A5;">Deactivate</button>'
-          : '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="true" style="padding:4px 10px; font-size:12px; color:#166534; border-color:#86EFAC;">Activate</button>';
+        // An expired notice must not be re-activatable — once its expiry
+        // has passed it stays dead, whatever its stored status says.
+        var isExpired = un.status === 'EXPIRED' || (un.expires_at && new Date(un.expires_at).getTime() < Date.now());
+        var toggleAction;
+        if (un.is_active) {
+          toggleAction = '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="false" style="padding:4px 10px; font-size:12px; color:#DC2626; border-color:#FCA5A5;">Deactivate</button>';
+        } else if (isExpired) {
+          toggleAction = '<span style="font-size:12px; color:#94A3B8; font-weight:600;">Expired</span>';
+        } else {
+          toggleAction = '<button class="lco-quick-btn secondary btn-toggle-urgent" data-notice-id="' + un.id + '" data-next-state="true" style="padding:4px 10px; font-size:12px; color:#166534; border-color:#86EFAC;">Activate</button>';
+        }
 
         return '<tr>' +
           '<td><strong style="color:#B91C1C;">' + esc(un.title) + '</strong><div style="font-size:12px; color:#64748B; margin-top:2px;">' + esc(un.message) + '</div></td>' +
@@ -2289,7 +2323,7 @@
           service_type: serviceType,
           plan_name: planName || null,
           service_status: 'ACTIVE',
-          connection_date: new Date().toISOString().split('T')[0],
+          connection_date: localDateStr(),
           notes: notes || null
         })
         .select()
@@ -2579,6 +2613,25 @@
       if (billsErr) throw billsErr;
       allBills = bills || [];
 
+      // Derive OVERDUE at load (audit LA-1): nothing in the backend ever
+      // sets a bill's stored status to OVERDUE, so a PENDING bill whose
+      // due date has passed with a balance remaining is overdue. This is
+      // display-only — the in-memory copy is adjusted so the stats, the
+      // Overdue filter and the status badges all see it; the stored
+      // status is never written back (Record Payment recomputes the
+      // stored status from the amounts when a payment is recorded).
+      var nowD = new Date();
+      var todayStr = nowD.getFullYear() + '-' +
+        String(nowD.getMonth() + 1).padStart(2, '0') + '-' +
+        String(nowD.getDate()).padStart(2, '0');
+      allBills.forEach(function (b) {
+        if (b.status !== 'PENDING' || !b.due_date) return;
+        var balance = Number(b.amount || 0) - Number(b.paid_amount || 0);
+        if (balance > 0 && String(b.due_date).slice(0, 10) < todayStr) {
+          b.status = 'OVERDUE';
+        }
+      });
+
       // 2. Fetch all payments for this LCO
       var { data: payments, error: payErr } = await sb.from('customer_payments')
         .select('*, customers(full_name, customer_id), customer_bills(bill_number)')
@@ -2833,9 +2886,9 @@
 
     // Pre-set dates
     var today = new Date();
-    var firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split('T')[0];
-    var lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split('T')[0];
-    var due = new Date(today.getFullYear(), today.getMonth(), 15).toISOString().split('T')[0];
+    var firstDay = localDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
+    var lastDay = localDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+    var due = localDateStr(new Date(today.getFullYear(), today.getMonth(), 15));
 
     document.getElementById('genBillPeriodStart').value = firstDay;
     document.getElementById('genBillPeriodEnd').value = lastDay;
@@ -3602,6 +3655,16 @@
      UTILITY FUNCTIONS
      ══════════════════════════════════════════════ */
 
+  // Local (IST) calendar date as YYYY-MM-DD. NEVER derive a date-only
+  // value from toISOString() - that is UTC, so between 00:00 and 05:30
+  // IST it returns yesterday (develop1 fix for the UTC date bugs).
+  function localDateStr(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
   function esc(str) {
     if (!str) return '';
     var d = document.createElement('div');
@@ -3617,6 +3680,7 @@
     else if (status === 'EXPIRED') cls = 'expired';
     else if (status === 'CANCELLED') cls = 'cancelled';
     else if (status === 'PENDING') cls = 'pending';
+    else if (status === 'OVERDUE') cls = 'expired';
     else if (status === 'DISCONNECTED') cls = 'disconnected';
     return '<span class="lco-badge ' + cls + '">' + label + '</span>';
   }
@@ -3830,8 +3894,12 @@
     var methodContainer = document.getElementById('anPaymentMethodList');
     var trendContainer = document.getElementById('anPaymentTrendChart');
 
-    // Methods breakdown
-    var methods = payData.methods || [];
+    // Methods breakdown — SQL returns by_method as {"CASH": {"count": n, "amount": x}, ...}
+    var byMethod = payData.by_method || {};
+    var methods = Object.keys(byMethod).map(function (k) {
+      var entry = byMethod[k] || {};
+      return { method: k, count: entry.count || 0, amount: entry.amount || 0 };
+    });
     var totalAmount = payData.total_amount || 0;
 
     if (!methodContainer) return;
@@ -4026,7 +4094,8 @@
   function renderTechnicianAnalytics(techData) {
     if (!techData) return;
 
-    var summary = techData.summary || {};
+    // SQL returns flat keys: total / active / inactive / suspended (no nested summary object)
+    var summary = techData || {};
     var workload = techData.workload || [];
 
     var elTotal = document.getElementById('anTechTotal');
@@ -4054,9 +4123,9 @@
         '<td><span class="lco-cust-id">' + esc(t.technician_id || '—') + '</span></td>' +
         '<td><strong>' + esc(t.full_name) + '</strong></td>' +
         '<td>' + renderStatusBadge(t.status) + '</td>' +
-        '<td><span class="lco-badge pending">' + (t.assigned_requests || 0) + ' assigned</span></td>' +
-        '<td><span class="lco-badge active">' + (t.in_progress_requests || 0) + ' active</span></td>' +
-        '<td><span class="lco-badge active" style="background:#ECFDF5; color:#047857;">' + (t.resolved_requests || 0) + ' resolved</span></td>' +
+        '<td><span class="lco-badge pending">' + (t.assigned_count || 0) + ' assigned</span></td>' +
+        '<td><span class="lco-badge active">' + (t.in_progress_count || 0) + ' active</span></td>' +
+        '<td><span class="lco-badge active" style="background:#ECFDF5; color:#047857;">' + (t.resolved_count || 0) + ' resolved</span></td>' +
         '</tr>';
     }).join('');
   }
@@ -5004,4 +5073,46 @@
     initAuth();
   }
 
+})();
+
+/* ══════════════════════════════════════════════
+   MOBILE TABLE LABELS (develop1 fix)
+   The responsive CSS turns tables into cards on
+   small screens and labels each cell via
+   td::before { content: attr(data-label) } — but
+   most renderers build <td>s without data-label.
+   This stamper copies each table's header text
+   onto its cells (by column, colspan-aware) after
+   every render, observed via MutationObserver.
+   ══════════════════════════════════════════════ */
+(function () {
+  function stampDataLabels(root) {
+    (root || document).querySelectorAll('table').forEach(function (tbl) {
+      var heads = Array.prototype.map.call(
+        tbl.querySelectorAll('thead th'),
+        function (th) { return th.textContent.trim(); }
+      );
+      if (!heads.length) return;
+      tbl.querySelectorAll('tbody tr').forEach(function (tr) {
+        var col = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          var span = td.colSpan || 1;
+          if (td.tagName === 'TD' && span === 1 && !td.hasAttribute('data-label') && heads[col]) {
+            td.setAttribute('data-label', heads[col]);
+          }
+          col += span;
+        });
+      });
+    });
+  }
+  function init() {
+    stampDataLabels(document);
+    if (window.MutationObserver && document.body) {
+      new MutationObserver(function () { stampDataLabels(document); })
+        .observe(document.body, { childList: true, subtree: true });
+    }
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
 })();

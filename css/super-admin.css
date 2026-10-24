@@ -1435,6 +1435,19 @@
   cursor: default;
 }
 
+.sa-preview-overlay iframe {
+  width: 90%;
+  height: 90vh;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.sa-table-responsive {
+  overflow-x: auto;
+}
+
 .sa-preview-close {
   position: absolute;
   top: 20px;
@@ -1816,6 +1829,23 @@
 /* ══════════════════════════════════════════════
    PHASE 13C-2: AUDIT & SECURITY BADGES & STYLING
    ══════════════════════════════════════════════ */
+
+/* Generic white card container (matches .sa-table-wrap used by other views).
+   The Audit Trail block uses .sa-card; without this rule it rendered directly
+   on the ash page background instead of on a white card. */
+.sa-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+/* Collapsible secondary-filter row in the Audit & Security toolbar */
+.sa-audit-more-filters {
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20px;
+}
 
 /* Severity Badges */
 .sa-sev-badge {

@@ -522,12 +522,13 @@ DECLARE
 BEGIN
   -- 1. Technician Assignment / Reassignment Notification
   IF NEW.assigned_technician_id IS NOT NULL AND (OLD.assigned_technician_id IS NULL OR NEW.assigned_technician_id IS DISTINCT FROM OLD.assigned_technician_id) THEN
-    INSERT INTO public.notifications (lco_id, customer_id, technician_id, recipient_role, title, message, type)
+    INSERT INTO public.notifications (lco_id, customer_id, technician_id, recipient_role, category, title, message, type)
     VALUES (
       NEW.lco_id,
       NULL,
       NEW.assigned_technician_id,
       'TECHNICIAN',
+      'SERVICE_REQUEST',
       'New Service Request Assigned',
       'You have been assigned to service request ' || NEW.request_id || ' (' || NEW.category || '): "' || NEW.subject || '".',
       'INFO'
@@ -538,12 +539,13 @@ BEGIN
   IF NEW.status = 'IN_PROGRESS' AND OLD.status != 'IN_PROGRESS' THEN
     SELECT full_name INTO v_tech_name FROM public.technicians WHERE id = NEW.assigned_technician_id;
 
-    INSERT INTO public.notifications (lco_id, customer_id, technician_id, recipient_role, title, message, type)
+    INSERT INTO public.notifications (lco_id, customer_id, technician_id, recipient_role, category, title, message, type)
     VALUES (
       NEW.lco_id,
       NULL,
       NULL,
       'LCO_ADMIN',
+      'SERVICE_REQUEST',
       'Technician Started Work: ' || NEW.request_id,
       'Technician ' || COALESCE(v_tech_name, 'Assigned') || ' started work on service request ' || NEW.request_id || '.',
       'INFO'
@@ -554,12 +556,13 @@ BEGIN
   IF NEW.status = 'RESOLVED' AND OLD.status != 'RESOLVED' THEN
     SELECT full_name INTO v_tech_name FROM public.technicians WHERE id = NEW.assigned_technician_id;
 
-    INSERT INTO public.notifications (lco_id, customer_id, technician_id, recipient_role, title, message, type)
+    INSERT INTO public.notifications (lco_id, customer_id, technician_id, recipient_role, category, title, message, type)
     VALUES (
       NEW.lco_id,
       NULL,
       NULL,
       'LCO_ADMIN',
+      'SERVICE_REQUEST',
       'Technician Resolved Request: ' || NEW.request_id,
       'Technician ' || COALESCE(v_tech_name, 'Assigned') || ' marked service request ' || NEW.request_id || ' as RESOLVED.',
       'SUCCESS'
