@@ -563,7 +563,10 @@
             btn.disabled = false;
             btn.innerHTML = '↻ Resend invitation';
             if (res.success) {
-              showToast('Activation invitation sent.', 'success');
+              // Surface the function's own message — it names the recipient
+              // inbox, so a "sent" toast can always be checked against the
+              // right mailbox instead of looking like a false success.
+              showToast(res.message || 'Activation invitation sent.', 'success');
               loadApplications().then(function () { openDetail(app.id); });
             } else {
               showToast('Failed to send invitation. ' + (res.error || ''), 'error');
@@ -1200,7 +1203,7 @@
         return { success: false, error: error.message };
       }
 
-      return { success: !!(data && data.ok), error: data && data.error ? data.error : null };
+      return { success: !!(data && data.ok), error: data && data.error ? data.error : null, message: data && data.message ? data.message : null };
 
     } catch (e) {
       // Edge function not deployed or not available
@@ -1639,15 +1642,20 @@
 
     var acctStatus = detail.account_status || 'ACTIVE';
 
+    // manage_lco_status expects the application's UUID (lco_applications.id),
+    // NOT the human-readable application_id (e.g. LCO-2026-0013) — passing the
+    // text ID makes Postgres reject it: "invalid input syntax for type uuid".
+    var appUuid = detail.id || currentInspectAppId;
+
     if (acctStatus === 'ACTIVE') {
       wrap.innerHTML = '<button class="sa-btn-suspend" id="lcoInspectSuspendBtn">🚫 Suspend Account</button>';
       document.getElementById('lcoInspectSuspendBtn').addEventListener('click', function () {
-        openGovernanceModal(detail.application_id, detail.business_name, 'ACTIVE', 'SUSPENDED');
+        openGovernanceModal(appUuid, detail.application_id, detail.business_name, 'ACTIVE', 'SUSPENDED');
       });
     } else if (acctStatus === 'SUSPENDED') {
       wrap.innerHTML = '<button class="sa-btn-reactivate" id="lcoInspectReactivateBtn">✅ Reactivate Account</button>';
       document.getElementById('lcoInspectReactivateBtn').addEventListener('click', function () {
-        openGovernanceModal(detail.application_id, detail.business_name, 'SUSPENDED', 'ACTIVE');
+        openGovernanceModal(appUuid, detail.application_id, detail.business_name, 'SUSPENDED', 'ACTIVE');
       });
     } else {
       wrap.innerHTML = '';
@@ -1679,9 +1687,10 @@
     }
   }
 
-  function openGovernanceModal(applicationId, bizName, currentStatus, newStatus) {
+  function openGovernanceModal(appUuid, displayAppId, bizName, currentStatus, newStatus) {
     pendingGovernanceAction = {
-      applicationId: applicationId,
+      applicationId: appUuid,
+      displayAppId: displayAppId,
       bizName: bizName,
       currentStatus: currentStatus,
       newStatus: newStatus
@@ -1718,7 +1727,7 @@
       confirmBtn.style.boxShadow = '0 2px 8px rgba(11,122,110,0.2)';
     }
 
-    infoEl.innerHTML = 'LCO: <span style="color:var(--teal-dark);">' + esc(bizName) + '</span> (App ID: <span class="mono">' + esc(applicationId) + '</span>)';
+    infoEl.innerHTML = 'LCO: <span style="color:var(--teal-dark);">' + esc(bizName) + '</span> (App ID: <span class="mono">' + esc(displayAppId || appUuid) + '</span>)';
 
     document.getElementById('manageLcoStatusModal').classList.add('visible');
   }
@@ -2380,6 +2389,14 @@
     var dateFromInput = document.getElementById('saAuditDateFrom');
     var dateToInput = document.getElementById('saAuditDateTo');
     var resetBtn = document.getElementById('saAuditResetBtn');
+    var filtersToggle = document.getElementById('saAuditFiltersToggle');
+    var moreFilters = document.getElementById('saAuditMoreFilters');
+    if (filtersToggle && moreFilters) {
+      filtersToggle.addEventListener('click', function () {
+        var isOpen = moreFilters.style.display !== 'none';
+        moreFilters.style.display = isOpen ? 'none' : 'flex';
+      });
+    }
     var prevBtn = document.getElementById('saAuditPrevBtn');
     var nextBtn = document.getElementById('saAuditNextBtn');
 
@@ -2533,6 +2550,13 @@
   }
 
   async function loadAuditLogs() {
+    // Keep the "More filters" toggle honest: a dot marks that a secondary
+    // filter (severity / role / date range) is currently active.
+    var toggleBtn = document.getElementById('saAuditFiltersToggle');
+    if (toggleBtn) {
+      var secondaryActive = auditSeverityFilter !== 'ALL' || auditRoleFilter !== 'ALL' || !!auditDateFrom || !!auditDateTo;
+      toggleBtn.textContent = secondaryActive ? '⚙ More filters •' : '⚙ More filters';
+    }
     var tbody = document.getElementById('saAuditTableBody');
     var pagDiv = document.getElementById('saAuditPagination');
     if (!tbody) return;

@@ -673,6 +673,16 @@
                   </select>
                 </div>
 
+                <!-- More Filters Toggle -->
+                <button id="saAuditFiltersToggle" class="sa-btn-secondary" type="button">⚙ More filters</button>
+
+                <button id="saAuditResetBtn" class="sa-btn-secondary">Reset</button>
+              </div>
+            </div>
+
+            <!-- Secondary filters: collapsed by default so the toolbar stays
+                 clean; every filter remains available under "More filters". -->
+            <div id="saAuditMoreFilters" class="sa-audit-more-filters" style="display: none;">
                 <!-- Severity Filter -->
                 <div class="sa-filter-group" style="align-items: center;">
                   <label style="font-size: 13px; font-weight: 600; color: var(--slate); margin-right: 4px;">Severity:</label>
@@ -707,9 +717,6 @@
                   <input type="date" id="saAuditDateTo" class="sa-date-input" title="Date To">
                 </div>
 
-                <!-- Reset Button -->
-                <button id="saAuditResetBtn" class="sa-btn-secondary">Reset</button>
-              </div>
             </div>
 
             <!-- Audit Logs Table -->

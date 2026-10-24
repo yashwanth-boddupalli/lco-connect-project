@@ -1830,6 +1830,23 @@
    PHASE 13C-2: AUDIT & SECURITY BADGES & STYLING
    ══════════════════════════════════════════════ */
 
+/* Generic white card container (matches .sa-table-wrap used by other views).
+   The Audit Trail block uses .sa-card; without this rule it rendered directly
+   on the ash page background instead of on a white card. */
+.sa-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+/* Collapsible secondary-filter row in the Audit & Security toolbar */
+.sa-audit-more-filters {
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
 /* Severity Badges */
 .sa-sev-badge {
   display: inline-flex;
