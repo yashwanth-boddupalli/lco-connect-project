@@ -1231,6 +1231,21 @@ section {
   }
 }
 
+.cta-mail {
+  margin-top: 20px;
+  font-size: 14.5px;
+}
+
+.cta-mail a {
+  color: #F0A430;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.cta-mail a:hover {
+  text-decoration: underline;
+}
+
 
 /* ── FOOTER ── */
 footer {
