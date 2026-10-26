@@ -40,6 +40,10 @@
 
   async function initAuth() {
     if (!sb) {
+      var loadingScreen = document.getElementById('custLoadingScreen');
+      if (loadingScreen) {
+        loadingScreen.innerHTML = '<div class="lco-loading-content"><div style="font-size:32px; margin-bottom:12px;">⚠️</div><div class="lco-loading-text">Connection unavailable. Please check your connection and try again.</div><button class="lco-quick-btn primary" style="margin-top:16px;" onclick="location.reload()">Reload</button></div>';
+      }
       showToast('Connection unavailable. Please refresh.', 'error');
       return;
     }
@@ -111,6 +115,7 @@
     setupCreateRequestModal();
     setupCustReqDetailModal();
     setupPayNow();
+    setupCustModalDismiss();
     setupNotificationCenterListeners(); // Phase 11 Batch 1
 
     // Render overview
@@ -123,6 +128,31 @@
     loadNotifications();
     loadBillingData();
     loadCustomerRequests();
+
+    // Cashfree redirect-return: if the gateway sent us back with
+    // ?order_id= and it matches the payment stashed before checkout,
+    // attempt verification once, then clean the param/stash.
+    checkPaymentReturn();
+  }
+
+  // Backdrop-click + Escape close for the customer modals (mirrors the
+  // technician detail modal's implementation).
+  function setupCustModalDismiss() {
+    var modalIds = ['editProfileModal', 'createRequestModal', 'requestPlanModal', 'custReqDetailModal'];
+    modalIds.forEach(function (id) {
+      var modal = document.getElementById(id);
+      if (!modal) return;
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) modal.classList.remove('visible');
+      });
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      modalIds.forEach(function (id) {
+        var modal = document.getElementById(id);
+        if (modal && modal.classList.contains('visible')) modal.classList.remove('visible');
+      });
+    });
   }
 
 
@@ -367,6 +397,10 @@
       openBtn.addEventListener('click', function () {
         document.getElementById('editCustPhone').value = customerData.phone || '';
         document.getElementById('editCustEmail').value = customerData.email || '';
+        var emailNote = document.getElementById('editCustEmailNote');
+        if (emailNote && currentUser && currentUser.email) {
+          emailNote.textContent = 'This changes your contact email only — you will still sign in with ' + currentUser.email + '.';
+        }
         document.getElementById('editCustAddress').value = customerData.address || '';
         document.getElementById('editCustCity').value = customerData.city || '';
         document.getElementById('editCustState').value = customerData.state || '';
@@ -479,6 +513,12 @@
 
     } catch (err) {
       console.error('Load subscriptions error:', err);
+      var subContainer = document.getElementById('custSubDetails');
+      if (subContainer) {
+        subContainer.innerHTML = '<div style="padding:16px 0; color:#DC2626;"><strong>Failed to load subscription.</strong><p style="font-size:13px; margin-top:4px;">Please try again.</p><button class="lco-quick-btn secondary" id="custSubRetryBtn" style="margin-top:10px;">Retry</button></div>';
+        var retryBtn = document.getElementById('custSubRetryBtn');
+        if (retryBtn) retryBtn.addEventListener('click', loadSubscriptions);
+      }
     }
   }
 
@@ -547,7 +587,13 @@
      ══════════════════════════════════════════════ */
 
   async function loadAvailablePlans() {
-    if (!customerData.lco_id) return;
+    var plansContainer = document.getElementById('custAvailablePlansGrid');
+    if (!customerData.lco_id) {
+      if (plansContainer) {
+        plansContainer.innerHTML = '<div style="grid-column:1/-1; padding:32px; text-align:center; color:#64748B;"><div style="font-size:28px; margin-bottom:8px;">🏷️</div><h3>No operator linked to your account yet</h3><p>Plans will appear here once your account is linked to an operator.</p></div>';
+      }
+      return;
+    }
 
     try {
       var { data, error } = await sb.from('service_plans')
@@ -563,6 +609,11 @@
 
     } catch (err) {
       console.error('Load available plans error:', err);
+      if (plansContainer) {
+        plansContainer.innerHTML = '<div style="grid-column:1/-1; padding:32px; text-align:center; color:#DC2626;"><h3>Failed to load plans</h3><p>Please try again.</p><button class="lco-quick-btn secondary" id="custPlansRetryBtn" style="margin-top:10px;">Retry</button></div>';
+        var plansRetryBtn = document.getElementById('custPlansRetryBtn');
+        if (plansRetryBtn) plansRetryBtn.addEventListener('click', loadAvailablePlans);
+      }
     }
   }
 
@@ -634,15 +685,19 @@
       confirmBtn.innerHTML = '<span class="lco-spinner"></span> Sending…';
 
       try {
-        // Create notification for LCO Admin
+        // Create notification for LCO Admin. The customer INSERT policy on
+        // notifications requires customer_id = get_customer_id() and
+        // lco_id = get_customer_lco_id(), so the row must carry the real
+        // customer id (a null customer_id is always RLS-rejected).
         var { error } = await sb.from('notifications')
           .insert({
             lco_id: customerData.lco_id,
-            customer_id: null,
+            customer_id: customerData.id,
             technician_id: null,
             recipient_role: 'LCO_ADMIN',
+            category: 'CUSTOMER_ACTIVITY',
             title: 'Plan Request from Customer',
-            message: customerData.full_name + ' (' + customerData.customer_id + ') has requested the plan "' + planName + '". Notes: ' + (notes || 'None'),
+            message: customerData.full_name + ' (' + customerData.customer_id + ') has requested the plan "' + planName + '" (Plan ID: ' + planId + '). Notes: ' + (notes || 'None'),
             type: 'INFO'
           });
 
@@ -675,6 +730,26 @@
      BILLING & PAYMENTS LOGIC
      ══════════════════════════════════════════════ */
 
+  // Display-only OVERDUE derivation (same rule as the LCO dashboard):
+  // nothing in the backend ever writes a bill's stored status to OVERDUE,
+  // so a stored-PENDING bill whose due_date is before today with a balance
+  // remaining displays as OVERDUE. The stored data is never changed.
+  function getBillDisplayStatus(bill) {
+    if (!bill) return '—';
+    if (bill.status === 'PENDING' && bill.due_date) {
+      var balance = Number(bill.amount || 0) - Number(bill.paid_amount || 0);
+      if (balance > 0 && String(bill.due_date).slice(0, 10) < localDateStr()) {
+        return 'OVERDUE';
+      }
+    }
+    return bill.status;
+  }
+
+  function isBillUnpaid(bill) {
+    var s = getBillDisplayStatus(bill);
+    return s === 'PENDING' || s === 'OVERDUE';
+  }
+
   async function loadBillingData() {
     if (!customerData) return;
 
@@ -688,8 +763,19 @@
       if (billsErr) throw billsErr;
       billingHistory = bills || [];
 
-      // Find first pending/overdue bill
-      activeBill = billingHistory.find(function (b) { return b.status === 'PENDING' || b.status === 'OVERDUE'; }) || null;
+      // The outstanding card shows the OLDEST unpaid bill (earliest
+      // due_date, then earliest created_at) so the oldest debt is
+      // payable first — not the most recently created bill.
+      var unpaidBills = billingHistory.filter(isBillUnpaid);
+      unpaidBills.sort(function (a, b) {
+        var da = a.due_date ? String(a.due_date).slice(0, 10) : '9999-12-31';
+        var db = b.due_date ? String(b.due_date).slice(0, 10) : '9999-12-31';
+        if (da !== db) return da < db ? -1 : 1;
+        var ca = String(a.created_at || '');
+        var cb = String(b.created_at || '');
+        return ca < cb ? -1 : (ca > cb ? 1 : 0);
+      });
+      activeBill = unpaidBills[0] || null;
 
       // 2. Fetch payments
       var { data: payments, error: payErr } = await sb.from('customer_payments')
@@ -728,7 +814,7 @@
     noBill.style.display = 'none';
     card.style.display = 'block';
 
-    if (badge) badge.innerHTML = renderStatusBadge(activeBill.status);
+    if (badge) badge.innerHTML = renderStatusBadge(getBillDisplayStatus(activeBill));
 
     var outstanding = Number(activeBill.amount) - Number(activeBill.paid_amount);
 
@@ -748,11 +834,14 @@
     if (!tbody) return;
 
     if (billingHistory.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:24px; color:#64748B;">No bills found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:24px; color:#64748B;">No bills found.</td></tr>';
       return;
     }
 
     tbody.innerHTML = billingHistory.map(function (b) {
+      var payCell = isBillUnpaid(b)
+        ? '<button class="cust-plan-btn pay-bill-btn" data-bill-id="' + b.id + '" style="width:auto; padding:6px 16px; font-size:13px;">Pay</button>'
+        : '—';
       return '<tr>' +
         '<td><strong>' + esc(b.bill_number) + '</strong></td>' +
         '<td>' + esc(b.plan_name) + '</td>' +
@@ -760,9 +849,17 @@
         '<td>₹' + Number(b.amount).toFixed(2) + '</td>' +
         '<td>₹' + Number(b.paid_amount).toFixed(2) + '</td>' +
         '<td>' + formatDate(b.due_date) + '</td>' +
-        '<td>' + renderStatusBadge(b.status) + '</td>' +
+        '<td>' + renderStatusBadge(getBillDisplayStatus(b)) + '</td>' +
+        '<td>' + payCell + '</td>' +
         '</tr>';
     }).join('');
+
+    tbody.querySelectorAll('.pay-bill-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var bill = billingHistory.find(function (b) { return b.id === btn.dataset.billId; });
+        if (bill) handlePayNow(bill);
+      });
+    });
   }
 
   function renderPaymentHistory() {
@@ -786,15 +883,80 @@
     }).join('');
   }
 
+  // TEST MODE — switch to 'production' only with production Cashfree keys.
+  const CASHFREE_MODE = 'sandbox';
+  var PENDING_PAYMENT_KEY = 'lco_pending_payment';
+
   function setupPayNow() {
     var payBtn = document.getElementById('custPayNowBtn');
     if (!payBtn) return;
 
-    payBtn.addEventListener('click', handlePayNow);
+    payBtn.addEventListener('click', function () { handlePayNow(); });
   }
 
-  async function handlePayNow() {
-    if (!activeBill) {
+  // Server-side verification (never trust the client result alone).
+  // Surfaces the function's real error from res.error / res.data.error.
+  async function verifyPayment(orderId, billId) {
+    showToast('Verifying payment with gateway…', 'info');
+    try {
+      var vRes = await sb.functions.invoke('verify-payment', {
+        body: { order_id: orderId, bill_id: billId }
+      });
+
+      if (vRes.error) {
+        showToast(vRes.error.message || 'Payment verification failed. Please try again.', 'error');
+        return false;
+      }
+
+      if (vRes.data && vRes.data.ok) {
+        if (vRes.data.already_paid) {
+          showToast('Payment already recorded for this bill.', 'success');
+        } else if (vRes.data.payment_number) {
+          showToast('Payment verified successfully! Receipt #: ' + vRes.data.payment_number, 'success');
+        } else {
+          showToast('Payment verified successfully!', 'success');
+        }
+        loadBillingData();
+        loadNotifications();
+        return true;
+      }
+
+      showToast((vRes.data && vRes.data.error) || 'Payment verification pending. Refresh in a moment.', 'warning');
+      return false;
+    } catch (vErr) {
+      console.error('Verify payment error:', vErr);
+      showToast('Verification check failed. Webhook will record if payment succeeded.', 'warning');
+      return false;
+    }
+  }
+
+  // Cashfree redirect-return handler: create-payment-order sets a
+  // return_url back to this page with ?order_id=; if it matches the
+  // payment stashed before checkout, verify it once and clean up.
+  async function checkPaymentReturn() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      var orderId = params.get('order_id');
+      if (!orderId) return;
+
+      var stash = null;
+      try { stash = JSON.parse(sessionStorage.getItem(PENDING_PAYMENT_KEY) || 'null'); } catch (e) { stash = null; }
+      if (!stash || stash.order_id !== orderId || !stash.bill_id) return;
+
+      sessionStorage.removeItem(PENDING_PAYMENT_KEY);
+      params.delete('order_id');
+      var qs = params.toString();
+      window.history.replaceState({}, document.title, window.location.pathname + (qs ? '?' + qs : '') + window.location.hash);
+
+      await verifyPayment(orderId, stash.bill_id);
+    } catch (e) {
+      console.error('Payment return check error:', e);
+    }
+  }
+
+  async function handlePayNow(targetBill) {
+    var bill = (targetBill && targetBill.id) ? targetBill : activeBill;
+    if (!bill) {
       showToast('No outstanding bill to pay.', 'warning');
       return;
     }
@@ -802,29 +964,42 @@
     var payBtn = document.getElementById('custPayNowBtn');
     var procEl = document.getElementById('custPaymentProcessing');
 
-    payBtn.disabled = true;
+    if (payBtn) payBtn.disabled = true;
     if (procEl) procEl.style.display = 'inline-block';
 
     try {
-      // Create payment order via Edge Function
-      var res = await sb.functions.invoke('create-payment-order', {
-        body: { bill_id: activeBill.id }
-      });
-
-      if (!res.data || !res.data.ok) {
-        throw new Error(res.data?.error || res.error?.message || 'Failed to initiate payment.');
-      }
-
-      var resData = res.data;
-
-      // Check if Cashfree Web Checkout SDK is available
+      // Check the Cashfree SDK is loaded BEFORE creating an order —
+      // otherwise the server-side order is orphaned with no checkout.
       if (typeof window.Cashfree === 'undefined') {
         showToast('Online payment gateway is currently loading. Please refresh the page and try again.', 'error');
         return;
       }
 
-      // Initialize Cashfree in Sandbox mode
-      var cashfree = window.Cashfree({ mode: 'sandbox' });
+      // Create payment order via Edge Function
+      var res = await sb.functions.invoke('create-payment-order', {
+        body: { bill_id: bill.id }
+      });
+
+      if (res.error) {
+        throw new Error(res.error.message || 'Failed to initiate payment.');
+      }
+      if (!res.data || !res.data.ok) {
+        throw new Error((res.data && res.data.error) || 'Failed to initiate payment.');
+      }
+
+      var resData = res.data;
+
+      // Stash the order/bill pair so a Cashfree redirect-return
+      // (?order_id=…) can be verified on dashboard init.
+      try {
+        sessionStorage.setItem(PENDING_PAYMENT_KEY, JSON.stringify({
+          order_id: resData.order_id,
+          bill_id: resData.bill.id
+        }));
+      } catch (e) { /* sessionStorage unavailable — modal flow still works */ }
+
+      // Initialize Cashfree
+      var cashfree = window.Cashfree({ mode: CASHFREE_MODE });
 
       // Trigger Cashfree Hosted Checkout
       var checkoutOptions = {
@@ -836,35 +1011,17 @@
 
       if (checkoutResult && checkoutResult.error) {
         showToast('Payment cancelled or failed: ' + (checkoutResult.error.message || 'Cancelled'), 'warning');
+        return;
       }
 
-      // Server-side verification (never trust client result alone)
-      showToast('Verifying payment with gateway…', 'info');
-      try {
-        var vRes = await sb.functions.invoke('verify-payment', {
-          body: {
-            order_id: resData.order_id,
-            bill_id: resData.bill.id
-          }
-        });
-
-        if (vRes.data && vRes.data.ok) {
-          showToast('Payment verified successfully! Receipt #: ' + (vRes.data.payment_number || ''), 'success');
-          loadBillingData();
-          loadNotifications();
-        } else {
-          showToast(vRes.data?.error || 'Payment verification pending. Refresh in a moment.', 'warning');
-        }
-      } catch (vErr) {
-        console.error('Verify payment error:', vErr);
-        showToast('Verification check failed. Webhook will record if payment succeeded.', 'warning');
-      }
+      await verifyPayment(resData.order_id, resData.bill.id);
+      try { sessionStorage.removeItem(PENDING_PAYMENT_KEY); } catch (e) { /* ignore */ }
 
     } catch (err) {
       console.error('Pay Now error:', err);
       showToast(err.message || 'Payment processing error.', 'error');
     } finally {
-      payBtn.disabled = false;
+      if (payBtn) payBtn.disabled = false;
       if (procEl) procEl.style.display = 'none';
     }
   }
@@ -1087,7 +1244,7 @@
   function formatDateFull(dateStr) {
     if (!dateStr) return '—';
     try {
-      var d = new Date(dateStr);
+      var d = parseLocalDate(dateStr);
       return d.toLocaleDateString('en-IN', {
         day: 'numeric', month: 'long', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
@@ -1167,26 +1324,39 @@
 
       container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
         item.addEventListener('click', function () {
-          markNotificationRead(item.dataset.id);
+          // Optimistic visual update; markNotificationRead rolls it
+          // back if the server update fails.
           item.classList.remove('unread');
           var dot = item.querySelector('.lco-notif-dot');
           if (dot) dot.classList.add('read');
+          markNotificationRead(item.dataset.id, item);
         });
       });
 
     } catch (err) {
+      // A stale failing load must not overwrite a newer successful list.
+      if (myLoadId !== custNotifLoadId) return;
       console.error('Load notifications error:', err);
       container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3><button class="lco-quick-btn secondary" style="margin-top:12px;" onclick="loadNotifications()">Retry</button></div>';
     }
   }
 
-  async function markNotificationRead(notifId) {
+  async function markNotificationRead(notifId, itemEl) {
+    function rollback() {
+      if (!itemEl) return;
+      itemEl.classList.add('unread');
+      var dot = itemEl.querySelector('.lco-notif-dot');
+      if (dot) dot.classList.remove('read');
+    }
+
     try {
-      await sb.from('notifications')
+      var { error } = await sb.from('notifications')
         .update({ is_read: true })
         .eq('id', notifId)
         .eq('customer_id', customerData.id)
         .eq('recipient_role', 'CUSTOMER');
+
+      if (error) throw error;
 
       var badge = document.getElementById('custNotifCount');
       if (badge) {
@@ -1197,6 +1367,7 @@
       }
     } catch (e) {
       console.error('Mark customer notification read error:', e);
+      rollback();
     }
   }
 
@@ -1223,11 +1394,21 @@
     if (!form) return;
     form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">Loading preferences…</div>';
 
+    var savePrefBtn = document.getElementById('custSavePrefBtn');
+
     try {
       var { data, error } = await sb.rpc('get_my_notification_preferences', { p_role: 'CUSTOMER' });
       if (error) throw error;
 
       var prefs = data || [];
+
+      if (prefs.length === 0) {
+        form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">No notification preferences available.</div>';
+        if (savePrefBtn) savePrefBtn.disabled = true;
+        return;
+      }
+
+      if (savePrefBtn) savePrefBtn.disabled = false;
       var categoryDescriptions = {
         'ACCOUNT': 'Account activation, security, and profile change alerts.',
         'SERVICE_REQUEST': 'Service request progress updates and resolution notes.',
@@ -1265,10 +1446,20 @@
     } catch (e) {
       console.error('Load customer preferences error:', e);
       form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:#E74C3C;">Failed to load preferences.</div>';
+      if (savePrefBtn) savePrefBtn.disabled = true;
     }
   }
 
   async function saveNotificationPreferences() {
+    // Never "save" an empty set: if preferences failed to load (or
+    // rendered no cards) there is nothing valid to submit.
+    var prefForm = document.getElementById('custPrefForm');
+    var prefCards = prefForm ? prefForm.querySelectorAll('.lco-pref-card') : [];
+    if (!prefCards || prefCards.length === 0) {
+      showToast("Preferences couldn't be loaded — please reload and try again", 'error');
+      return;
+    }
+
     var saveBtn = document.getElementById('custSavePrefBtn');
     if (saveBtn) {
       saveBtn.disabled = true;
@@ -1471,11 +1662,12 @@
       badgesEl.innerHTML = renderReqPriorityBadge(req.priority) + ' ' + renderReqStatusBadge(req.status);
     }
 
-    // Operator Resolution Notes
+    // Operator Resolution Notes — only a finished request's notes are a
+    // resolution; a work-in-progress note must not read as one.
     var resSection = document.getElementById('custReqDetailResolutionSection');
     var resNotes = document.getElementById('custReqDetailResolutionNotes');
     if (resSection && resNotes) {
-      if (req.resolution_notes) {
+      if (req.resolution_notes && (req.status === 'RESOLVED' || req.status === 'CLOSED')) {
         resNotes.textContent = req.resolution_notes;
         resSection.style.display = 'block';
       } else {
@@ -1587,14 +1779,25 @@
     var st = status || 'ACTIVE';
     if (st === 'INACTIVE') cls = 'inactive';
     else if (st === 'EXPIRED') cls = 'expired';
+    else if (st === 'OVERDUE') cls = 'expired';
     else if (st === 'PENDING') cls = 'pending';
     return '<span class="cust-badge ' + cls + '">' + st + '</span>';
+  }
+
+  // Date-only 'YYYY-MM-DD' strings must parse as LOCAL dates — new Date(str)
+  // parses them as UTC midnight, which renders a day early west of UTC.
+  function parseLocalDate(dateStr) {
+    if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      var parts = dateStr.split('-');
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+    return new Date(dateStr);
   }
 
   function formatDate(dateStr) {
     if (!dateStr) return '—';
     try {
-      var d = new Date(dateStr);
+      var d = parseLocalDate(dateStr);
       return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     } catch (e) {
       return dateStr;

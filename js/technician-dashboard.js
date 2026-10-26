@@ -80,6 +80,15 @@
 
     } catch (err) {
       console.error('Technician dashboard init error:', err);
+      // Never strand the user on the loading screen: hide it and show a
+      // fatal error state with a way back.
+      var failLoading = document.getElementById('techLoadingScreen');
+      var failContainer = document.getElementById('techDashboardContainer');
+      if (failLoading) failLoading.style.display = 'none';
+      if (failContainer) {
+        failContainer.style.display = 'block';
+        failContainer.innerHTML = '<div class="lco-empty" style="padding:64px 24px; text-align:center;"><div class="lco-empty-icon">⚠️</div><h3>Something went wrong</h3><p>The dashboard could not be loaded. Please try again.</p><button class="lco-quick-btn primary" style="margin-top:12px;" onclick="location.reload()">Reload</button></div>';
+      }
       showToast('Error initializing dashboard. Please refresh.', 'error');
     }
   }
@@ -230,13 +239,13 @@
     var openCount = allRequests.filter(function (r) { return r.status === 'OPEN'; }).length;
     var inProgressCount = allRequests.filter(function (r) { return r.status === 'IN_PROGRESS'; }).length;
 
-    // Resolved today calculation
+    // Resolved today calculation — only a real resolved_at dated today
+    // counts; no updated_at/created_at fallbacks, no dateless tickets.
     var todayStr = localDateStr();
     var resolvedTodayCount = allRequests.filter(function (r) {
       if (r.status !== 'RESOLVED') return false;
-      var dateVal = r.resolved_at || r.updated_at || r.created_at;
-      if (!dateVal) return true;
-      return localDateStr(new Date(dateVal)) === todayStr;
+      if (!r.resolved_at) return false;
+      return localDateStr(new Date(r.resolved_at)) === todayStr;
     }).length;
 
     document.getElementById('statTotalAssigned').textContent = total;
@@ -412,11 +421,17 @@
 
     var custName = req.customers ? req.customers.full_name : 'Customer';
     var custPhone = req.customers ? req.customers.phone : '—';
-    var custAddr = req.customers ? [req.customers.address, req.customers.city, req.customers.pincode].filter(Boolean).join(', ') : '—';
+    var custAddr = req.customers ? [req.customers.address, req.customers.city, req.customers.pincode].filter(Boolean).join(', ') : '';
 
     document.getElementById('modalCustName').textContent = custName;
     document.getElementById('modalCustPhone').textContent = custPhone;
     document.getElementById('modalCustAddress').textContent = custAddr || 'No address registered';
+
+    // CT-M6: a null customers embed is a data-access problem, not a
+    // customer with no contact details — say so explicitly instead of
+    // letting the placeholders above read as real missing data.
+    var custUnavailableEl = document.getElementById('modalCustUnavailable');
+    if (custUnavailableEl) custUnavailableEl.style.display = req.customers ? 'none' : '';
 
     document.getElementById('modalSubject').textContent = req.subject || '—';
     document.getElementById('modalCustomerDescription').textContent = req.description || 'No description provided by customer.';
@@ -932,26 +947,39 @@
 
       container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
         item.addEventListener('click', function () {
-          markNotificationRead(item.dataset.id);
+          // Optimistic visual update; markNotificationRead rolls it
+          // back if the server update fails.
           item.classList.remove('unread');
           var dot = item.querySelector('.lco-notif-dot');
           if (dot) dot.classList.add('read');
+          markNotificationRead(item.dataset.id, item);
         });
       });
 
     } catch (err) {
+      // A stale failing load must not overwrite a newer successful list.
+      if (myLoadId !== techNotifLoadId) return;
       console.error('Load technician notifications error:', err);
       container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3><button class="lco-quick-btn secondary" style="margin-top:12px;" onclick="loadNotifications()">Retry</button></div>';
     }
   }
 
-  async function markNotificationRead(notifId) {
+  async function markNotificationRead(notifId, itemEl) {
+    function rollback() {
+      if (!itemEl) return;
+      itemEl.classList.add('unread');
+      var dot = itemEl.querySelector('.lco-notif-dot');
+      if (dot) dot.classList.remove('read');
+    }
+
     try {
-      await sb.from('notifications')
+      var { error } = await sb.from('notifications')
         .update({ is_read: true })
         .eq('id', notifId)
         .eq('technician_id', techProfile.id)
         .eq('recipient_role', 'TECHNICIAN');
+
+      if (error) throw error;
 
       var badge = document.getElementById('techNotifCount');
       if (badge) {
@@ -962,6 +990,7 @@
       }
     } catch (e) {
       console.error('Mark technician notification read error:', e);
+      rollback();
     }
   }
 
@@ -988,11 +1017,21 @@
     if (!form) return;
     form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">Loading preferences…</div>';
 
+    var savePrefBtn = document.getElementById('techSavePrefBtn');
+
     try {
       var { data, error } = await sb.rpc('get_my_notification_preferences', { p_role: 'TECHNICIAN' });
       if (error) throw error;
 
       var prefs = data || [];
+
+      if (prefs.length === 0) {
+        form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">No notification preferences available.</div>';
+        if (savePrefBtn) savePrefBtn.disabled = true;
+        return;
+      }
+
+      if (savePrefBtn) savePrefBtn.disabled = false;
       var categoryDescriptions = {
         'SERVICE_REQUEST': 'Job assignment notifications & field ticket status updates.',
         'ACCOUNT': 'Account credential updates and security alerts.',
@@ -1030,10 +1069,20 @@
     } catch (e) {
       console.error('Load technician preferences error:', e);
       form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:#E74C3C;">Failed to load preferences.</div>';
+      if (savePrefBtn) savePrefBtn.disabled = true;
     }
   }
 
   async function saveNotificationPreferences() {
+    // Never "save" an empty set: if preferences failed to load (or
+    // rendered no cards) there is nothing valid to submit.
+    var prefForm = document.getElementById('techPrefForm');
+    var prefCards = prefForm ? prefForm.querySelectorAll('.lco-pref-card') : [];
+    if (!prefCards || prefCards.length === 0) {
+      showToast("Preferences couldn't be loaded — please reload and try again", 'error');
+      return;
+    }
+
     var saveBtn = document.getElementById('techSavePrefBtn');
     if (saveBtn) {
       saveBtn.disabled = true;
@@ -1077,10 +1126,17 @@
   function renderProfileView() {
     var nameEl = document.getElementById('techProfileName');
     var avatarEl = document.getElementById('techProfileAvatar');
+    var badgeEl = document.getElementById('techProfileBadge');
     var techGrid = document.getElementById('techProfileDetailsGrid');
     var lcoGrid = document.getElementById('techProfileLcoGrid');
 
     if (nameEl) nameEl.textContent = techProfile.full_name || 'Technician';
+
+    if (badgeEl) {
+      var status = techProfile.status || 'ACTIVE';
+      var badgeCls = status === 'ACTIVE' ? 'active' : (status === 'INACTIVE' || status === 'SUSPENDED') ? 'inactive' : 'pending';
+      badgeEl.innerHTML = '<span class="lco-badge ' + badgeCls + '">' + esc(status) + '</span>';
+    }
 
     if (avatarEl) {
       var initials = (techProfile.full_name || 'TC').split(' ').map(function (w) { return w.charAt(0); }).join('').substring(0, 2).toUpperCase();
@@ -1172,15 +1228,25 @@
       '</div>';
   }
 
+  // Date-only 'YYYY-MM-DD' strings must parse as LOCAL dates — new Date(str)
+  // parses them as UTC midnight, which renders a day early west of UTC.
+  function parseLocalDate(dateStr) {
+    if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      var parts = dateStr.split('-');
+      return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    }
+    return new Date(dateStr);
+  }
+
   function formatDateShort(dateStr) {
     if (!dateStr) return '—';
-    var d = new Date(dateStr);
+    var d = parseLocalDate(dateStr);
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
   }
 
   function formatDateFull(dateStr) {
     if (!dateStr) return '—';
-    var d = new Date(dateStr);
+    var d = parseLocalDate(dateStr);
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
