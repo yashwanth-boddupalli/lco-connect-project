@@ -73,7 +73,7 @@ Deno.serve(async (request) => {
     const lcoEmail = application.email.trim().toLowerCase();
     const businessName = application.business_name || 'Your LCO Business';
     const activationBaseUrl = Deno.env.get('APP_LCO_ACTIVATION_URL')
-      || 'https://lco-connect-project.vercel.app/pages/activate-account.html';
+      || 'https://www.lcoconnect.in/pages/activate-account.html';
     const activationUrl = `${activationBaseUrl}?application_id=${encodeURIComponent(application.application_id)}`;
 
     if (!smtp2goKey || !from) {

@@ -23,7 +23,7 @@ Deno.serve(async (request) => {
     const smtp2goKey = Deno.env.get('SMTP2GO_API_KEY');
     const from = Deno.env.get('SMTP2GO_FROM_EMAIL');
     const loginUrl = Deno.env.get('APP_LOGIN_URL')
-      || 'https://lco-connect-project.vercel.app/pages/login.html';
+      || 'https://www.lcoconnect.in/pages/login.html';
 
     if (!url || !anonKey || !serviceRoleKey) {
       console.error('Notification function is missing platform configuration.');

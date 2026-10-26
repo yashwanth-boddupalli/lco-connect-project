@@ -23,7 +23,7 @@ Deno.serve(async (request) => {
     const smtp2goKey = Deno.env.get('SMTP2GO_API_KEY');
     const from = Deno.env.get('SMTP2GO_FROM_EMAIL');
     const activationBaseUrl = Deno.env.get('APP_TECHNICIAN_ACTIVATION_URL')
-      || 'https://lco-connect-project.vercel.app/pages/activate-account.html';
+      || 'https://www.lcoconnect.in/pages/activate-account.html';
 
     if (!url || !anonKey || !serviceRoleKey) {
       console.error('Send technician invitation missing platform config.');

@@ -54,7 +54,7 @@ Deno.serve(async (request) => {
     const admin = createClient(url, serviceRoleKey, { auth: { persistSession: false } });
 
     const resetPageUrl = Deno.env.get('APP_PASSWORD_RESET_URL')
-      || 'https://lco-connect-project.vercel.app/pages/reset-password.html';
+      || 'https://www.lcoconnect.in/pages/reset-password.html';
 
     // Generate the recovery link. If no account exists for this email,
     // generateLink errors — swallow it and return the generic response
