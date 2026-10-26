@@ -86,6 +86,7 @@
         <div class="sa-login-footer-text">
           <div>Customer first time? <a href="activate-account.html"
               style="font-weight: 600; color: var(--primary);">Activate Account →</a></div>
+          <div style="margin-top: 8px;"><a href="application-status.html">Check application status</a></div>
           <div style="margin-top: 8px;"><a href="../index.html">← Back to LCO Connect</a></div>
         </div>
       </form>
@@ -123,6 +124,12 @@
         var route = LCOAuth.resolveDashboardForProfile(data.profile);
         if (route) {
           window.location.href = route;
+        } else {
+          // Session + profile exist but no dashboard (e.g. suspended /
+          // inactive account) — mirror the sign-in path instead of
+          // silently staying on the page with no message.
+          showToast('Your account is not active. Please contact support for assistance.', 'error');
+          await LCOAuth.signOut();
         }
       }
       checkExistingSession();
@@ -176,6 +183,15 @@
       forgotEmail.addEventListener('input', function () {
         forgotEmail.classList.remove('error');
         document.getElementById('forgotEmail-error').classList.remove('visible');
+      });
+
+      // Enter inside the forgot-password field must send the reset link,
+      // not implicitly submit the surrounding login form.
+      forgotEmail.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          forgotSendBtn.click();
+        }
       });
 
       forgotSendBtn.addEventListener('click', async function () {
@@ -271,7 +287,16 @@
           loginBtn.disabled = false;
           loginBtn.innerHTML = 'Sign In';
           var msg = err.message || 'Login failed. Please try again.';
-          if (msg.includes('Invalid login credentials')) msg = 'Invalid email or password.';
+          if (msg.includes('Invalid login credentials')) {
+            msg = 'Invalid email or password.';
+          } else if (/email not confirmed/i.test(msg)) {
+            msg = 'Please confirm your email address before signing in. Check your inbox for the confirmation link.';
+          } else if (/rate limit|too many requests|over_request_rate_limit/i.test(msg)) {
+            msg = 'Too many sign-in attempts. Please wait a moment and try again.';
+          } else if (!/not active|pending verification|not approved|not yet activated|setup incomplete|Access denied|coming soon/i.test(msg)) {
+            // Keep friendly auth.js status messages; hide raw backend text otherwise.
+            msg = 'Sign-in failed. Please try again.';
+          }
           showToast(msg, 'error');
         }
       });

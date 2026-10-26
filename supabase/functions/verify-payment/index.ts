@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const CASHFREE_API_BASE = 'https://sandbox.cashfree.com/pg'; // TEST MODE — sandbox endpoint; switch together with production keys
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -81,7 +83,7 @@ Deno.serve(async (request) => {
     // ── 5. Fetch and Verify Bill from DB ──
     const { data: bill, error: billError } = await admin
       .from('customer_bills')
-      .select('id, bill_number, lco_id, customer_id, amount, paid_amount, status')
+      .select('id, bill_number, lco_id, customer_id, amount, paid_amount, status, due_date')
       .eq('id', billId)
       .single();
 
@@ -101,7 +103,27 @@ Deno.serve(async (request) => {
     }
 
     if (bill.status === 'PAID') {
-      return reply({ ok: true, message: 'Bill is already paid.', already_paid: true });
+      // Include the existing payment's number so the client never prints
+      // a blank receipt for an already-paid bill.
+      let existingPaymentNumber: string | null = null;
+      const { data: paidRow } = await admin
+        .from('customer_payments')
+        .select('payment_number')
+        .eq('bill_id', bill.id)
+        .eq('gateway_order_id', orderId)
+        .maybeSingle();
+      if (paidRow?.payment_number) {
+        existingPaymentNumber = paidRow.payment_number;
+      } else {
+        const { data: anyPaidRow } = await admin
+          .from('customer_payments')
+          .select('payment_number')
+          .eq('bill_id', bill.id)
+          .limit(1)
+          .maybeSingle();
+        existingPaymentNumber = anyPaidRow?.payment_number || null;
+      }
+      return reply({ ok: true, message: 'Bill is already paid.', already_paid: true, payment_number: existingPaymentNumber });
     }
 
     if (bill.status === 'CANCELLED') {
@@ -115,7 +137,7 @@ Deno.serve(async (request) => {
       'x-api-version': cashfreeApiVersion,
     };
 
-    const orderRes = await fetch(`https://sandbox.cashfree.com/pg/orders/${encodeURIComponent(orderId)}`, {
+    const orderRes = await fetch(`${CASHFREE_API_BASE}/orders/${encodeURIComponent(orderId)}`, {
       headers: cfHeaders,
     });
 
@@ -136,6 +158,15 @@ Deno.serve(async (request) => {
       }, 400);
     }
 
+    // Bind the gateway order to this bill: the tags stamped by
+    // create-payment-order must match the bill being credited, otherwise
+    // any PAID order could be credited to any bill the caller owns.
+    const orderTags = cfOrder.order_tags || {};
+    if (orderTags.bill_id !== billId || orderTags.customer_id !== bill.customer_id) {
+      console.error(`verify-payment: order ${orderId} tags (bill_id=${orderTags.bill_id}, customer_id=${orderTags.customer_id}) do not match bill ${billId} / customer ${bill.customer_id}`);
+      return reply({ error: 'Payment order does not match this bill.' }, 403);
+    }
+
     const paidAmountRupees = Number(cfOrder.order_amount);
     const outstandingAmount = Number(bill.amount) - Number(bill.paid_amount);
 
@@ -149,7 +180,7 @@ Deno.serve(async (request) => {
     let paymentMethodStr = 'ONLINE';
 
     try {
-      const paymentsRes = await fetch(`https://sandbox.cashfree.com/pg/orders/${encodeURIComponent(orderId)}/payments`, {
+      const paymentsRes = await fetch(`${CASHFREE_API_BASE}/orders/${encodeURIComponent(orderId)}/payments`, {
         headers: cfHeaders,
       });
 
@@ -198,7 +229,7 @@ Deno.serve(async (request) => {
         customer_id: customer.id,
         bill_id: bill.id,
         amount: paidAmountRupees,
-        payment_method: 'ONLINE',
+        payment_method: paymentMethodStr,
         payment_date: new Date().toISOString(),
         transaction_reference: cfPaymentId,
         recorded_by: callerUser.id,
@@ -220,7 +251,19 @@ Deno.serve(async (request) => {
 
     // ── 11. Update Bill paid_amount and status ──
     const newPaidAmount = Number(bill.paid_amount) + paidAmountRupees;
-    const newStatus = newPaidAmount >= Number(bill.amount) ? 'PAID' : 'PENDING';
+    if (newPaidAmount > Number(bill.amount)) {
+      console.warn(`verify-payment: payment for bill ${bill.id} exceeds bill amount — capping paid_amount at ${bill.amount} (computed ${newPaidAmount})`);
+    }
+    // Bill statuses are only PENDING/PAID/OVERDUE/CANCELLED (no PARTIAL):
+    // a partial payment on a past-due bill stays OVERDUE, else PENDING.
+    let newStatus: string;
+    if (newPaidAmount >= Number(bill.amount)) {
+      newStatus = 'PAID';
+    } else if (bill.due_date && new Date(bill.due_date) < new Date(new Date().toISOString().slice(0, 10))) {
+      newStatus = 'OVERDUE';
+    } else {
+      newStatus = 'PENDING';
+    }
 
     const { error: updateError } = await admin
       .from('customer_bills')
@@ -232,6 +275,11 @@ Deno.serve(async (request) => {
 
     if (updateError) {
       console.error('verify-payment: bill update error:', updateError);
+      return reply({
+        ok: false,
+        error: 'Payment recorded but the bill could not be updated',
+        payment_number: newPayment?.payment_number || paymentNumber,
+      }, 500);
     }
 
     // ── 12. Create Dual Notifications (CUSTOMER + LCO_ADMIN) ──
@@ -245,6 +293,7 @@ Deno.serve(async (request) => {
           title: 'Payment Received',
           message: `Your payment of ₹${paidAmountRupees.toFixed(2)} for bill ${bill.bill_number} has been verified and recorded successfully via Cashfree. Payment #: ${paymentNumber}`,
           type: 'SUCCESS',
+          category: 'PAYMENT',
         },
         {
           lco_id: bill.lco_id,
@@ -254,6 +303,7 @@ Deno.serve(async (request) => {
           title: 'Payment Received',
           message: `Payment of ₹${paidAmountRupees.toFixed(2)} received from customer ${customer.full_name || 'Customer'} (${customer.customer_id || 'ID'}) for bill ${bill.bill_number} via Cashfree. Payment #: ${paymentNumber}`,
           type: 'SUCCESS',
+          category: 'PAYMENT',
         },
       ]);
     } catch (notifErr) {

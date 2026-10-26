@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const CASHFREE_API_BASE = 'https://sandbox.cashfree.com/pg'; // TEST MODE — sandbox endpoint; switch together with production keys
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
@@ -114,9 +116,29 @@ Deno.serve(async (request) => {
     // Generate unique Cashfree order ID (max 45 chars: order_ + 16-char uuid + _ + timestamp)
     const orderId = `order_${bill.id.replace(/-/g, '').substring(0, 16)}_${Date.now()}`;
 
-    // Format phone (must be 10 digits for Indian numbers, remove non-numeric)
+    // Format phone (must be 10 digits for Indian numbers, remove non-numeric).
+    // Never fabricate contact data — a missing/short phone or a missing
+    // email is a data problem on the customer record, not a value to invent.
     const rawPhone = String(customer.phone || '').replace(/[^0-9]/g, '');
-    const cleanPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9999999999';
+    if (rawPhone.length < 10) {
+      return reply({ error: 'Customer phone number is missing — update the customer record' }, 400);
+    }
+    const cleanPhone = rawPhone.slice(-10);
+
+    if (!customer.email) {
+      return reply({ error: 'Customer email is missing — update the customer record' }, 400);
+    }
+
+    // return_url: trust the request Origin only when it is on the allowlist.
+    const requestOrigin = request.headers.get('origin') || '';
+    const allowedOriginHosts = ['lcoconnect.in', 'www.lcoconnect.in', 'lco-connect-project.vercel.app', 'localhost', '127.0.0.1'];
+    let returnOrigin = 'https://lcoconnect.in';
+    try {
+      const parsedOrigin = new URL(requestOrigin);
+      if (allowedOriginHosts.includes(parsedOrigin.hostname)) {
+        returnOrigin = parsedOrigin.origin;
+      }
+    } catch { /* unparseable Origin — keep the default */ }
 
     // ── 9. Create Cashfree Sandbox Order (server-side) ──
     const orderPayload = {
@@ -126,11 +148,11 @@ Deno.serve(async (request) => {
       customer_details: {
         customer_id: customer.id,
         customer_name: customer.full_name || 'Customer',
-        customer_email: customer.email || `${customer.customer_id.toLowerCase()}@lcoconnect.internal`,
+        customer_email: customer.email,
         customer_phone: cleanPhone,
       },
       order_meta: {
-        return_url: `${request.headers.get('origin') || 'https://lcoconnect.internal'}/pages/customer-dashboard.html?order_id={order_id}`,
+        return_url: `${returnOrigin}/pages/customer-dashboard.html?order_id={order_id}`,
       },
       order_tags: {
         bill_id: bill.id,
@@ -141,7 +163,7 @@ Deno.serve(async (request) => {
       order_note: `Bill ${bill.bill_number}`,
     };
 
-    const cashfreeEndpoint = 'https://sandbox.cashfree.com/pg/orders';
+    const cashfreeEndpoint = `${CASHFREE_API_BASE}/orders`;
 
     const cfResponse = await fetch(cashfreeEndpoint, {
       method: 'POST',

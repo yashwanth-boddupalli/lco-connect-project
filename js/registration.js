@@ -163,10 +163,19 @@
 
 
   function goToStep(step, skipValidation) {
-    // If going forward, validate current step first
-    if (step > currentStep && !skipValidation) {
-      if (!validateStep(currentStep)) {
-        return;
+    // Forward navigation must validate every step being passed over —
+    // not just the current one. This also covers forward skips via
+    // completed progress steps and returning to Review after an Edit
+    // jump: an invalid intermediate step lands the user on that step
+    // with its errors shown, instead of reaching Review with bad data.
+    if (step > currentStep) {
+      for (var s = currentStep; s < step; s++) {
+        if (!validateStep(s)) {
+          currentStep = s;
+          updateUI();
+          scrollToTop();
+          return;
+        }
       }
     }
 
@@ -433,7 +442,9 @@
      ══════════════════════════════════════════════ */
 
   var ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+  var ALLOWED_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
   var MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+  var MAX_FILES_PER_DOC = 5;
 
   function setupFileUploads() {
     var uploadSections = document.querySelectorAll('.doc-upload-section');
@@ -468,7 +479,13 @@
 
   function handleFiles(fileList, docType) {
     Array.from(fileList).forEach(function (file) {
-      if (!ALLOWED_TYPES.includes(file.type)) {
+      if (uploadedFiles[docType].length >= MAX_FILES_PER_DOC) {
+        showToast('You can upload a maximum of ' + MAX_FILES_PER_DOC + ' files per document.', 'error');
+        return;
+      }
+
+      var ext = (file.name.split('.').pop() || '').toLowerCase();
+      if (!ALLOWED_TYPES.includes(file.type) || !ALLOWED_EXTENSIONS.includes(ext)) {
         showToast('Invalid file type: ' + file.name + '. Please use PDF, JPG, PNG or WEBP.', 'error');
         return;
       }
@@ -640,12 +657,43 @@
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<span class="spinner"></span> Submitting application…';
 
+    var uploadedPaths = [];
+
     try {
       if (!supabase) {
         throw new Error('Database connection unavailable. Please check your internet connection and try again.');
       }
 
       var email = getVal('businessEmail').trim().toLowerCase();
+      var phone = getVal('businessPhone').trim();
+
+      // ═══════════════════════════════════════
+      // PRE-CHECK: Duplicate pending application
+      // ═══════════════════════════════════════
+      // If a PENDING application already exists for this email/phone,
+      // point the applicant at it instead of filing a duplicate.
+      // A failed pre-check must not block registration — log & continue.
+      try {
+        var dupResult = await supabase.rpc('check_pending_application', {
+          p_email: email,
+          p_phone: phone
+        });
+        if (dupResult && !dupResult.error) {
+          var dupData = Array.isArray(dupResult.data) ? dupResult.data[0] : dupResult.data;
+          if (dupData && dupData.found && dupData.application_id) {
+            showToast('You already have a pending application (ID: ' + dupData.application_id + '). You can track it on the application status page.', 'error');
+            var dupId = dupData.application_id;
+            setTimeout(function () {
+              window.location.href = 'application-status.html?id=' + encodeURIComponent(dupId);
+            }, 1200);
+            return;
+          }
+        } else if (dupResult && dupResult.error) {
+          console.error('Duplicate-application pre-check failed:', dupResult.error);
+        }
+      } catch (dupError) {
+        console.error('Duplicate-application pre-check failed:', dupError);
+      }
 
       // ═══════════════════════════════════════
       // STEP A: Generate Application ID
@@ -656,12 +704,11 @@
 
       submitBtn.innerHTML = '<span class="spinner"></span> Generating application ID…';
 
-      submitBtn.innerHTML = '<span class="spinner"></span> Generating application ID…';
-
       var appIdResult = await supabase.rpc('generate_application_id');
 
       if (appIdResult.error) {
-        throw new Error('Failed to generate application ID: ' + appIdResult.error.message);
+        console.error('Failed to generate application ID:', appIdResult.error);
+        throw new Error('Failed to generate application ID.');
       }
 
       var applicationId = appIdResult.data;
@@ -712,7 +759,12 @@
         .single();
 
       if (insertResult.error) {
-        throw new Error('Failed to save application: ' + insertResult.error.message);
+        console.error('Failed to save application:', insertResult.error);
+        // Preserve detectable conflict info for the friendly mapper in catch.
+        var insertErr = new Error('Failed to save application.');
+        insertErr.code = insertResult.error.code;
+        insertErr.rawMessage = insertResult.error.message;
+        throw insertErr;
       }
 
       var appUUID = insertResult.data.id;
@@ -746,8 +798,10 @@
 
           if (uploadResult.error) {
             console.error('File upload error:', uploadResult.error);
-            throw new Error('Failed to upload document: ' + fileEntry.name + '. ' + uploadResult.error.message);
+            throw new Error('Failed to upload document: ' + fileEntry.name + '.');
           }
+
+          uploadedPaths.push(filePath);
 
           var docRecord = {
             application_id: appUUID,
@@ -765,7 +819,7 @@
 
           if (docInsert.error) {
             console.error('Document record error:', docInsert.error);
-            throw new Error('Failed to save document record: ' + docInsert.error.message);
+            throw new Error('Failed to save document record.');
           }
         }
       }
@@ -778,16 +832,12 @@
       // email after approval.
 
       sessionStorage.setItem('lco_app_id', applicationId);
-      sessionStorage.setItem('lco_biz_name', appData.business_name);
-      sessionStorage.setItem('lco_submitted_date', new Date().toISOString());
 
       showToast('Application submitted successfully!', 'success');
 
       setTimeout(function () {
         window.location.href = 'application-status.html?id=' +
-          encodeURIComponent(applicationId) +
-          '&biz=' + encodeURIComponent(appData.business_name) +
-          '&date=' + encodeURIComponent(new Date().toISOString());
+          encodeURIComponent(applicationId);
       }, 1200);
 
     } catch (error) {
@@ -798,6 +848,14 @@
       // Admin queue and duplicates on every retry. The
       // withdraw_application RPC only ever removes an application
       // that is still PENDING and not linked to an account.
+      if (supabase && uploadedPaths && uploadedPaths.length > 0) {
+        try {
+          await supabase.storage.from('verification-documents').remove(uploadedPaths);
+        } catch (removeError) {
+          console.error('Failed-submission storage cleanup error:', removeError);
+        }
+      }
+
       if (supabase && typeof applicationId !== 'undefined' && applicationId) {
         try {
           await supabase.rpc('withdraw_application', { p_application_id: applicationId });
@@ -808,7 +866,18 @@
 
       submitBtn.disabled = false;
       submitBtn.innerHTML = 'Submit Application';
-      showToast(error.message || 'Something went wrong. Please try again.', 'error');
+      // Never surface raw backend error text to applicants.
+      var rawText = ((error && error.rawMessage) || (error && error.message) || '');
+      var codeText = (error && error.code) ? String(error.code) : '';
+      var friendlyMessage;
+      if (/Database connection unavailable/.test(rawText)) {
+        friendlyMessage = rawText;
+      } else if (/duplicate|unique|conflict|already exists/i.test(rawText) || codeText === '23505') {
+        friendlyMessage = 'An application with these details already exists. Please check your application status instead.';
+      } else {
+        friendlyMessage = 'Something went wrong while submitting. Please try again.';
+      }
+      showToast(friendlyMessage, 'error');
     }
   }
 

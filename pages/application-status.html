@@ -79,6 +79,15 @@
           <a href="../index.html" class="btn btn-primary">Back to Home</a>
         </div>
 
+        <div class="status-lookup" id="statusLookup" style="display: none; margin-top: 24px;">
+          <p style="margin-bottom: 10px;">Enter your Application ID to check its status:</p>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+            <input type="text" id="statusIdInput" placeholder="e.g. LCO-2026-0001" autocomplete="off"
+              style="flex: 1; min-width: 200px; padding: 10px 12px; border: 1px solid var(--line, #ddd); border-radius: 8px;">
+            <button type="button" class="btn btn-primary" id="statusCheckBtn">Check Status</button>
+          </div>
+        </div>
+
       </div>
     </div>
   </main>
@@ -139,6 +148,16 @@
       subtitle.textContent = 'Looking up your application status…';
       document.querySelector('.status-icon').textContent = '⋯';
 
+      var lookupBox = document.getElementById('statusLookup');
+      var lookupInput = document.getElementById('statusIdInput');
+      var lookupBtn = document.getElementById('statusCheckBtn');
+      var lastLookupId = '';
+
+      function showLookupForm(prefill) {
+        if (lookupBox) lookupBox.style.display = '';
+        if (prefill && lookupInput) lookupInput.value = prefill;
+      }
+
       function showNotFound() {
         messageBox.style.display = '';
         actionsBox.style.display = '';
@@ -148,6 +167,25 @@
         detailsBox.style.display = 'none';
         messageBox.innerHTML = '<p>Check the Application ID from your registration confirmation, or start a new application below.</p>';
         actionsBox.innerHTML = '<a href="register-lco.html" class="btn btn-primary">Start New Application</a>';
+        showLookupForm(lastLookupId);
+      }
+
+      function showLookupError() {
+        messageBox.style.display = '';
+        actionsBox.style.display = '';
+        heading.textContent = 'Something went wrong';
+        subtitle.textContent = 'We couldn\'t check your status right now.';
+        document.querySelector('.status-icon').textContent = '!';
+        detailsBox.style.display = 'none';
+        messageBox.innerHTML = '<p>We couldn\'t check your status right now. Please try again in a moment.</p>';
+        actionsBox.innerHTML = '<button type="button" class="btn btn-primary" id="statusRetryBtn">Retry</button>';
+        var retryBtn = document.getElementById('statusRetryBtn');
+        if (retryBtn) {
+          retryBtn.addEventListener('click', function () {
+            if (lastLookupId) lookupStatus(lastLookupId);
+          });
+        }
+        showLookupForm(lastLookupId);
       }
 
       function formatDate(iso) {
@@ -164,58 +202,106 @@
         }
       }
 
-      var params = new URLSearchParams(window.location.search);
-      var appId = params.get('id') || sessionStorage.getItem('lco_app_id');
-
-      if (!appId) {
-        showNotFound();
-        return;
-      }
-
       var sb = null;
       try {
         if (window.supabase && window.supabase.createClient) {
           sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         }
-      } catch (e) { /* fall through to not found */ }
+      } catch (e) { /* handled as a lookup failure below */ }
 
-      if (!sb) {
-        showNotFound();
-        return;
+      function normaliseId(value) {
+        return String(value || '').trim().toUpperCase();
       }
 
-      sb.rpc('get_application_status', { p_application_id: appId }).then(function (res) {
-        var data = res.data;
-        if (res.error || !data || !data.found) {
+      function lookupStatus(rawId) {
+        var appId = normaliseId(rawId);
+        lastLookupId = appId;
+        if (!appId) {
           showNotFound();
           return;
         }
-
-        heading.textContent = 'Application Submitted';
-        subtitle.textContent = 'Your LCO registration is being processed';
-        document.querySelector('.status-icon').textContent = '✓';
-        detailsBox.style.display = '';
-        messageBox.style.display = '';
-        actionsBox.style.display = '';
-
-        document.getElementById('statusAppId').textContent = data.application_id;
-        document.getElementById('statusBizName').textContent = data.business_name;
-        document.getElementById('statusDate').textContent = formatDate(data.submitted_at);
-
-        var badge = document.getElementById('statusBadge');
-        badge.textContent = STATUS_LABELS[data.status] || data.status;
-        badge.className = 'status-badge ' + (STATUS_CLASSES[data.status] || 'pending');
-
-        if (data.status === 'APPROVED') {
-          messageBox.innerHTML = '<p>Your application has been <strong>approved</strong>! ' +
-            'We\'ve emailed you an activation link — open it to set your password and activate your LCO account.</p>';
-        } else if (data.status === 'REJECTED') {
-          messageBox.innerHTML = '<p>Your application was not approved. You can contact support for details, or submit a new application.</p>';
-          actionsBox.innerHTML = '<a href="register-lco.html" class="btn btn-primary">New Application</a>';
+        if (!sb) {
+          showLookupError();
+          return;
         }
-      }).catch(function () {
-        showNotFound();
-      });
+
+        detailsBox.style.display = 'none';
+        messageBox.style.display = 'none';
+        actionsBox.style.display = 'none';
+        if (lookupBox) lookupBox.style.display = 'none';
+        heading.textContent = 'Checking your application…';
+        subtitle.textContent = 'Looking up your application status…';
+        document.querySelector('.status-icon').textContent = '⋯';
+
+        sb.rpc('get_application_status', { p_application_id: appId }).then(function (res) {
+          if (res.error) {
+            showLookupError();
+            return;
+          }
+          var data = res.data;
+          if (!data || !data.found) {
+            showNotFound();
+            return;
+          }
+
+          heading.textContent = 'Application Submitted';
+          subtitle.textContent = 'Your LCO registration is being processed';
+          document.querySelector('.status-icon').textContent = '✓';
+          detailsBox.style.display = '';
+          messageBox.style.display = '';
+          actionsBox.style.display = '';
+          if (lookupBox) lookupBox.style.display = 'none';
+
+          document.getElementById('statusAppId').textContent = data.application_id;
+          document.getElementById('statusBizName').textContent = data.business_name;
+          document.getElementById('statusDate').textContent = formatDate(data.submitted_at);
+
+          var badge = document.getElementById('statusBadge');
+          badge.textContent = STATUS_LABELS[data.status] || data.status;
+          badge.className = 'status-badge ' + (STATUS_CLASSES[data.status] || 'pending');
+
+          if (data.status === 'APPROVED') {
+            messageBox.innerHTML = '<p>Your application has been <strong>approved</strong>! ' +
+              'We\'ve emailed you an activation link — open it to set your password and activate your LCO account.</p>';
+          } else if (data.status === 'REJECTED') {
+            messageBox.innerHTML = '<p>Your application was not approved. You can contact support for details, or submit a new application.</p>';
+            actionsBox.innerHTML = '<a href="register-lco.html" class="btn btn-primary">New Application</a>';
+          }
+        }).catch(function () {
+          showLookupError();
+        });
+      }
+
+      if (lookupBtn) {
+        lookupBtn.addEventListener('click', function () {
+          lookupStatus(lookupInput ? lookupInput.value : '');
+        });
+      }
+      if (lookupInput) {
+        lookupInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            lookupStatus(lookupInput.value);
+          }
+        });
+      }
+
+      var params = new URLSearchParams(window.location.search);
+      var appId = normaliseId(params.get('id') || sessionStorage.getItem('lco_app_id'));
+
+      if (!appId) {
+        // No ID supplied — show the entry form instead of a bare not-found.
+        heading.textContent = 'Check Application Status';
+        subtitle.textContent = 'Enter your Application ID to see its current status.';
+        document.querySelector('.status-icon').textContent = '?';
+        messageBox.style.display = 'none';
+        actionsBox.style.display = '';
+        actionsBox.innerHTML = '<a href="register-lco.html" class="btn btn-primary">Start New Application</a>';
+        showLookupForm('');
+        return;
+      }
+
+      lookupStatus(appId);
     })();
   </script>
 

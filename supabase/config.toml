@@ -11,3 +11,9 @@ additional_redirect_urls = [
   "http://localhost:3000/*",
   "http://127.0.0.1:3000/*"
 ]
+
+[functions.cashfree-webhook]
+verify_jwt = false
+
+[functions.razorpay-webhook]
+verify_jwt = false

@@ -1,3 +1,15 @@
+/**
+ * ⚠️ DEPRECATED — DO NOT USE / DELETE FROM THE SUPABASE DASHBOARD ⚠️
+ *
+ * This Razorpay webhook is ORPHANED: no Razorpay order-creation path
+ * exists anywhere in the product. Payments are Cashfree-only
+ * (create-payment-order / verify-payment / cashfree-webhook), so no
+ * real payment can ever supply the `payment.notes.bill_id` this handler
+ * requires, and it can therefore never identify a bill. It is kept in
+ * the repo only for reference and should be deleted from the Supabase
+ * dashboard. Behaviour below is intentionally unchanged.
+ */
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 /**
@@ -53,7 +65,7 @@ Deno.serve(async (request) => {
     // ── 2. Validate Webhook Signature ──
     const expectedSignature = await generateHmacSha256(rawBody, webhookSecret);
 
-    if (expectedSignature !== receivedSignature) {
+    if (!timingSafeEqual(expectedSignature, receivedSignature)) {
       console.error('razorpay-webhook: signature mismatch.');
       return reply({ error: 'Invalid webhook signature.' }, 400);
     }
@@ -275,6 +287,15 @@ async function generateHmacSha256(data: string, key: string): Promise<string> {
     .join('');
 }
 
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
 
 function getSupabaseKey(legacyName: string, keyMapName: string) {
   const legacyValue = Deno.env.get(legacyName);

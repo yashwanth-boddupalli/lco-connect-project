@@ -182,12 +182,7 @@ var LCOAuth = (function () {
     var dashboardUrl = ROLE_ROUTES[role] || null;
 
     if (!dashboardUrl) {
-      // Known role but no dashboard built yet
-      if (ROLE_ROUTES.hasOwnProperty(role)) {
-        await sb.auth.signOut();
-        throw new Error('Your dashboard (' + role + ') is coming soon. Please check back later.');
-      }
-      // Unknown role
+      // Unknown role (every known role maps to a dashboard above)
       await sb.auth.signOut();
       throw new Error('Access denied. Unrecognized account role.');
     }
@@ -290,8 +285,14 @@ var LCOAuth = (function () {
      ══════════════════════════════════════════════ */
 
   function redirectToLogin() {
-    // We are in the /pages/ directory
-    window.location.href = LOGIN_PAGE;
+    // Pages under /pages/ use 'login.html'; pages elsewhere need the prefix.
+    var inPagesDir = window.location.pathname.indexOf('/pages/') !== -1;
+    window.location.href = inPagesDir ? LOGIN_PAGE : 'pages/' + LOGIN_PAGE;
+  }
+
+  function loginPageUrl() {
+    var inPagesDir = window.location.pathname.indexOf('/pages/') !== -1;
+    return inPagesDir ? LOGIN_PAGE : 'pages/' + LOGIN_PAGE;
   }
 
 
@@ -322,6 +323,22 @@ var LCOAuth = (function () {
     });
   }
 
+  var PAGE_ROLE = {
+    'super-admin.html': 'SUPER_ADMIN',
+    'lco-dashboard.html': 'LCO_ADMIN',
+    'customer-dashboard.html': 'CUSTOMER',
+    'technician-dashboard.html': 'TECHNICIAN'
+  };
+
+  function expectedRoleForPage() {
+    var path = window.location.pathname;
+    var names = Object.keys(PAGE_ROLE);
+    for (var i = 0; i < names.length; i++) {
+      if (path.slice(-names[i].length) === names[i]) return PAGE_ROLE[names[i]];
+    }
+    return null;
+  }
+
   window.addEventListener('pageshow', function (event) {
     if (!event.persisted || !isDashboardPage()) return;
 
@@ -331,10 +348,35 @@ var LCOAuth = (function () {
       return;
     }
 
-    sb.auth.getSession().then(function (result) {
+    sb.auth.getSession().then(async function (result) {
       if (!result.data || !result.data.session) {
         document.body.innerHTML = '';
         window.location.replace(LOGIN_PAGE);
+        return;
+      }
+
+      // Also verify role/status: a restored dashboard for a wrong-role or
+      // no-longer-ACTIVE user must not stay on screen (page scripts don't
+      // re-run on a bfcache restore, so requireRole() never fires).
+      try {
+        var session = result.data.session;
+        var profileResult = await sb.from('profiles')
+          .select('role, email, status')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profileResult.error || !profileResult.data) return; // fall back to session-only behaviour
+
+        var profile = profileResult.data;
+        var expectedRole = expectedRoleForPage();
+        var ownDashboard = resolveDashboardForProfile(profile);
+
+        if (!ownDashboard || (expectedRole && profile.role !== expectedRole)) {
+          document.body.innerHTML = '';
+          window.location.replace(ownDashboard || LOGIN_PAGE);
+        }
+      } catch (e) {
+        // Profile fetch failed — keep the session-existence behaviour above.
       }
     });
   });

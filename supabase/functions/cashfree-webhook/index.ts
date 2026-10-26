@@ -11,6 +11,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
  * Header fields: x-webhook-signature, x-webhook-timestamp
  */
 
+const CASHFREE_API_BASE = 'https://sandbox.cashfree.com/pg'; // TEST MODE — sandbox endpoint; switch together with production keys
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', {
@@ -55,7 +57,7 @@ Deno.serve(async (request) => {
     const signatureData = receivedTimestamp + rawBody;
     const expectedSignature = await generateHmacSha256Base64(signatureData, webhookSecret);
 
-    if (expectedSignature !== receivedSignature) {
+    if (!timingSafeEqual(expectedSignature, receivedSignature)) {
       console.error('cashfree-webhook: signature mismatch.');
       return reply({ error: 'Invalid webhook signature.' }, 400);
     }
@@ -77,8 +79,9 @@ Deno.serve(async (request) => {
 
     const paymentStatus = paymentObj.payment_status || '';
 
-    // Only process successful payment events
-    if (eventType !== 'PAYMENT_SUCCESS_WEBHOOK' && paymentStatus !== 'SUCCESS') {
+    // Only process successful payment events — BOTH the event type and
+    // the nested payment status must indicate success.
+    if (eventType !== 'PAYMENT_SUCCESS_WEBHOOK' || paymentStatus !== 'SUCCESS') {
       return reply({ ok: true, message: `Event ${eventType} acknowledged but not processed.` });
     }
 
@@ -117,7 +120,7 @@ Deno.serve(async (request) => {
 
       if (cashfreeAppId && cashfreeSecretKey) {
         try {
-          const cfRes = await fetch(`https://sandbox.cashfree.com/pg/orders/${encodeURIComponent(orderId)}`, {
+          const cfRes = await fetch(`${CASHFREE_API_BASE}/orders/${encodeURIComponent(orderId)}`, {
             headers: {
               'x-client-id': cashfreeAppId,
               'x-client-secret': cashfreeSecretKey,
@@ -163,6 +166,9 @@ Deno.serve(async (request) => {
 
     // ── 8. Calculate Effective Amount ──
     const outstandingAmount = Number(bill.amount) - Number(bill.paid_amount);
+    if (paidAmountRupees > outstandingAmount) {
+      console.warn(`cashfree-webhook: payment ₹${paidAmountRupees} exceeds outstanding ₹${outstandingAmount} for bill ${bill.bill_number} — capping at outstanding`);
+    }
     const effectivePayment = Math.min(paidAmountRupees, outstandingAmount);
 
     // ── 9. Generate Payment Number ──
@@ -281,6 +287,15 @@ async function generateHmacSha256Base64(data: string, key: string): Promise<stri
     binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
 }
 
 function getSupabaseKey(legacyName: string, keyMapName: string) {

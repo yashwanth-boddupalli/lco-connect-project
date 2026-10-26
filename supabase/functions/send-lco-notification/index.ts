@@ -54,7 +54,7 @@ Deno.serve(async (request) => {
       return reply({ error: 'Application review state does not match this request.' }, 409);
     }
 
-    if (!smtp2goKey || !from || !loginUrl) {
+    if (!smtp2goKey || !from) {
       console.error('Notification function is missing email configuration.');
       const { error: statusError } = await admin.from('lco_applications')
         .update({ notification_status: 'FAILED' })
@@ -66,8 +66,11 @@ Deno.serve(async (request) => {
     const subject = decision === 'APPROVED'
       ? 'Your LCO Connect account is approved'
       : 'Update on your LCO Connect application';
+    const loginLinkHtml = loginUrl
+      ? `<p><a href="${escapeHtml(loginUrl)}" style="color: #0B7A6E; font-weight: 600;">Go to Login</a></p>`
+      : '';
     const innerBody = decision === 'APPROVED'
-      ? `<p style="font-size: 16px; margin-top: 0;">Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Your application is approved — a separate activation email is on its way; open it to set your password and activate your account.</p>`
+      ? `<p style="font-size: 16px; margin-top: 0;">Hello,</p><p><strong>${escapeHtml(application.business_name)}</strong> has been approved and your LCO Connect account is now active.</p><p>Your application is approved — a separate activation email is on its way; open it to set your password and activate your account.</p>${loginLinkHtml}`
       : `<p style="font-size: 16px; margin-top: 0;">Hello,</p><p>Your application for <strong>${escapeHtml(application.business_name)}</strong> has not been approved.</p><p><strong>Reason:</strong> ${escapeHtml(application.rejection_reason || 'Please contact support for more information.')}</p><p>If you need help, please contact the LCO Connect support channel provided to you.</p>`;
     // Branded LCO CONNECT shell — same label/header as the invitation
     // and password-reset emails, so every mail from the platform
@@ -91,7 +94,7 @@ Deno.serve(async (request) => {
       </div>
     `;
     const textBody = decision === 'APPROVED'
-      ? `Hello,\n\n${application.business_name} has been approved and your LCO Connect account is now active.\n\nYour application is approved — a separate activation email is on its way; open it to set your password and activate your account.\n\nFor security, we never send or retrieve passwords by email.`
+      ? `Hello,\n\n${application.business_name} has been approved and your LCO Connect account is now active.\n\nYour application is approved — a separate activation email is on its way; open it to set your password and activate your account.${loginUrl ? `\n\nGo to Login: ${loginUrl}` : ''}\n\nFor security, we never send or retrieve passwords by email.`
       : `Hello,\n\nYour application for ${application.business_name} has not been approved.\n\nReason: ${application.rejection_reason || 'Please contact support for more information.'}\n\nIf you need help, please contact the LCO Connect support channel provided to you.`;
 
     let sent = false;
@@ -142,10 +145,6 @@ function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[character]!));
-}
-
-function escapeAttribute(value: string) {
-  return escapeHtml(value);
 }
 
 function getSupabaseKey(legacyName: string, keyMapName: string) {
