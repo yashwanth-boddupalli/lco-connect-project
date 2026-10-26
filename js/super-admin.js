@@ -35,6 +35,7 @@
   var lcoDirSearch = '';
   var lcoDirStatusFilter = 'ALL';
   var lcoDirSearchTimer = null;
+  var lcoDirRequestId = 0;
   var currentInspectAppId = null;
   var currentInspectDetail = null;
   var pendingGovernanceAction = null; // { applicationId, bizName, currentStatus, newStatus }
@@ -123,9 +124,9 @@
     setupCommunicationOversight();
     setupAuditSecurity();
 
-    // Load data
+    // Load data — loadPlatformOverview is the single source for the
+    // Overview stats; loadStats runs only as its fallback (SA-08).
     loadPlatformOverview();
-    loadStats();
     loadApplications();
     loadPlatformLcos();
   }
@@ -163,8 +164,7 @@
     // Load data for specific views
     if (viewName === 'overview') {
       loadPlatformOverview();
-      loadStats();
-      loadRecentApplications();
+      loadApplications();
     } else if (viewName === 'lco-directory') {
       lcoDirOffset = 0;
       loadLcoDirectory();
@@ -178,11 +178,11 @@
       auditOffset = 0;
       loadAuditSecurity();
     } else if (viewName === 'applications') {
-      renderApplicationsTable();
+      loadApplications();
     } else if (viewName === 'approved') {
-      renderApprovedTable();
+      loadApplications();
     } else if (viewName === 'rejected') {
-      renderRejectedTable();
+      loadApplications();
     }
 
     // Scroll to top
@@ -274,6 +274,10 @@
     } catch (e) {
       console.error('Load stats error:', e);
       showToast('Failed to load statistics.', 'error');
+      ['statTotalValue', 'statPendingValue', 'statApprovedValue', 'statRejectedValue'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = '—';
+      });
     }
   }
 
@@ -299,7 +303,31 @@
     } catch (e) {
       console.error('Load applications error:', e);
       showToast('Failed to load applications.', 'error');
+      renderApplicationsError(e.message || '');
     }
+  }
+
+  // Error state for the four application tables (Recent / Verification /
+  // Approved / Rejected) — replaces the permanent "Loading…" rows (SA-07).
+  function renderApplicationsError(message) {
+    var tables = [
+      { id: 'recentTableBody', colspan: 6 },
+      { id: 'applicationsTableBody', colspan: 8 },
+      { id: 'approvedTableBody', colspan: 8 },
+      { id: 'rejectedTableBody', colspan: 6 }
+    ];
+    tables.forEach(function (t) {
+      var tbody = document.getElementById(t.id);
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="' + t.colspan + '" style="text-align:center; padding:32px; color:#E74C3C;">Failed to load applications. ' + esc(message) +
+        ' <button class="sa-view-btn sa-applications-retry-btn" type="button">Retry</button></td></tr>';
+    });
+    document.querySelectorAll('.sa-applications-retry-btn').forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        loadApplications();
+      });
+    });
   }
 
 
@@ -858,15 +886,17 @@
 
   async function verifyDocument(docId) {
     try {
-      var { error } = await sb.from('verification_documents')
+      var { data, error } = await sb.from('verification_documents')
         .update({
           status: 'VERIFIED',
           reviewed_by: currentUser.id,
           reviewed_at: new Date().toISOString()
         })
-        .eq('id', docId);
+        .eq('id', docId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error('No matching document was updated.');
 
       showToast('Document verified.', 'success');
       if (currentDetailApp) await loadDocuments(currentDetailApp.id);
@@ -884,23 +914,27 @@
 
   async function rejectDocument(docId, reason) {
     try {
-      var { error } = await sb.from('verification_documents')
+      var { data, error } = await sb.from('verification_documents')
         .update({
           status: 'REJECTED',
           review_notes: reason,
           reviewed_by: currentUser.id,
           reviewed_at: new Date().toISOString()
         })
-        .eq('id', docId);
+        .eq('id', docId)
+        .select('id');
 
       if (error) throw error;
+      if (!data || data.length === 0) throw new Error('No matching document was updated.');
 
       showToast('Document rejected.', 'success');
       if (currentDetailApp) await loadDocuments(currentDetailApp.id);
+      return true;
 
     } catch (e) {
       console.error('Reject document error:', e);
       showToast('Failed to reject document. ' + (e.message || ''), 'error');
+      return false;
     }
   }
 
@@ -948,11 +982,36 @@
         closeLcoInspector();
         closeGovernanceModal();
         closeUserInspectorModal();
+        var auditModal = document.getElementById('saAuditModal');
+        if (auditModal) auditModal.classList.remove('visible');
         document.getElementById('imagePreview').classList.remove('visible');
       }
     });
   }
 
+
+  // SA-03: approval requires the documents the registration wizard
+  // requires (registration.js validateStep4: business_proof +
+  // identity_proof) to exist and be VERIFIED. Documents are already in
+  // state — openDetail loads them via loadDocuments into currentDetailDocs.
+  function getUnverifiedRequiredDocs() {
+    var required = ['business_proof', 'identity_proof'];
+    var missing = [];
+    required.forEach(function (type) {
+      var verified = (currentDetailDocs || []).some(function (doc) {
+        return doc.document_type === type && doc.status === 'VERIFIED';
+      });
+      if (!verified) missing.push(DOC_TYPE_LABELS[type] || type);
+    });
+    return missing;
+  }
+
+  function checkApprovalDocuments() {
+    var missing = getUnverifiedRequiredDocs();
+    if (missing.length === 0) return true;
+    showToast('Cannot approve: ' + missing.map(function (name) { return name + ' is not verified'; }).join('; '), 'error');
+    return false;
+  }
 
   function openApproveModal() {
     // Pre-check: is the app already approved?
@@ -960,6 +1019,7 @@
       showToast('This application is already approved.', 'error');
       return;
     }
+    if (!checkApprovalDocuments()) return;
     document.getElementById('approveModal').classList.add('visible');
   }
 
@@ -1013,6 +1073,13 @@
       return;
     }
 
+    // Document gate (SA-03): never call review_lco_application unless
+    // the required documents are VERIFIED.
+    if (!checkApprovalDocuments()) {
+      closeApproveModal();
+      return;
+    }
+
     var btn = document.getElementById('approveConfirmBtn');
     btn.disabled = true;
     btn.innerHTML = '<span class="sa-spinner"></span> Approving…';
@@ -1044,7 +1111,7 @@
 
       // Refresh data
       await loadApplications();
-      await loadStats();
+      await loadPlatformOverview();
 
       // Re-open detail with updated data
       openDetail(currentDetailApp.id);
@@ -1106,7 +1173,7 @@
 
       // Refresh data
       await loadApplications();
-      await loadStats();
+      await loadPlatformOverview();
 
       // Re-open detail
       openDetail(currentDetailApp.id);
@@ -1136,8 +1203,10 @@
     btn.innerHTML = '<span class="sa-spinner"></span> Rejecting…';
 
     try {
-      await rejectDocument(pendingDocRejectId, reason);
-      closeDocRejectModal();
+      // Close (and clear the pending reason) only on success — on failure
+      // the modal stays open so the typed reason is not lost (SA-10).
+      var rejected = await rejectDocument(pendingDocRejectId, reason);
+      if (rejected) closeDocRejectModal();
     } catch (e) {
       showToast('Failed to reject document.', 'error');
     } finally {
@@ -1324,7 +1393,9 @@
 
     } catch (e) {
       console.error('Platform overview error:', e);
-      // Silently fall back to existing loadStats
+      // Fall back to the direct-query loader — the only place loadStats
+      // runs, so the Overview stats have a single source (SA-08).
+      loadStats();
     }
   }
 
@@ -1399,6 +1470,8 @@
 
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:var(--slate);">Loading directory…</td></tr>';
 
+    var thisReqId = ++lcoDirRequestId;
+
     try {
       var { data, error } = await sb.rpc('get_super_admin_lco_directory', {
         p_search: lcoDirSearch || null,
@@ -1406,6 +1479,8 @@
         p_limit: lcoDirLimit,
         p_offset: lcoDirOffset
       });
+
+      if (thisReqId !== lcoDirRequestId) return; // Prevent stale request overwrite
 
       if (error) throw error;
 
@@ -1432,7 +1507,7 @@
         var techCount = lco.total_technicians !== undefined ? lco.total_technicians : (lco.technician_count || 0);
         var targetId = lco.id || lco.application_id;
 
-        return '<tr data-app-id="' + esc(targetId) + '" class="sa-lco-dir-row">' +
+        return '<tr data-app-id="' + esc(targetId) + '" data-human-id="' + esc(lco.application_id || '') + '" class="sa-lco-dir-row">' +
           '<td data-label="App ID"><span class="sa-app-id">' + esc(lco.application_id) + '</span></td>' +
           '<td data-label="Business & Owner"><span class="sa-biz-name">' + esc(lco.business_name) + '</span><div style="font-size:12px;color:var(--slate);margin-top:2px;">' + esc(lco.owner_name) + '</div></td>' +
           '<td data-label="Contact"><div style="font-size:13px;">' + esc(lco.phone || '—') + '</div><div style="font-size:12px;color:var(--slate);margin-top:1px;">' + esc(lco.email || '—') + '</div></td>' +
@@ -1440,7 +1515,7 @@
           '<td data-label="Account Status">' + acctBadge + '</td>' +
           '<td data-label="Customers" style="text-align:center; font-weight:600;">' + custCount + '</td>' +
           '<td data-label="Technicians" style="text-align:center; font-weight:600;">' + techCount + '</td>' +
-          '<td data-label="Actions"><button class="sa-view-btn sa-inspect-btn" data-app-id="' + esc(targetId) + '">Inspect</button></td>' +
+          '<td data-label="Actions"><button class="sa-view-btn sa-inspect-btn" data-app-id="' + esc(targetId) + '" data-human-id="' + esc(lco.application_id || '') + '">Inspect</button></td>' +
           '</tr>';
       }).join('');
 
@@ -1448,18 +1523,19 @@
       tbody.querySelectorAll('.sa-inspect-btn').forEach(function (btn) {
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
-          openLcoInspector(btn.dataset.appId);
+          openLcoInspector(btn.dataset.appId, btn.dataset.humanId);
         });
       });
       tbody.querySelectorAll('.sa-lco-dir-row').forEach(function (row) {
         row.addEventListener('click', function () {
-          openLcoInspector(row.dataset.appId);
+          openLcoInspector(row.dataset.appId, row.dataset.humanId);
         });
       });
 
       updateLcoDirPagination();
 
     } catch (e) {
+      if (thisReqId !== lcoDirRequestId) return;
       console.error('LCO directory error:', e);
       tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#E74C3C;">Failed to load directory. ' + esc(e.message || '') + '</td></tr>';
     }
@@ -1511,14 +1587,15 @@
     currentInspectDetail = null;
   }
 
-  async function openLcoInspector(applicationId) {
+  async function openLcoInspector(applicationId, humanAppId) {
     currentInspectAppId = applicationId;
     var modal = document.getElementById('lcoDetailModal');
     modal.classList.add('visible');
 
-    // Reset content
+    // Reset content — the header shows the human App ID when the caller
+    // has it, never the raw UUID (SA-12).
     document.getElementById('lcoInspectBizName').textContent = 'Loading…';
-    document.getElementById('lcoInspectAppId').textContent = applicationId;
+    document.getElementById('lcoInspectAppId').textContent = humanAppId || 'Loading…';
     document.getElementById('lcoInspectAccountBadge').innerHTML = '';
     document.getElementById('lcoInspectContent').innerHTML =
       '<div style="text-align:center; padding:40px; color:var(--slate);">Loading LCO detail inspection…</div>';
@@ -1531,6 +1608,7 @@
 
       if (error) throw error;
       if (!data) {
+        document.getElementById('lcoInspectAppId').textContent = humanAppId || '—';
         document.getElementById('lcoInspectContent').innerHTML =
           '<div style="text-align:center; padding:40px; color:#E74C3C;">LCO detail not found for this application.</div>';
         return;
@@ -1538,6 +1616,7 @@
 
       var raw = Array.isArray(data) ? data[0] : data;
       if (!raw) {
+        document.getElementById('lcoInspectAppId').textContent = humanAppId || '—';
         document.getElementById('lcoInspectContent').innerHTML =
           '<div style="text-align:center; padding:40px; color:#E74C3C;">LCO detail not found for this application.</div>';
         return;
@@ -1624,6 +1703,7 @@
 
     } catch (e) {
       console.error('LCO detail error:', e);
+      document.getElementById('lcoInspectAppId').textContent = humanAppId || '—';
       document.getElementById('lcoInspectContent').innerHTML =
         '<div style="text-align:center; padding:40px; color:#E74C3C;">Failed to load LCO details. ' + esc(e.message || '') + '</div>';
     }
@@ -1740,6 +1820,11 @@
   async function confirmGovernanceAction() {
     if (!pendingGovernanceAction) return;
 
+    // Capture the pending action locally BEFORE closeGovernanceModal()
+    // nulls it — dereferencing the global afterwards threw and produced
+    // a false "Failed" toast right after the success toast (SA-01).
+    var pendingAction = pendingGovernanceAction;
+
     var reason = document.getElementById('manageLcoReasonInput').value.trim();
     if (!reason) {
       document.getElementById('manageLcoReasonError').classList.add('visible');
@@ -1753,15 +1838,15 @@
 
     try {
       var { data, error } = await sb.rpc('manage_lco_status', {
-        p_application_id: pendingGovernanceAction.applicationId,
-        p_new_status: pendingGovernanceAction.newStatus,
+        p_application_id: pendingAction.applicationId,
+        p_new_status: pendingAction.newStatus,
         p_reason: reason
       });
 
       if (error) throw error;
 
-      var action = pendingGovernanceAction.newStatus === 'SUSPENDED' ? 'suspended' : 'reactivated';
-      showToast('Account successfully ' + action + ': ' + pendingGovernanceAction.bizName, 'success');
+      var action = pendingAction.newStatus === 'SUSPENDED' ? 'suspended' : 'reactivated';
+      showToast('Account successfully ' + action + ': ' + pendingAction.bizName, 'success');
 
       closeGovernanceModal();
 
@@ -1769,9 +1854,10 @@
       await loadPlatformOverview();
       await loadLcoDirectory();
 
-      // If the inspector is still open for this LCO, refresh it
-      if (currentInspectAppId === pendingGovernanceAction.applicationId) {
-        await openLcoInspector(currentInspectAppId);
+      // If the inspector is still open for this LCO, reload its detail so
+      // the badge/status shown is fresh
+      if (currentInspectAppId === pendingAction.applicationId) {
+        await openLcoInspector(currentInspectAppId, pendingAction.displayAppId);
       }
 
     } catch (e) {
@@ -1790,15 +1876,24 @@
 
   async function loadPlatformLcos() {
     try {
-      var { data, error } = await sb.rpc('get_super_admin_lco_directory', {
-        p_search: null,
-        p_status: 'ALL',
-        p_limit: 500,
-        p_offset: 0
-      });
-      if (error) throw error;
-      var records = (data && data.data) ? data.data : [];
-      platformLcosList = records.map(function (r) {
+      // The directory RPC clamps p_limit to 100 server-side, so page
+      // through it until a short page returns (SA-05).
+      var pageSize = 100;
+      var allRecords = [];
+      for (var page = 0; page < 20; page++) {
+        var { data, error } = await sb.rpc('get_super_admin_lco_directory', {
+          p_search: null,
+          p_status: 'ALL',
+          p_limit: pageSize,
+          p_offset: page * pageSize
+        });
+        if (error) throw error;
+        var res = Array.isArray(data) ? data[0] : data;
+        var records = (res && Array.isArray(res.data)) ? res.data : (Array.isArray(res) ? res : []);
+        allRecords = allRecords.concat(records);
+        if (records.length < pageSize) break;
+      }
+      platformLcosList = allRecords.map(function (r) {
         return { id: r.lco_id || r.id, name: r.business_name || r.owner_name };
       });
 
@@ -1898,6 +1993,8 @@
       tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:var(--slate);"><span class="sa-spinner"></span> Loading user directory…</td></tr>';
     }
 
+    var thisReqId = ++userDirRequestId;
+
     try {
       var roleParam = userDirRoleFilter === 'ALL' ? null : userDirRoleFilter;
       var statusParam = userDirStatusFilter === 'ALL' ? null : userDirStatusFilter;
@@ -1910,6 +2007,8 @@
         p_limit: userDirLimit,
         p_offset: userDirOffset
       });
+
+      if (thisReqId !== userDirRequestId) return; // Prevent stale request overwrite
 
       if (error) {
         console.error('[UserDir] RPC error:', error);
@@ -1940,6 +2039,7 @@
       renderUserDirectoryTable();
       updateUserDirPagination();
     } catch (e) {
+      if (thisReqId !== userDirRequestId) return;
       console.error('[UserDir] Exception in loadUserDirectory:', e);
       if (tbody) {
         var errMsg = escapeHtml(e.message || e.error_description || (typeof e === 'string' ? e : 'Unknown error'));
@@ -2380,6 +2480,9 @@
   var auditDateTo = null;
   var auditOffset = 0;
   var AUDIT_LIMIT = 50;
+  var auditRequestId = 0;
+  var auditHasMore = false;
+  var auditTotalRecords = 0;
 
   function setupAuditSecurity() {
     var searchInput = document.getElementById('saAuditSearch');
@@ -2484,6 +2587,8 @@
 
     if (nextBtn) {
       nextBtn.addEventListener('click', function () {
+        if (!auditHasMore) return;
+        if (auditTotalRecords && auditOffset + AUDIT_LIMIT >= auditTotalRecords) return;
         auditOffset += AUDIT_LIMIT;
         loadAuditLogs();
       });
@@ -2544,7 +2649,7 @@
       console.error('Error loading security metrics:', err);
       ['statAuditTotalVal','statAudit24hVal','statAudit7dVal','statAuditPrivilegedVal','statAuditGovernanceVal','statAuditSecurityVal','statAuditWarningVal','statAuditCriticalVal'].forEach(function(id) {
         var el = document.getElementById(id);
-        if (el) el.textContent = '0';
+        if (el) el.textContent = '—';
       });
     }
   }
@@ -2563,6 +2668,8 @@
 
     tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty" style="text-align:center; padding:32px; color:var(--slate);"><span class="sa-spinner"></span> Loading audit logs...</td></tr>';
 
+    var thisReqId = ++auditRequestId;
+
     try {
       var client = sb || LCOAuth.getClient();
       var { data, error } = await client.rpc('get_super_admin_audit_logs', {
@@ -2571,17 +2678,21 @@
         p_severity: auditSeverityFilter || 'ALL',
         p_actor_role: auditRoleFilter || 'ALL',
         p_lco_id: null,
-        p_date_from: auditDateFrom ? new Date(auditDateFrom).toISOString() : null,
-        p_date_to: auditDateTo ? new Date(auditDateTo + 'T23:59:59').toISOString() : null,
+        p_date_from: auditDateFrom ? new Date(auditDateFrom + 'T00:00:00+05:30').toISOString() : null,
+        p_date_to: auditDateTo ? new Date(auditDateTo + 'T23:59:59.999+05:30').toISOString() : null,
         p_limit: AUDIT_LIMIT,
         p_offset: auditOffset
       });
+
+      if (thisReqId !== auditRequestId) return; // Prevent stale request overwrite
 
       if (error) throw error;
 
       var raw = Array.isArray(data) ? data[0] : data;
       var list = (raw && raw.data) ? raw.data : [];
       var pagination = (raw && raw.pagination) ? raw.pagination : { total_records: 0, limit: AUDIT_LIMIT, offset: 0, has_more: false };
+      auditHasMore = !!pagination.has_more;
+      auditTotalRecords = pagination.total_records || 0;
 
       if (!list || list.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty" style="text-align:center; padding:32px; color:var(--slate);">No audit logs found matching criteria.</td></tr>';
@@ -2639,6 +2750,7 @@
       }
 
     } catch (err) {
+      if (thisReqId !== auditRequestId) return;
       console.error('Error loading audit logs:', err);
       tbody.innerHTML = '<tr><td colspan="8" class="sa-table-empty sa-error">Error loading audit logs: ' + esc(err.message || String(err)) + '</td></tr>';
       if (pagDiv) pagDiv.style.display = 'none';
