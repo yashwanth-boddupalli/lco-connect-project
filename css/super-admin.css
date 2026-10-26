@@ -18,7 +18,7 @@
     radial-gradient(700px 400px at 80% 80%, rgba(74, 80, 196, 0.06), transparent 50%),
     var(--paper);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .sa-login-main {
@@ -27,6 +27,7 @@
   width: 100%;
   max-width: 440px;
   padding: 24px;
+  margin: auto;
 }
 
 .sa-login-card {
