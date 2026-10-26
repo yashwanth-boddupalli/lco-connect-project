@@ -83,7 +83,7 @@
           <div class="sa-field-error" id="activateConfirmPassword-error">Passwords do not match</div>
         </div>
 
-        <button type="submit" class="sa-login-btn" id="activateBtn">
+        <button type="submit" class="sa-login-btn" id="activateBtn" disabled>
           Set Password & Activate Account
         </button>
 
@@ -103,6 +103,9 @@
     </div>
   </main>
 
+
+  <!-- Capture the untouched URL hash before Supabase consumes/clears it -->
+  <script>window.__lcoInitialHash = window.location.hash || '';</script>
 
   <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -124,6 +127,7 @@
           errorText: 'Please enter your Application ID',
           rpc: 'link_lco_account',
           rpcParam: 'p_application_id',
+          table: 'lco_applications',
           dashboard: 'lco-dashboard.html'
         },
         CUSTOMER: {
@@ -133,6 +137,7 @@
           errorText: 'Please enter your Customer ID',
           rpc: 'link_customer_account',
           rpcParam: 'p_customer_id',
+          table: 'customers',
           dashboard: 'customer-dashboard.html'
         },
         TECHNICIAN: {
@@ -142,6 +147,7 @@
           errorText: 'Please enter your Technician ID',
           rpc: 'link_technician_account',
           rpcParam: 'p_technician_id',
+          table: 'technicians',
           dashboard: 'technician-dashboard.html'
         }
       };
@@ -217,21 +223,123 @@
         }
       }
 
-      if (sb) {
+      // Link provenance: parse the untouched hash captured before the
+      // Supabase client was created (it consumes/clears the hash).
+      // Supabase returns link errors there
+      // (#error=access_denied&error_code=otp_expired&...), and a genuine
+      // link arrival carries an access_token.
+      var initialHash = window.__lcoInitialHash || window.location.hash || '';
+      var initialHashParams = new URLSearchParams(initialHash.replace(/^#/, ''));
+      var hashError = initialHashParams.get('error') || initialHashParams.get('error_code');
+      var arrivedViaLink = initialHash.indexOf('access_token') !== -1;
+
+      function showLinkError() {
+        hasInviteSession = false;
+        activateBtn.disabled = true;
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = 'rgba(220,38,38,0.08)';
+        noticeEl.style.borderLeftColor = '#DC2626';
+        noticeEl.style.color = '#B91C1C';
+        noticeEl.innerHTML = '<strong>This activation link has expired or has already been used. Please ask for a new invitation email.</strong>';
+        if (subtextEl) subtextEl.textContent = 'Activation links can be used only once.';
+      }
+
+      function showAlreadyActivated() {
+        hasInviteSession = false;
+        activateBtn.disabled = true;
+        noticeEl.style.display = 'block';
+        noticeEl.style.background = 'rgba(220,38,38,0.08)';
+        noticeEl.style.borderLeftColor = '#DC2626';
+        noticeEl.style.color = '#B91C1C';
+        noticeEl.innerHTML = '<strong>This account is already activated.</strong> Please <a href="login.html" style="color:#B91C1C; text-decoration: underline;">sign in</a> instead.';
+        if (subtextEl) subtextEl.textContent = 'This account is already activated — please sign in.';
+      }
+
+      function showGenericDisabled() {
+        if (hasInviteSession) return;
+        activateBtn.disabled = true;
+        if (subtextEl) {
+          subtextEl.textContent = 'Open the activation link from your invitation email to continue. Manual activation without an invitation is not supported.';
+        }
+      }
+
+      // Resolve the role for a session without enabling the form:
+      // query param / typed ID (already applied), else invite metadata.
+      function resolveRoleForSession(session) {
+        if (activeRole) return activeRole;
+        if (session && session.user && session.user.user_metadata) {
+          var md = session.user.user_metadata;
+          var found = null;
+          Object.keys(ROLES).forEach(function (role) {
+            if (!found && md[ROLES[role].param]) {
+              applyRole(role, md[ROLES[role].param], true);
+              found = role;
+            }
+          });
+          if (found) return found;
+        }
+        if (idInput.value) {
+          var detected = detectRoleFromId(idInput.value);
+          if (detected) { applyRole(detected, idInput.value, false); return detected; }
+        }
+        return null;
+      }
+
+      // Activated-state pre-check for a persisted (non-link) session.
+      // Resolves to 'ACTIVATED', 'INVITED', or null (no row / no role /
+      // query error — caller keeps the generic disabled state).
+      function checkActivationStatus(session) {
+        var role = session ? resolveRoleForSession(session) : null;
+        if (!sb || !role || !session || !session.user) return Promise.resolve(null);
+        return sb.from(ROLES[role].table)
+          .select('invitation_status')
+          .eq('user_id', session.user.id)
+          .limit(1)
+          .then(function (res) {
+            if (res.error || !res.data || !res.data.length) return null;
+            return res.data[0].invitation_status || null;
+          }, function () { return null; });
+      }
+
+      // A session with no token in the hash is only a persisted login:
+      // enable the form only if its record is still INVITED.
+      function handlePersistedSession(session) {
+        checkActivationStatus(session).then(function (status) {
+          if (status === 'ACTIVATED') {
+            showAlreadyActivated();
+          } else if (status === 'INVITED') {
+            applyInviteSession(session);
+          } else {
+            showGenericDisabled();
+          }
+        });
+      }
+
+      if (hashError) {
+        // Expired/used link: do NOT register any session logic, so a
+        // persisted session cannot re-enable the form (reset page pattern).
+        showLinkError();
+      } else if (sb) {
         sb.auth.getSession().then(function (res) {
           if (res.data && res.data.session) {
-            applyInviteSession(res.data.session);
-          } else if (!hasInviteSession) {
-            activateBtn.disabled = true;
-            if (subtextEl) {
-              subtextEl.textContent = 'Open the activation link from your invitation email to continue. Manual activation without an invitation is not supported.';
+            if (arrivedViaLink) {
+              applyInviteSession(res.data.session);
+            } else {
+              handlePersistedSession(res.data.session);
             }
+          } else if (!hasInviteSession) {
+            showGenericDisabled();
           }
         });
 
         sb.auth.onAuthStateChange(function (event, session) {
-          if (session && (event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY' || event === 'INITIAL_SESSION')) {
+          if (!session) return;
+          if (event === 'PASSWORD_RECOVERY') {
             applyInviteSession(session);
+          } else if (event === 'SIGNED_IN' && arrivedViaLink) {
+            applyInviteSession(session);
+          } else if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+            if (!hasInviteSession) handlePersistedSession(session);
           }
         });
       } else {
@@ -312,6 +420,16 @@
             throw new Error('Email must match the address that received your activation invitation.');
           }
 
+          // LNK-03: never overwrite the password of an account that is
+          // already activated for this user.
+          var preCheckStatus = await checkActivationStatus(currentSession);
+          if (preCheckStatus === 'ACTIVATED') {
+            showAlreadyActivated();
+            showToast('This account is already activated — please sign in', 'error');
+            activateBtn.innerHTML = 'Set Password & Activate Account';
+            return;
+          }
+
           var updateRes = await sb.auth.updateUser({ password: password });
           if (updateRes.error) throw updateRes.error;
 
@@ -322,6 +440,20 @@
           var linkRes = await sb.rpc(cfg.rpc, linkArgs);
 
           if (linkRes.error) throw linkRes.error;
+
+          // LNK-04: customer/technician RPCs report a same-user re-run as
+          // { already_activated: true } — surface it, don't celebrate it.
+          var linkData = linkRes.data;
+          if (typeof linkData === 'string') {
+            try { linkData = JSON.parse(linkData); } catch (parseErr) { linkData = null; }
+          }
+          if (Array.isArray(linkData)) linkData = linkData[0];
+          if (linkData && linkData.already_activated === true) {
+            showAlreadyActivated();
+            showToast('This account is already activated — please sign in', 'error');
+            activateBtn.innerHTML = 'Set Password & Activate Account';
+            return;
+          }
 
           showToast('Account activated successfully! Redirecting to dashboard…', 'success');
 

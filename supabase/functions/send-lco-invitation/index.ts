@@ -49,7 +49,7 @@ Deno.serve(async (request) => {
 
     const { data: application, error: appError } = await admin
       .from('lco_applications')
-      .select('id, application_id, business_name, email, status, invitation_status')
+      .select('id, application_id, business_name, email, status, invitation_status, user_id')
       .eq('id', applicationUuid)
       .single();
 
@@ -66,7 +66,7 @@ Deno.serve(async (request) => {
       return reply({ error: 'Application does not have an email address registered.' }, 400);
     }
 
-    if (application.invitation_status === 'ACTIVATED') {
+    if (application.invitation_status === 'ACTIVATED' || application.user_id) {
       return reply({ error: 'This LCO account is already activated.' }, 409);
     }
 
@@ -101,17 +101,22 @@ Deno.serve(async (request) => {
 
       if (linkRes.data?.properties?.action_link) {
         actionLink = linkRes.data.properties.action_link;
+        console.log('Issued INVITE link for application_id:', application.application_id);
       } else {
         const recoveryRes = await admin.auth.admin.generateLink({
           type: 'recovery',
           email: lcoEmail,
           options: {
             redirectTo: activationUrl,
+            data: {
+              application_id: application.application_id,
+            },
           },
         });
 
         if (recoveryRes.data?.properties?.action_link) {
           actionLink = recoveryRes.data.properties.action_link;
+          console.log('Issued RECOVERY fallback link for application_id:', application.application_id);
         }
       }
     } catch (authErr) {

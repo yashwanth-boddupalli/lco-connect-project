@@ -126,17 +126,22 @@ Deno.serve(async (request) => {
 
       if (linkRes.data?.properties?.action_link) {
         actionLink = linkRes.data.properties.action_link;
+        console.log('Issued INVITE link for customer_id:', customer.customer_id);
       } else {
         const recoveryRes = await admin.auth.admin.generateLink({
           type: 'recovery',
           email: customerEmail,
           options: {
             redirectTo: `${activationBaseUrl}?customer_id=${encodeURIComponent(customer.customer_id)}`,
+            data: {
+              customer_id: customer.customer_id,
+            },
           },
         });
 
         if (recoveryRes.data?.properties?.action_link) {
           actionLink = recoveryRes.data.properties.action_link;
+          console.log('Issued RECOVERY fallback link for customer_id:', customer.customer_id);
         }
       }
     } catch (authErr) {
