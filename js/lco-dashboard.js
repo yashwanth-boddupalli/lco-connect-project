@@ -53,6 +53,13 @@
   var currentReqCategoryFilter = 'ALL';
   var currentReqSearch = '';
 
+  var customersLoaded = false;
+  var customersLoadFailed = false;
+  var subscriptionsLoadFailed = false;
+  var notifOffset = 0;
+  var notifHasMore = false;
+  var reportTechDropdownLoaded = false;
+
   // Phase 10: Technicians state
   var allTechnicians = [];
   var currentTechStatusFilter = 'ALL';
@@ -190,6 +197,7 @@
     } else if (viewName === 'analytics') {
       loadAnalyticsDashboard();
     } else if (viewName === 'reports') {
+      if (!reportTechDropdownLoaded) populateReportTechnicianDropdown();
       loadCurrentReport();
     } else if (viewName === 'customers') {
       renderCustomersTable();
@@ -278,7 +286,7 @@
     if (inactiveCard) {
       inactiveCard.addEventListener('click', function () {
         switchView('customers');
-        setFilter('INACTIVE');
+        setFilter('NON_ACTIVE');
       });
     }
     var servicesCard = document.getElementById('lcoStatServices');
@@ -311,12 +319,13 @@
       document.getElementById('lcoStatInactiveValue').textContent = inactive;
 
       // Active service plans count
-      var { data: plansData } = await sb.from('service_plans')
+      var { data: plansData, error: plansError } = await sb.from('service_plans')
         .select('id')
         .eq('lco_id', lcoId)
         .eq('status', 'ACTIVE');
 
-      document.getElementById('lcoStatServicesValue').textContent = (plansData || []).length;
+      var servicesEl = document.getElementById('lcoStatServicesValue');
+      if (servicesEl) servicesEl.textContent = plansError ? '—' : (plansData || []).length;
 
     } catch (e) {
       console.error('Load stats error:', e);
@@ -342,12 +351,25 @@
       if (error) throw error;
 
       allCustomers = data || [];
+      customersLoaded = true;
+      customersLoadFailed = false;
       loadRecentCustomers();
       renderCustomersTable();
+      if (currentView === 'services') renderServicesSummary();
 
     } catch (e) {
       console.error('Load customers error:', e);
+      customersLoadFailed = true;
       showToast('Failed to load customers.', 'error');
+      var errRow = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#DC2626;">Failed to load customers. <button class="lco-quick-btn secondary lco-customers-retry" style="margin-left:8px; padding:4px 12px; font-size:12px;">Retry</button></td></tr>';
+      ['lcoCustomersTableBody', 'lcoRecentTableBody'].forEach(function (id) {
+        var tb = document.getElementById(id);
+        if (tb) tb.innerHTML = errRow;
+      });
+      document.querySelectorAll('.lco-customers-retry').forEach(function (b) {
+        b.addEventListener('click', function () { loadCustomers(); });
+      });
+      if (currentView === 'services') renderServicesSummary();
     }
   }
 
@@ -503,8 +525,10 @@
 
   function getFilteredCustomers() {
     return allCustomers.filter(function (cust) {
-      // Service status filter
-      if (currentFilter !== 'all' && cust.service_status !== currentFilter) return false;
+      // Service status filter (NON_ACTIVE = every status except ACTIVE)
+      if (currentFilter === 'NON_ACTIVE') {
+        if (cust.service_status === 'ACTIVE') return false;
+      } else if (currentFilter !== 'all' && cust.service_status !== currentFilter) return false;
 
       // Phase 7: Service category filter
       if (currentServiceCatFilter !== 'all' && cust.service_type !== currentServiceCatFilter) return false;
@@ -747,14 +771,20 @@
     } catch (e) {
       console.error('Load plans error:', e);
       showToast('Failed to load service plans.', 'error');
+      var grid = document.getElementById('lcoPlansGrid');
+      if (grid) {
+        grid.innerHTML = '<div class="lco-empty" style="grid-column: 1 / -1;"><div class="lco-empty-icon">⚠️</div><h3>Failed to load service plans.</h3><p>Please try again.</p><button class="lco-quick-btn secondary" id="lcoPlansRetryBtn">Retry</button></div>';
+        var rb = document.getElementById('lcoPlansRetryBtn');
+        if (rb) rb.addEventListener('click', function () { loadPlans(); });
+      }
     }
   }
 
   function updatePlanStats() {
     var total = allPlans.length;
     var active = allPlans.filter(function (p) { return p.status === 'ACTIVE'; }).length;
-    var broadband = allPlans.filter(function (p) { return p.service_type === 'Broadband'; }).length;
-    var cable = allPlans.filter(function (p) { return p.service_type === 'Cable TV'; }).length;
+    var broadband = allPlans.filter(function (p) { return p.service_type === 'Broadband' || p.service_type === 'Both'; }).length;
+    var cable = allPlans.filter(function (p) { return p.service_type === 'Cable TV' || p.service_type === 'Both'; }).length;
 
     var totalEl = document.getElementById('lcoPlanStatTotal');
     if (totalEl) totalEl.textContent = total;
@@ -998,7 +1028,11 @@
     var description = document.getElementById('planDescription').value.trim();
     var status = document.getElementById('planStatus').value;
 
-    if (!name || isNaN(price)) {
+    var nameErr = document.getElementById('planName-error');
+    var priceErr = document.getElementById('planPrice-error');
+    if (nameErr) nameErr.classList.toggle('visible', !name);
+    if (priceErr) priceErr.classList.toggle('visible', isNaN(price) || price < 0);
+    if (!name || isNaN(price) || price < 0) {
       showToast('Please fill in required plan details.', 'error');
       return;
     }
@@ -1077,7 +1111,10 @@
       if (currentPlanFilterType !== 'all' && p.service_type !== currentPlanFilterType) return false;
       if (currentPlanFilterStatus !== 'all' && p.status !== currentPlanFilterStatus) return false;
       if (currentPlanSearch) {
-        var text = (p.name + ' ' + p.service_type + ' ' + p.price + ' ' + p.description).toLowerCase();
+        var text = [p.name, p.service_type, p.price, p.description,
+          p.speed_mbps ? (p.speed_mbps + ' Mbps') : '', p.speed_mbps,
+          p.package_type, p.channel_count, p.data_limit_gb
+        ].filter(Boolean).join(' ').toLowerCase();
         return text.indexOf(currentPlanSearch) !== -1;
       }
       return true;
@@ -1098,9 +1135,16 @@
 
       if (error) throw error;
       allSubscriptions = data || [];
+      subscriptionsLoadFailed = false;
 
     } catch (e) {
       console.error('Load subscriptions error:', e);
+      subscriptionsLoadFailed = true;
+      var subErrHtml = '<div class="lco-sub-card" style="border-color:#FCA5A5;"><strong style="color:#DC2626;">Failed to load subscriptions.</strong><div style="font-size:13px; color:var(--slate); margin-top:2px;">This is a loading error, not an empty subscription. Please refresh and try again.</div></div>';
+      var c1 = document.getElementById('lcoDetailSubscriptionContent');
+      if (c1) c1.innerHTML = subErrHtml;
+      var c2 = document.getElementById('lcoSubHistoryContent');
+      if (c2) c2.innerHTML = '<div style="font-size:14px; color:#DC2626; padding:8px 0;">Failed to load subscription history.</div>';
     }
   }
 
@@ -1183,7 +1227,7 @@
     var plan = allPlans.find(function (p) { return p.id === planId; });
     if (!plan) return;
 
-    var start = new Date(startDateStr);
+    var start = parseLocalDate(startDateStr);
     var end = new Date(start);
 
     if (plan.duration_unit === 'DAYS') {
@@ -1217,8 +1261,18 @@
     try {
       var plan = allPlans.find(function (p) { return p.id === planId; });
 
+      // m5: End any other ACTIVE subscription first when the new one is ACTIVE
+      if (status === 'ACTIVE') {
+        var { error: expireErr } = await sb.from('customer_subscriptions')
+          .update({ status: 'EXPIRED', end_date: localDateStr() })
+          .eq('customer_id', customerId)
+          .eq('lco_id', lcoId)
+          .eq('status', 'ACTIVE');
+        if (expireErr) throw expireErr;
+      }
+
       // Insert customer subscription
-      var { error: subError } = await sb.from('customer_subscriptions')
+      var { data: newSub, error: subError } = await sb.from('customer_subscriptions')
         .insert({
           lco_id: lcoId,
           customer_id: customerId,
@@ -1227,19 +1281,41 @@
           end_date: endDate,
           status: status,
           notes: notes || null
-        });
+        })
+        .select()
+        .single();
 
       if (subError) throw subError;
 
-      // Update customer table service fields to match active plan
+      // Update customer table service fields to match the effective plan.
+      // Customer stays ACTIVE only if an ACTIVE subscription actually remains.
       if (plan) {
-        await sb.from('customers')
+        var { data: activeSubs } = await sb.from('customer_subscriptions')
+          .select('*, service_plans(*)')
+          .eq('customer_id', customerId)
+          .eq('lco_id', lcoId)
+          .eq('status', 'ACTIVE');
+        var hasActive = !!(activeSubs && activeSubs.length);
+        var effectivePlan = plan;
+        if (hasActive && status !== 'ACTIVE' && activeSubs[0] && activeSubs[0].service_plans) {
+          effectivePlan = activeSubs[0].service_plans;
+        }
+        var { error: custErr } = await sb.from('customers')
           .update({
-            service_type: plan.service_type,
-            plan_name: plan.name,
-            service_status: status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'
+            service_type: effectivePlan.service_type,
+            plan_name: effectivePlan.name,
+            service_status: hasActive ? 'ACTIVE' : 'INACTIVE'
           })
           .eq('id', customerId);
+
+        if (custErr) {
+          // Compensating rollback: remove the just-inserted subscription
+          if (newSub && newSub.id) {
+            await sb.from('customer_subscriptions').delete().eq('id', newSub.id);
+          }
+          showToast('Failed to assign subscription: customer record could not be updated. The assignment was rolled back.', 'error');
+          return;
+        }
       }
 
       showToast('Subscription assigned successfully!', 'success');
@@ -1269,6 +1345,11 @@
     // Renders ONLY the "Current Subscription & Plan" section (active sub)
     var container = document.getElementById('lcoDetailSubscriptionContent');
     if (!container) return;
+
+    if (subscriptionsLoadFailed) {
+      container.innerHTML = '<div class="lco-sub-card" style="border-color:#FCA5A5;"><strong style="color:#DC2626;">Failed to load subscriptions.</strong><div style="font-size:13px; color:var(--slate); margin-top:2px;">This is a loading error, not an empty subscription. Please refresh and try again.</div></div>';
+      return;
+    }
 
     var subs = allSubscriptions.filter(function (s) { return s.customer_id === customer.id; });
 
@@ -1306,6 +1387,11 @@
     // Phase 7: Renders ALL subscriptions including historical ones
     var container = document.getElementById('lcoSubHistoryContent');
     if (!container) return;
+
+    if (subscriptionsLoadFailed) {
+      container.innerHTML = '<div style="font-size:14px; color:#DC2626; padding:8px 0;">Failed to load subscription history.</div>';
+      return;
+    }
 
     var subs = allSubscriptions.filter(function (s) { return s.customer_id === customer.id; });
 
@@ -1356,6 +1442,15 @@
      ══════════════════════════════════════════════ */
 
   function renderServicesSummary() {
+    if (!customersLoaded) {
+      ['lcoServiceCableCount', 'lcoServiceBroadbandCount', 'lcoServiceBothCount', 'lcoServiceOtherCount'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = '…';
+      });
+      var sg = document.getElementById('lcoServiceStatusGrid');
+      if (sg) sg.innerHTML = '<div style="font-size:14px; color:var(--slate); padding:8px 0;">' + (customersLoadFailed ? 'Failed to load customer data.' : 'Loading customer data…') + '</div>';
+      return;
+    }
     var cableCount = 0;
     var broadbandCount = 0;
     var bothCount = 0;
@@ -1491,9 +1586,10 @@
     setupBroadcastModals();
   }
 
-  async function loadNotifications() {
+  async function loadNotifications(append) {
     var container = document.getElementById('lcoNotifList');
     if (!container) return;
+    if (!append) notifOffset = 0;
 
     try {
       var query = sb.from('notifications')
@@ -1512,11 +1608,13 @@
         query = query.eq('is_read', true);
       }
 
-      var { data, error } = await query.order('created_at', { ascending: false }).limit(50);
+      var { data, error } = await query.order('created_at', { ascending: false }).range(notifOffset, notifOffset + 49);
 
       if (error) throw error;
 
       var notifications = data || [];
+      notifHasMore = notifications.length === 50;
+      notifOffset += notifications.length;
 
       // Update total unread badge
       var { count: unreadCount } = await sb.from('notifications')
@@ -1533,12 +1631,7 @@
         badge.style.display = (unreadCount && unreadCount > 0) ? '' : 'none';
       }
 
-      if (notifications.length === 0) {
-        container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">🔔</div><h3>No notifications found</h3><p>You\'re all caught up!</p></div>';
-        return;
-      }
-
-      container.innerHTML = notifications.map(function (notif) {
+      var itemsHtml = notifications.map(function (notif) {
         var catMeta = getCategoryMeta(notif.category);
         return '<div class="lco-notif-item' + (notif.is_read ? '' : ' unread') + '" data-notif-id="' + notif.id + '">' +
           '<div class="lco-notif-dot' + (notif.is_read ? ' read' : '') + '"></div>' +
@@ -1548,32 +1641,59 @@
           '<span class="lco-notif-cat-badge cat-' + (notif.category || 'SYSTEM') + '">' + esc(catMeta.label) + '</span>' +
           '</div>' +
           '<div class="lco-notif-message">' + esc(notif.message) + '</div>' +
-          '<div class="lco-notif-time">' + formatTimeAgo(notif.created_at) + ' • ' + formatDateFull(notif.created_at) + '</div>' +
+          '<div class="lco-notif-time">' + formatTimeAgo(notif.created_at) + ' \u2022 ' + formatDateFull(notif.created_at) + '</div>' +
           '</div>' +
           '</div>';
       }).join('');
 
+      var loadMoreHtml = notifHasMore
+        ? '<div id="lcoNotifLoadMoreWrap" style="text-align:center; padding:8px;"><button class="lco-quick-btn secondary" id="lcoNotifLoadMoreBtn">Load more</button></div>'
+        : '';
+
+      if (append) {
+        var oldWrap = document.getElementById('lcoNotifLoadMoreWrap');
+        if (oldWrap) oldWrap.remove();
+        container.insertAdjacentHTML('beforeend', itemsHtml + loadMoreHtml);
+      } else if (notifications.length === 0) {
+        container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">\uD83D\uDD14</div><h3>No notifications found</h3><p>You\'re all caught up!</p></div>';
+        return;
+      } else {
+        container.innerHTML = itemsHtml + loadMoreHtml;
+      }
+
+      var moreBtn = document.getElementById('lcoNotifLoadMoreBtn');
+      if (moreBtn) moreBtn.addEventListener('click', function () { loadNotifications(true); });
+
       container.querySelectorAll('.lco-notif-item.unread').forEach(function (item) {
+        if (item.dataset.readListener) return;
+        item.dataset.readListener = '1';
         item.addEventListener('click', function () {
-          markNotificationRead(item.dataset.notifId);
-          item.classList.remove('unread');
-          var dot = item.querySelector('.lco-notif-dot');
-          if (dot) dot.classList.add('read');
+          markNotificationRead(item.dataset.notifId, item);
         });
       });
 
     } catch (e) {
       console.error('Load notifications error:', e);
-      container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">⚠️</div><h3>Unable to load notifications</h3><button class="lco-quick-btn secondary" style="margin-top:12px;" onclick="loadNotifications()">Retry</button></div>';
+      container.innerHTML = '<div class="lco-empty"><div class="lco-empty-icon">\u26A0\uFE0F</div><h3>Unable to load notifications</h3><button class="lco-quick-btn secondary" id="lcoNotifRetryBtn" style="margin-top:12px;">Retry</button></div>';
+      var retryBtn = document.getElementById('lcoNotifRetryBtn');
+      if (retryBtn) retryBtn.addEventListener('click', function () { loadNotifications(); });
     }
   }
 
-  async function markNotificationRead(notifId) {
+  async function markNotificationRead(notifId, itemEl) {
     try {
-      await sb.from('notifications')
+      var { error } = await sb.from('notifications')
         .update({ is_read: true })
         .eq('id', notifId)
         .eq('recipient_role', 'LCO_ADMIN');
+
+      if (error) throw error;
+
+      if (itemEl) {
+        itemEl.classList.remove('unread');
+        var dot = itemEl.querySelector('.lco-notif-dot');
+        if (dot) dot.classList.add('read');
+      }
 
       var badge = document.getElementById('lcoNotifCount');
       if (badge) {
@@ -1584,6 +1704,7 @@
       }
     } catch (e) {
       console.error('Mark notification read error:', e);
+      showToast('Failed to mark notification as read.', 'error');
     }
   }
 
@@ -1616,6 +1737,14 @@
       if (error) throw error;
 
       notifPreferencesCache = data || [];
+
+      var savePrefBtnEl = document.getElementById('lcoSavePrefBtn');
+      if (!notifPreferencesCache.length) {
+        form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--slate);">No notification preferences available.</div>';
+        if (savePrefBtnEl) savePrefBtnEl.disabled = true;
+        return;
+      }
+      if (savePrefBtnEl) savePrefBtnEl.disabled = false;
 
       var categoryDescriptions = {
         'CUSTOMER_ACTIVITY': 'Alerts for customer account activations & updates.',
@@ -1656,10 +1785,17 @@
     } catch (e) {
       console.error('Load notification preferences error:', e);
       form.innerHTML = '<div style="grid-column:1/-1; padding:20px; text-align:center; color:#E74C3C;">Failed to load preferences.</div>';
+      var savePrefBtnErr = document.getElementById('lcoSavePrefBtn');
+      if (savePrefBtnErr) savePrefBtnErr.disabled = true;
     }
   }
 
   async function saveNotificationPreferences() {
+    var prefFormEl = document.getElementById('lcoPrefForm');
+    if (!prefFormEl || prefFormEl.querySelectorAll('.lco-pref-card').length === 0) {
+      showToast('No notification preferences loaded — nothing to save.', 'error');
+      return;
+    }
     var saveBtn = document.getElementById('lcoSavePrefBtn');
     if (saveBtn) {
       saveBtn.disabled = true;
@@ -2100,6 +2236,8 @@
       document.getElementById('notifTabFeedContainer').style.display = 'none';
       document.getElementById('notifTabBroadcastsContainer').style.display = 'block';
       document.getElementById('notifTabUrgentContainer').style.display = 'none';
+      var histWrapB = document.getElementById('notifTabHistoryContainer');
+      if (histWrapB) histWrapB.style.display = 'none';
       loadBroadcastHistory();
 
     } catch (e) {
@@ -2156,6 +2294,8 @@
       document.getElementById('notifTabFeedContainer').style.display = 'none';
       document.getElementById('notifTabBroadcastsContainer').style.display = 'none';
       document.getElementById('notifTabUrgentContainer').style.display = 'block';
+      var histWrapU = document.getElementById('notifTabHistoryContainer');
+      if (histWrapU) histWrapU.style.display = 'none';
       loadUrgentNoticesHistory();
 
     } catch (e) {
@@ -2179,7 +2319,7 @@
     var initials = (lcoData.business_name || '').split(' ').map(function (w) { return w.charAt(0); }).join('').substring(0, 2).toUpperCase();
     document.getElementById('lcoProfileAvatar').textContent = initials;
     document.getElementById('lcoProfileBizName').textContent = lcoData.business_name;
-    document.getElementById('lcoProfileStatus').innerHTML = '<span class="lco-badge active">ACTIVE</span>';
+    document.getElementById('lcoProfileStatus').innerHTML = renderStatusBadge(lcoData.status || 'ACTIVE');
 
     // Business info grid
     var bizGrid = document.getElementById('lcoProfileBizGrid');
@@ -2223,7 +2363,7 @@
     var accountGrid = document.getElementById('lcoProfileAccountGrid');
     accountGrid.innerHTML =
       detailField('Application ID', lcoData.application_id) +
-      detailField('Account Status', 'ACTIVE') +
+      detailField('Account Status', lcoData.status || '—') +
       detailField('Registered', formatDateFull(lcoData.created_at)) +
       detailField('Last Updated', formatDateFull(lcoData.updated_at));
   }
@@ -2297,9 +2437,16 @@
     var notes = document.getElementById('custNotes').value.trim();
 
     // Validation
+    clearFormErrors();
     var hasErrors = false;
     if (!fullName) { showFieldError('custFullName-error'); hasErrors = true; }
     if (!phone) { showFieldError('custPhone-error'); hasErrors = true; }
+    else if (!/^[6-9]\d{9}$/.test(phone)) {
+      var phoneErr = document.getElementById('custPhone-error');
+      if (phoneErr) phoneErr.textContent = 'Enter a valid 10-digit Indian mobile number';
+      showFieldError('custPhone-error'); hasErrors = true;
+    }
+    if (pincode && !/^[1-9]\d{5}$/.test(pincode)) { showFieldError('custPincode-error'); hasErrors = true; }
     if (!serviceType) { showFieldError('custServiceType-error'); hasErrors = true; }
 
     if (hasErrors) return;
@@ -2439,12 +2586,22 @@
     var serviceType = document.getElementById('editCustServiceType').value;
     var notes = document.getElementById('editCustNotes').value.trim();
 
+    document.querySelectorAll('#editCustomerForm .lco-form-error').forEach(function (el) { el.classList.remove('visible'); });
     if (!fullName) {
       document.getElementById('editCustFullName-error').classList.add('visible');
       return;
     }
-    if (!phone) {
-      document.getElementById('editCustPhone-error').classList.add('visible');
+    if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+      var editPhoneErr = document.getElementById('editCustPhone-error');
+      if (editPhoneErr) {
+        editPhoneErr.textContent = phone ? 'Enter a valid 10-digit Indian mobile number' : 'Phone number is required';
+        editPhoneErr.classList.add('visible');
+      }
+      return;
+    }
+    if (pincode && !/^[1-9]\d{5}$/.test(pincode)) {
+      var editPinErr = document.getElementById('editCustPincode-error');
+      if (editPinErr) editPinErr.classList.add('visible');
       return;
     }
 
@@ -2649,6 +2806,13 @@
     } catch (err) {
       console.error('Load LCO billing data error:', err);
       showToast('Failed to load billing information.', 'error');
+      var billsBody = document.getElementById('lcoBillsTableBody');
+      if (billsBody) billsBody.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:32px; color:#DC2626;">Failed to load bills. <button class="lco-quick-btn secondary lco-billing-retry" style="margin-left:8px; padding:4px 12px; font-size:12px;">Retry</button></td></tr>';
+      var payBody = document.getElementById('lcoPaymentsTableBody');
+      if (payBody) payBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px; color:#DC2626;">Failed to load payments. <button class="lco-quick-btn secondary lco-billing-retry" style="margin-left:8px; padding:4px 12px; font-size:12px;">Retry</button></td></tr>';
+      document.querySelectorAll('.lco-billing-retry').forEach(function (b) {
+        b.addEventListener('click', function () { loadBillingData(); });
+      });
     }
   }
 
@@ -2747,7 +2911,23 @@
       return;
     }
 
-    tbody.innerHTML = allPayments.map(function (p) {
+    var filteredPayments = allPayments;
+    if (currentBillSearch) {
+      filteredPayments = allPayments.filter(function (p) {
+        var custName = p.customers ? p.customers.full_name : '';
+        var custId = p.customers ? p.customers.customer_id : '';
+        var billNum = p.customer_bills ? p.customer_bills.bill_number : '';
+        var haystack = [p.payment_number, custName, custId, billNum, p.payment_method, p.transaction_reference, p.amount].filter(Boolean).join(' ').toLowerCase();
+        return haystack.indexOf(currentBillSearch) !== -1;
+      });
+    }
+
+    if (filteredPayments.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="lco-empty"><div class="lco-empty-icon">🔍</div><h3>No payments match your search.</h3></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filteredPayments.map(function (p) {
       var custName = p.customers ? p.customers.full_name : '—';
       var billNum = p.customer_bills ? p.customer_bills.bill_number : '—';
 
@@ -2772,6 +2952,7 @@
         timer = setTimeout(function () {
           currentBillSearch = searchInput.value.trim().toLowerCase();
           renderBillsTable();
+          renderPaymentsTable();
         }, 250);
       });
     }
@@ -2784,6 +2965,7 @@
           filterGroup.querySelectorAll('.lco-filter-btn').forEach(function (b) { b.classList.remove('active'); });
           btn.classList.add('active');
           renderBillsTable();
+          renderPaymentsTable();
         });
       });
     }
@@ -2830,6 +3012,13 @@
       var pEnd = document.getElementById('genBillPeriodEnd').value;
       var dueDate = document.getElementById('genBillDueDate').value;
       var notes = document.getElementById('genBillNotes').value.trim();
+
+      var genCustErr = document.getElementById('genBillCustomerSelect-error');
+      if (genCustErr) genCustErr.classList.toggle('visible', !custId);
+      if (!custId || !planName || isNaN(amount) || amount <= 0 || !pStart || !pEnd || !dueDate) {
+        showToast('Please fill in all required bill fields with valid values.', 'error');
+        return;
+      }
 
       var confirmBtn = document.getElementById('genBillConfirmBtn');
       confirmBtn.disabled = true;
@@ -2888,7 +3077,9 @@
     var today = new Date();
     var firstDay = localDateStr(new Date(today.getFullYear(), today.getMonth(), 1));
     var lastDay = localDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 0));
-    var due = localDateStr(new Date(today.getFullYear(), today.getMonth(), 15));
+    var due = today.getDate() > 15
+      ? localDateStr(new Date(today.getFullYear(), today.getMonth() + 1, 15))
+      : localDateStr(new Date(today.getFullYear(), today.getMonth(), 15));
 
     document.getElementById('genBillPeriodStart').value = firstDay;
     document.getElementById('genBillPeriodEnd').value = lastDay;
@@ -2930,6 +3121,8 @@
 
       var bill = allBills.find(function (b) { return b.id === billId; });
       if (!bill) {
+        var recBillErrEarly = document.getElementById('recPayBillSelect-error');
+        if (recBillErrEarly) recBillErrEarly.classList.add('visible');
         showToast('Please select a valid bill.', 'error');
         return;
       }
@@ -2957,49 +3150,26 @@
       confirmBtn.disabled = true;
       confirmBtn.innerHTML = '<span class="lco-spinner"></span> Recording…';
 
+      // Validate bill selection against the inline error element
+      var recBillErr = document.getElementById('recPayBillSelect-error');
+      if (recBillErr) recBillErr.classList.toggle('visible', !billId);
+
       try {
-        // 1. Generate concurrency-safe payment number using DB sequence function
-        var { data: payNumResult, error: numErr } = await sb.rpc('generate_payment_number');
-        if (numErr) {
-          console.warn('generate_payment_number RPC warning:', numErr);
-        }
-        var paymentNumber = payNumResult || ('PAY-' + new Date().getFullYear() + '-' + Math.floor(1000 + Math.random() * 9000));
+        // Single atomic RPC: inserts the payment and updates the bill together
+        var { data: rpcData, error: rpcErr } = await sb.rpc('record_customer_payment', {
+          p_bill_id: bill.id,
+          p_amount: amount,
+          p_payment_method: method,
+          p_payment_date: new Date().toISOString(),
+          p_notes: notes || null,
+          p_transaction_reference: ref || null
+        });
 
-        // 2. Insert payment record (no payment_status column)
-        var { data: newPayment, error: payErr } = await sb.from('customer_payments')
-          .insert({
-            payment_number: paymentNumber,
-            lco_id: lcoId,
-            customer_id: bill.customer_id,
-            bill_id: bill.id,
-            amount: amount,
-            payment_method: method,
-            payment_date: new Date().toISOString(),
-            transaction_reference: ref || ('MANUAL_' + Date.now()),
-            notes: notes || null,
-            recorded_by: currentUser ? currentUser.id : null,
-            gateway: null
-          })
-          .select()
-          .single();
+        if (rpcErr) throw rpcErr;
+        if (rpcData && rpcData.ok === false) throw new Error(rpcData.error || 'Failed to record payment.');
+        var rpcPaymentNumber = rpcData ? rpcData.payment_number : '';
 
-        if (payErr) throw payErr;
-
-        // 3. Update bill paid_amount and status
-        var newPaidAmount = Number(bill.paid_amount) + amount;
-        var newStatus = newPaidAmount >= Number(bill.amount) ? 'PAID' : 'PENDING';
-
-        var { error: updateErr } = await sb.from('customer_bills')
-          .update({
-            paid_amount: Math.min(newPaidAmount, Number(bill.amount)),
-            status: newStatus
-          })
-          .eq('id', bill.id)
-          .eq('lco_id', lcoId);
-
-        if (updateErr) throw updateErr;
-
-        showToast('Payment recorded successfully! Receipt #: ' + (newPayment ? newPayment.payment_number : paymentNumber), 'success');
+        showToast('Payment recorded successfully! Receipt #: ' + rpcPaymentNumber, 'success');
         modal.classList.remove('visible');
         form.reset();
         await loadBillingData();
@@ -3220,6 +3390,9 @@
             document.getElementById('manageReqTechName').value = tech.full_name || '';
             document.getElementById('manageReqTechPhone').value = tech.phone || '';
           }
+        } else {
+          document.getElementById('manageReqTechName').value = '';
+          document.getElementById('manageReqTechPhone').value = '';
         }
       });
     }
@@ -3248,7 +3421,7 @@
       confirmBtn.innerHTML = '<span class="lco-spinner"></span> Saving…';
 
       try {
-        var isResolvedOrClosed = (status === 'RESOLVED' || status === 'CLOSED');
+        var isResolvedOrClosed = (status === 'RESOLVED' || status === 'CLOSED' || status === 'CANCELLED');
         var resolvedAt = isResolvedOrClosed ? (req.resolved_at || new Date().toISOString()) : null;
 
         var updatePayload = {
@@ -3579,12 +3752,17 @@
 
         if (error) throw error;
 
-        showToast('Technician ' + newTech.technician_id + ' created! Sending activation invite…', 'success');
+        var inviteRes = await invokeTechnicianInvite(newTech.id);
+        if (inviteRes.ok) {
+          showToast('Technician ' + newTech.technician_id + ' created and invitation email sent!', 'success');
+        } else {
+          console.error('Technician invite failed:', inviteRes.error);
+          showToast('Technician ' + newTech.technician_id + ' created, but the invitation email failed — open the technician and use Resend Invite.', 'warning');
+        }
         modal.classList.remove('visible');
         form.reset();
 
         await loadTechnicians();
-        sendTechnicianInvite(newTech.id, null);
 
       } catch (err) {
         console.error('Add technician error:', err);
@@ -3599,6 +3777,15 @@
   function openAddTechModal() {
     var modal = document.getElementById('addTechModal');
     if (modal) modal.classList.add('visible');
+  }
+
+  async function invokeTechnicianInvite(techId) {
+    var { data, error } = await sb.functions.invoke('send-technician-invitation', {
+      body: { technician_id: techId }
+    });
+    if (error) return { ok: false, error: error };
+    if (data && data.ok) return { ok: true };
+    return { ok: false, error: new Error(data ? (data.error || 'Invitation delivery failed.') : 'Invitation failed.') };
   }
 
   async function sendTechnicianInvite(techId, btn) {
@@ -3692,10 +3879,18 @@
     return '<span class="lco-service-tag' + cls + '">' + esc(serviceType || '—') + '</span>';
   }
 
+  function parseLocalDate(dateStr) {
+    if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim())) {
+      var parts = dateStr.trim().split('-');
+      return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    }
+    return new Date(dateStr);
+  }
+
   function formatDate(dateStr) {
     if (!dateStr) return '—';
     try {
-      var d = new Date(dateStr);
+      var d = parseLocalDate(dateStr);
       return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
     } catch (e) {
       return dateStr;
@@ -3705,7 +3900,7 @@
   function formatDateFull(dateStr) {
     if (!dateStr) return '—';
     try {
-      var d = new Date(dateStr);
+      var d = parseLocalDate(dateStr);
       return d.toLocaleDateString('en-IN', {
         day: 'numeric', month: 'long', year: 'numeric',
         hour: '2-digit', minute: '2-digit'
@@ -3756,6 +3951,10 @@
 
         if (!fromVal || !toVal) {
           showToast('Please select both From and To dates.', 'error');
+          return;
+        }
+        if (fromVal > toVal) {
+          showToast('Invalid date range: From date must be before or on the To date.', 'error');
           return;
         }
 
@@ -4332,6 +4531,11 @@
           showToast('Please select both From and To dates.', 'error');
           return;
         }
+        if (fromVal > toVal) {
+          showToast('Invalid date range: From date must be before or on the To date.', 'error');
+          showReportError('Invalid date range: From date must be before or on the To date.');
+          return;
+        }
         reportFilters.dateFrom = new Date(fromVal + 'T00:00:00').toISOString();
         reportFilters.dateTo = new Date(toVal + 'T23:59:59.999').toISOString();
         reportFilters.offset = 0;
@@ -4471,6 +4675,7 @@
       var res = await sb.rpc('get_lco_technician_report', { p_limit: 100 });
       if (!res.error && res.data && res.data.data) {
         reportTechniciansList = res.data.data;
+        reportTechDropdownLoaded = reportTechniciansList.length > 0;
         var html = '<option value="">All Technicians</option>';
         reportTechniciansList.forEach(function (tech) {
           html += '<option value="' + tech.id + '">' + esc(tech.full_name || 'Tech ' + tech.technician_id) + '</option>';
@@ -4715,7 +4920,7 @@
           '<td><span style="font-family:\'IBM Plex Mono\', monospace;">' + esc(p.bill_number || '—') + '</span></td>' +
           '<td><strong style="color:#059669;">₹' + (p.amount || 0).toLocaleString('en-IN') + '</strong></td>' +
           '<td>' + renderStatusBadge(p.payment_method) + '</td>' +
-          '<td>' + formatDate(p.payment_date) + '</td>' +
+          '<td>' + formatDateFull(p.payment_date) + '</td>' +
           '<td><small style="font-family:\'IBM Plex Mono\', monospace; color:var(--slate);">' + esc(p.transaction_reference || '—') + '</small></td>' +
           '</tr>';
       });

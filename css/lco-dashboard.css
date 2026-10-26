@@ -804,6 +804,24 @@
 
 .lco-table .lco-cust-name {
   font-weight: 600;
+  display: inline-block;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Broadcast / Urgent message cells: same containment as Communication History */
+#lcoBroadcastHistoryTable td:first-child,
+#lcoUrgentNoticesTable td:first-child {
+  max-width: 320px;
+}
+#lcoBroadcastHistoryTable td:first-child div,
+#lcoUrgentNoticesTable td:first-child div {
+  max-width: 320px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .lco-table .lco-date {

@@ -669,6 +669,7 @@
                 <button class="lco-filter-btn" data-filter="INACTIVE">Inactive</button>
                 <button class="lco-filter-btn" data-filter="SUSPENDED">Suspended</button>
                 <button class="lco-filter-btn" data-filter="DISCONNECTED">Disconnected</button>
+                <button class="lco-filter-btn" data-filter="NON_ACTIVE">Non-Active</button>
               </div>
             </div>
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -1049,6 +1050,7 @@
                 <button class="lco-filter-btn" data-status="IN_PROGRESS">In Progress</button>
                 <button class="lco-filter-btn" data-status="RESOLVED">Resolved</button>
                 <button class="lco-filter-btn" data-status="CLOSED">Closed</button>
+                <button class="lco-filter-btn" data-status="CANCELLED">Cancelled</button>
               </div>
             </div>
           </div>
@@ -1421,6 +1423,7 @@
           <div class="lco-form-group">
             <label for="custPincode">PIN Code</label>
             <input type="text" id="custPincode" placeholder="6-digit code" maxlength="6">
+            <div class="lco-form-error" id="custPincode-error">Enter a valid 6-digit PIN code</div>
           </div>
           <div class="lco-form-group">
             <label for="custServiceType">Service Type *</label>
@@ -1656,6 +1659,7 @@
           <div class="lco-form-group">
             <label for="editCustPincode">PIN Code</label>
             <input type="text" id="editCustPincode" placeholder="6-digit code" maxlength="6">
+            <div class="lco-form-error" id="editCustPincode-error">Enter a valid 6-digit PIN code</div>
           </div>
           <div class="lco-form-group">
             <label for="editCustServiceType">Service Type *</label>
@@ -1950,7 +1954,7 @@
         </div>
 
         <div style="font-size:12px; color:#64748B; background:#F8FAFC; padding:10px; border-radius:6px; border-left:3px solid #0B7A6E; margin-bottom:16px;">
-          ℹ️ An invitation email will be generated automatically to allow the technician to activate their portal account.
+          ℹ️ After saving, an invitation email will be sent so the technician can activate their portal account. If the email fails, you can resend it from the technicians list using Resend Invite.
         </div>
 
         <div class="lco-modal-actions">
